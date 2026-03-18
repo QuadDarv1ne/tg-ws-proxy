@@ -12,13 +12,24 @@ on:
         description: "Release version tag (e.g. v1.0.0)"
         required: false
         default: "v1.0.0"
+      build_windows:
+        description: 'Build Windows executable?'
+        type: boolean
+        required: true
+        default: true
+      build_macos:
+        description: 'Build macOS application?'
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
+    if: ${{ github.event.inputs.build_windows == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,12 +52,12 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TgWsProxy
-          path: |
-            dist/TgWsProxy.exe
+          name: TgWsProxy-win
+          path: dist/TgWsProxy.exe
 
   build-win7:
     runs-on: windows-latest
+    if: ${{ github.event.inputs.build_windows == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,15 +86,50 @@ jobs:
           name: TgWsProxy-win7
           path: dist/TgWsProxy-win7.exe
 
+  build-macos:
+    runs-on: macos-latest
+    if: ${{ github.event.inputs.build_macos == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install rumps
+
+      - name: Install pyinstaller
+        run: pip install "pyinstaller==6.13.0"
+
+      - name: Build macOS app with PyInstaller
+        run: pyinstaller packaging/macos.spec --noconfirm
+
+      - name: Create DMG
+        run: |
+          mkdir -p dist/TgWsProxy.app/Contents/MacOS
+          hdiutil create -volname "TG WS Proxy" -srcfolder dist/TgWsProxy.app -ov -format UDZO TgWsProxy.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TgWsProxy-macOS
+          path: TgWsProxy.dmg
+
   release:
-    needs: [build, build-win7]
+    needs: [build-windows, build-win7, build-macos]
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.make_release == 'true' }}
     steps:
-      - name: Download main build
+      - name: Download Windows build
         uses: actions/download-artifact@v4
         with:
-          name: TgWsProxy
+          name: TgWsProxy-win
           path: dist
 
       - name: Download Win7 build
@@ -92,6 +138,13 @@ jobs:
           name: TgWsProxy-win7
           path: dist
 
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: TgWsProxy-macOS
+          path: dist
+        continue-on-error: true
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -99,9 +152,15 @@ jobs:
           name: "TG WS Proxy ${{ github.event.inputs.version }}"
           body: |
             ## TG WS Proxy ${{ github.event.inputs.version }}
+            
+            ### Downloads
+            - **Windows**: `TgWsProxy.exe`
+            - **Windows 7**: `TgWsProxy-win7.exe`
+            - **macOS**: `TgWsProxy.dmg` (Universal)
           files: |
             dist/TgWsProxy.exe
             dist/TgWsProxy-win7.exe
+            dist/TgWsProxy.dmg
           draft: false
           prerelease: false
         env:

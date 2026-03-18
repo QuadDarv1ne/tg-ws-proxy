@@ -13,14 +13,27 @@ ctk_path = os.path.dirname(customtkinter.__file__)
 import rich
 rich_path = os.path.dirname(rich.__file__)
 
+# rumps for native macOS menu bar
+try:
+    import rumps
+    rumps_path = os.path.dirname(rumps.__file__)
+except ImportError:
+    rumps = None
+    rumps_path = None
+
+datas_list = [
+    (ctk_path, 'customtkinter/'),
+    (rich_path, 'rich/'),
+]
+
+if rumps_path:
+    datas_list.append((rumps_path, 'rumps/'))
+
 a = Analysis(
     [os.path.join(os.path.dirname(SPEC), os.pardir, 'macos.py')],
     pathex=[],
     binaries=[],
-    datas=[
-        (ctk_path, 'customtkinter/'),
-        (rich_path, 'rich/'),
-    ],
+    datas=datas_list,
     hiddenimports=[
         'pystray._cocoa',
         'PIL._tkinter_finder',
@@ -32,6 +45,9 @@ a = Analysis(
         'rich',
         'rich.console',
         'markdown_it',
+        'rumps',
+        'Foundation',
+        'AppKit',
     ],
     hookspath=[],
     hooksconfig={},
@@ -51,7 +67,8 @@ if os.path.exists(icon_path):
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 app = BUNDLE(
-    exe,
+    pyz,
+    a.scripts,
     a.binaries,
     a.zipfiles,
     a.datas,
