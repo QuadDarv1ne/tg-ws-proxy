@@ -14,7 +14,7 @@ import rich
 rich_path = os.path.dirname(rich.__file__)
 
 a = Analysis(
-    [os.path.join(os.path.dirname(SPEC), os.pardir, 'windows.py')],
+    [os.path.join(os.path.dirname(SPEC), os.pardir, 'macos.py')],
     pathex=[],
     binaries=[],
     datas=[
@@ -22,7 +22,7 @@ a = Analysis(
         (rich_path, 'rich/'),
     ],
     hiddenimports=[
-        'pystray._win32',
+        'pystray._cocoa',
         'PIL._tkinter_finder',
         'customtkinter',
         'cryptography.hazmat.primitives.ciphers',
@@ -31,9 +31,6 @@ a = Analysis(
         'cryptography.hazmat.backends.openssl',
         'rich',
         'rich.console',
-        'rich.live',
-        'rich.table',
-        'rich.panel',
         'markdown_it',
     ],
     hookspath=[],
@@ -46,20 +43,20 @@ a = Analysis(
     noarchive=False,
 )
 
+# Try to load icon from project root
 icon_path = os.path.join(os.path.dirname(SPEC), os.pardir, 'icon.ico')
 if os.path.exists(icon_path):
     a.datas += [('icon.ico', icon_path, 'DATA')]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
+app = BUNDLE(
+    exe,
     a.binaries,
     a.zipfiles,
     a.datas,
     [],
-    name='TgWsProxy',
+    name='TgWsProxy.app',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

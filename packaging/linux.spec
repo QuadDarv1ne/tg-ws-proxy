@@ -14,7 +14,7 @@ import rich
 rich_path = os.path.dirname(rich.__file__)
 
 a = Analysis(
-    [os.path.join(os.path.dirname(SPEC), os.pardir, 'windows.py')],
+    [os.path.join(os.path.dirname(SPEC), os.pardir, 'linux.py')],
     pathex=[],
     binaries=[],
     datas=[
@@ -22,7 +22,8 @@ a = Analysis(
         (rich_path, 'rich/'),
     ],
     hiddenimports=[
-        'pystray._win32',
+        'pystray._xorg',
+        'pystray._appindicator',
         'PIL._tkinter_finder',
         'customtkinter',
         'cryptography.hazmat.primitives.ciphers',
@@ -31,9 +32,6 @@ a = Analysis(
         'cryptography.hazmat.backends.openssl',
         'rich',
         'rich.console',
-        'rich.live',
-        'rich.table',
-        'rich.panel',
         'markdown_it',
     ],
     hookspath=[],
@@ -46,6 +44,7 @@ a = Analysis(
     noarchive=False,
 )
 
+# Try to load icon from project root
 icon_path = os.path.join(os.path.dirname(SPEC), os.pardir, 'icon.ico')
 if os.path.exists(icon_path):
     a.datas += [('icon.ico', icon_path, 'DATA')]

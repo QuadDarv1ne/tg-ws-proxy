@@ -80,7 +80,7 @@ UPDATE_CHECK_MARKER = APP_DIR / ".update_checked"
 # GitHub repository for update checks
 GITHUB_REPO = "Flowseal/tg-ws-proxy"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-CURRENT_VERSION = "1.3.0"  # Updated with each release
+CURRENT_VERSION = "2.0.0"  # Updated with each release
 
 
 _proxy_thread: Optional[threading.Thread] = None
