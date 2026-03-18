@@ -478,15 +478,15 @@ def _edit_config_dialog():
     btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
     btn_frame.pack(fill="x")
     ctk.CTkButton(btn_frame, text="Сохранить", width=140, height=38,
-                  font=(FONT_FAMILY, 14, "bold"), corner_radius=10,
+                  font=(UI_FONT_FAMILY, 14, "bold"), corner_radius=10,
                   fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                   text_color="#ffffff",
                   command=on_save).pack(side="left", padx=(0, 10))
     ctk.CTkButton(btn_frame, text="Отмена", width=140, height=38,
-                  font=(FONT_FAMILY, 14), corner_radius=10,
-                  fg_color=FIELD_BG, hover_color=FIELD_BORDER,
-                  text_color=TEXT_PRIMARY, border_width=1,
-                  border_color=FIELD_BORDER,
+                  font=(UI_FONT_FAMILY, 14), corner_radius=10,
+                  fg_color=UI_FIELD_BG, hover_color=UI_FIELD_BORDER,
+                  text_color=UI_TEXT_PRIMARY, border_width=1,
+                  border_color=UI_FIELD_BORDER,
                   command=on_cancel).pack(side="left")
 
     root.mainloop()
