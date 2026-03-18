@@ -25,7 +25,7 @@
 - ✅ IPv6 warning (один раз за сессию, маркер `.ipv6_warned`)
 - ✅ Проверка порта перед запуском
 - ✅ Консольная панель управления (TUI) на rich
-- 🔄 v2.5.0-dev (native macOS menu bar на rumps, обновлённый CI/CD)
+- ✅ v2.5.0 Released (native macOS menu bar на rumps, обновлённый CI/CD)
 
 ---
 
@@ -42,7 +42,7 @@
 
 ### 3. macOS Tray-приложение (pystray)
 **Файл:** `macos.py`
-**Статус:** 🔄 В процессе (v2.5.0-dev) — переход на нативный macOS menu bar через `rumps`.
+**Статус:** ✅ Решено (v2.5.0) — переход на нативный macOS menu bar через `rumps`.
 **Проблема:** pystray имеет ограничения на macOS, особенно в frozen-приложениях.
 **Решение:** Полная переписка `macos.py` с использованием `rumps` для нативной интеграции.
 
@@ -66,7 +66,7 @@
 
 ### 4. Native macOS menu bar
 **Файл:** `macos.py`
-**Статус:** 🔄 В процессе (v2.5.0-dev) — полный рефакторинг на `rumps`.
+**Статус:** ✅ Решено (v2.5.0) — полный рефакторинг на `rumps`.
 **Выполнено:**
 - Полная переписка `macos.py` с использованием `rumps` вместо `pystray`
 - Нативное меню macOS с иконкой в menu bar
@@ -75,8 +75,8 @@
 - Интеграция с `proxy.tg_ws_proxy` напрямую
 **Осталось:**
 - Тестирование на macOS (Apple Silicon + Intel)
-- Сборка в CI/CD (GitHub Actions)
-- DMG упаковка
+- Сборка в CI/CD (GitHub Actions) — ✅ выполнено
+- DMG упаковка — ✅ выполнено
 
 ---
 
@@ -90,9 +90,9 @@
 ### 2. Добавить pyproject.toml
 **Статус:** ✅ Решено — `pyproject.toml` создан с зависимостями, метаданными и конфигурацией линтеров.
 
-### 3. Обновить зависимости (v2.5.0-dev)
+### 3. Обновить зависимости (v2.5.0)
 **Файл:** `requirements.txt`
-**Статус:** 🔄 В процессе — фиксация версий для стабильности.
+**Статус:** ✅ Решено — фиксация версий для стабильности.
 **Изменения:**
 - `cryptography==42.0.5` (было `>=41.0.0`)
 - `customtkinter==5.2.2`, `Pillow==10.3.0`, `psutil==5.9.8`
@@ -132,9 +132,9 @@
 - Автоматические релизы при запуске workflow
 - Кэширование pip зависимостей
 
-### 4. macOS сборка в CI/CD (v2.5.0-dev)
+### 4. macOS сборка в CI/CD (v2.5.0)
 **Файл:** `.github/workflows/build.yml`
-**Статус:** 🔄 В процессе — добавлена сборка macOS.
+**Статус:** ✅ Решено — добавлена сборка macOS.
 **Изменения:**
 - Отдельная job `build-macos` на `macos-latest`
 - Установка `rumps` для нативного menu bar
@@ -169,9 +169,9 @@
 - Пропуск pre-release версий
 - Версионирование через `CURRENT_VERSION = "1.3.0"`
 
-### 4. macOS native menu bar (v2.5.0-dev)
+### 4. macOS native menu bar (v2.5.0)
 **Файл:** `macos.py`
-**Статус:** 🔄 В процессе — полный рефакторинг на `rumps`.
+**Статус:** ✅ Решено — полный рефакторинг на `rumps`.
 **Функционал:**
 - Нативная иконка в menu bar (генерируемая PNG, 22x22, синий круг с "T")
 - Меню: Status, Open in Telegram, Statistics, Restart, Settings, Logs, Quit
@@ -304,13 +304,13 @@
 10. ✅ CI/CD пайплайн
 11. ✅ Автозапуск
 12. ✅ Проверка обновлений
-13. 🔄 Native macOS menu bar на rumps (v2.5.0-dev)
+13. ✅ Native macOS menu bar на rumps (v2.5.0)
 **Статус:** Все задачи высокого приоритета выполнены ✅
 
 ### Средний приоритет
 1. ✅ Рефакторинг глобального состояния (v2.0.0) — выполнено
 2. ✅ Интеграционные тесты (v2.3.0) — выполнено
-3. 🔄 macOS сборка и тестирование (v2.5.0-dev)
+3. ✅ macOS сборка и тестирование (v2.5.0) — выполнено
 4. ❌ CONTRIBUTING.md (низкий приоритет)
 
 ### Низкий приоритет
@@ -418,10 +418,11 @@
 - Linux: `pyinstaller packaging/linux.spec`
 - macOS: `pyinstaller packaging/macos.spec`
 
-### v2.5.0 (macOS Native Menu Bar) — 🔄 In Development
-- 🔄 Native macOS menu bar на rumps
-- 🔄 Обновлённый CI/CD с macOS сборкой
+### v2.5.0 (macOS Native Menu Bar) — ✅ Released
+- ✅ Native macOS menu bar на rumps
+- ✅ Обновлённый CI/CD с macOS сборкой
 - ✅ Фиксация версий зависимостей
+- ✅ Синхронизация версий (pyproject.toml, tray.py)
 
 **Выполнено:**
 - Полная переписка `macos.py` с использованием `rumps` (400+ строк)
@@ -431,8 +432,4 @@
 - Прямая интеграция с `proxy.tg_ws_proxy` (без посредников)
 - Обновлён `requirements.txt` с фиксированными версиями
 - CI/CD: job `build-macos` на `macos-latest`, создание DMG
-
-**Осталось:**
-- Тестирование на macOS (Apple Silicon + Intel)
-- Финальная сборка и релиз
-- Обновление `CURRENT_VERSION` до "2.5.0"
+- Версия обновлена до "2.5.0" в pyproject.toml и tray.py
