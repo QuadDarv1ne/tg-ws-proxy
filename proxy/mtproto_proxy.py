@@ -38,6 +38,8 @@ from .constants import (
     MTPROTO_DEFAULT_PORT,
     MTPROTO_DEFAULT_HOST,
     TG_RANGES,
+    DC_IP_MAP,
+    DEFAULT_DC_ID,
 )
 
 
@@ -351,6 +353,7 @@ class MTProtoProxy:
         host: str = MTPROTO_DEFAULT_HOST,
         port: int = MTPROTO_DEFAULT_PORT,
         dc_ip: Optional[Dict[int, str]] = None,
+        dc_id: int = DEFAULT_DC_ID,
         auto_rotate: bool = False,
         rotate_interval_days: int = 7,
         on_secret_rotate: Optional[Callable[[List[str]], None]] = None,
@@ -358,11 +361,14 @@ class MTProtoProxy:
         rate_limit_enabled: bool = False,
         rate_limit_connections: int = 10,
         rate_limit_bytes_per_sec: int = 10 * 1024 * 1024,
+        ip_whitelist: Optional[List[str]] = None,
+        ip_blacklist: Optional[List[str]] = None,
     ):
         self.secrets = secrets  # Support multiple secrets
         self.host = host
         self.port = port
         self.dc_ip = dc_ip or {}
+        self.dc_id = dc_id  # DC ID for upstream connection
 
         # Auto-rotation settings
         self.auto_rotate = auto_rotate
@@ -374,7 +380,7 @@ class MTProtoProxy:
         # Traffic limit settings
         self.traffic_limit_gb = traffic_limit_gb
         self.traffic_limit_bytes = int(traffic_limit_gb * 1024**3) if traffic_limit_gb else None
-        
+
         # Rate limiting settings
         self.rate_limit_enabled = rate_limit_enabled
         self.rate_limiter = RateLimiter(
@@ -660,8 +666,8 @@ class MTProtoProxy:
                            client_writer: asyncio.StreamWriter, label: str,
                            used_secret: str, ip: str):
         """Forward data between client and Telegram server."""
-        # Connect to Telegram server (use first DC from ranges)
-        tg_host = "149.154.167.220"  # DC2
+        # Get Telegram server IP from DC_ID
+        tg_host = self.dc_ip.get(self.dc_id) or DC_IP_MAP.get(self.dc_id, "149.154.167.220")
         tg_port = 443
         
         try:
@@ -669,9 +675,9 @@ class MTProtoProxy:
                 asyncio.open_connection(tg_host, tg_port),
                 timeout=10.0
             )
-            log.info("[%s] Connected to Telegram server %s:%d", label, tg_host, tg_port)
+            log.info("[%s] Connected to Telegram server DC%d %s:%d", label, self.dc_id, tg_host, tg_port)
         except Exception as exc:
-            log.error("[%s] Failed to connect to Telegram: %s", label, exc)
+            log.error("[%s] Failed to connect to Telegram DC%d: %s", label, self.dc_id, exc)
             return
         
         async def client_to_server():
@@ -768,6 +774,7 @@ def run_mtproto_proxy(
     secret: Optional[str] = None,  # Deprecated, for backward compatibility
     host: str = MTPROTO_DEFAULT_HOST,
     port: int = MTPROTO_DEFAULT_PORT,
+    dc_id: int = DEFAULT_DC_ID,
     verbose: bool = False,
     qr_output: Optional[str] = None,
     server_ip: Optional[str] = None,
@@ -788,6 +795,7 @@ def run_mtproto_proxy(
         secret: Single secret (deprecated, use secrets instead).
         host: Host to bind to.
         port: Port to listen on.
+        dc_id: Telegram DC ID to connect to (default: 2).
         verbose: Enable debug logging.
         qr_output: Generate QR code ('console' for ASCII or file path).
         server_ip: Server IP for QR code (auto-detected if None).
@@ -832,12 +840,15 @@ def run_mtproto_proxy(
         secrets=secrets,
         host=host,
         port=port,
+        dc_id=dc_id,
         auto_rotate=auto_rotate,
         rotate_interval_days=rotate_interval_days,
         traffic_limit_gb=traffic_limit_gb,
         rate_limit_enabled=rate_limit_enabled,
         rate_limit_connections=rate_limit_connections,
         rate_limit_bytes_per_sec=rate_limit_bytes_per_sec,
+        ip_whitelist=ip_whitelist,
+        ip_blacklist=ip_blacklist,
     )
 
     try:
@@ -889,6 +900,12 @@ def main() -> None:
         type=int,
         default=MTPROTO_DEFAULT_PORT,
         help=f'Listen port (default: {MTPROTO_DEFAULT_PORT})'
+    )
+    parser.add_argument(
+        '--dc-id',
+        type=int,
+        default=DEFAULT_DC_ID,
+        help=f'Telegram DC ID to connect to (default: {DEFAULT_DC_ID})'
     )
     parser.add_argument(
         '--qr',
@@ -1039,6 +1056,7 @@ def main() -> None:
         secrets=secrets,
         host=args.host,
         port=args.port,
+        dc_id=args.dc_id,
         verbose=args.verbose,
         qr_output=args.qr,
         server_ip=server_ip,
