@@ -13,58 +13,42 @@ import time
 from typing import Dict, List, Optional, Set, Tuple
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .constants import (
+    DEFAULT_PORT,
+    TCP_NODELAY,
+    RECV_BUF_SIZE,
+    SEND_BUF_SIZE,
+    WS_POOL_SIZE,
+    WS_POOL_MAX_AGE,
+    DC_FAIL_COOLDOWN,
+    INIT_PACKET_SIZE,
+    INIT_KEY_OFFSET,
+    INIT_KEY_SIZE,
+    INIT_IV_OFFSET,
+    INIT_IV_SIZE,
+    INIT_DC_OFFSET,
+    INIT_DC_SIZE,
+    PROTO_OBFUSCATED,
+    PROTO_ABRIDGED,
+    PROTO_PADDED_ABRIDGED,
+    ABRIDGED_SHORT_PREFIX,
+    TG_RANGES,
+    _IP_TO_DC,
+    WSAEADDRINUSE,
+)
 
-DEFAULT_PORT = 1080
+
 log = logging.getLogger('tg-ws-proxy')
 
-_TCP_NODELAY = True
-_RECV_BUF = 65536
-_SEND_BUF = 65536
-_WS_POOL_SIZE = 4
-_WS_POOL_MAX_AGE = 120.0
+_RECV_BUF = RECV_BUF_SIZE
+_SEND_BUF = SEND_BUF_SIZE
+_WS_POOL_SIZE = WS_POOL_SIZE
+_WS_POOL_MAX_AGE = WS_POOL_MAX_AGE
 
-_TG_RANGES = [
-    # 185.76.151.0/24
-    (struct.unpack('!I', _socket.inet_aton('185.76.151.0'))[0],
-     struct.unpack('!I', _socket.inet_aton('185.76.151.255'))[0]),
-    # 149.154.160.0/20
-    (struct.unpack('!I', _socket.inet_aton('149.154.160.0'))[0],
-     struct.unpack('!I', _socket.inet_aton('149.154.175.255'))[0]),
-    # 91.105.192.0/23
-    (struct.unpack('!I', _socket.inet_aton('91.105.192.0'))[0],
-     struct.unpack('!I', _socket.inet_aton('91.105.193.255'))[0]),
-    # 91.108.0.0/16
-    (struct.unpack('!I', _socket.inet_aton('91.108.0.0'))[0],
-     struct.unpack('!I', _socket.inet_aton('91.108.255.255'))[0]),
-]
+_TG_RANGES = TG_RANGES
 
 # IP -> (dc_id, is_media)
-_IP_TO_DC: Dict[str, Tuple[int, bool]] = {
-    # DC1
-    '149.154.175.50': (1, False), '149.154.175.51': (1, False),
-    '149.154.175.53': (1, False), '149.154.175.54': (1, False),
-    '149.154.175.52': (1, True),
-    # DC2
-    '149.154.167.41': (2, False), '149.154.167.50': (2, False),
-    '149.154.167.51': (2, False), '149.154.167.220': (2, False),
-    '95.161.76.100':  (2, False),
-    '149.154.167.151': (2, True), '149.154.167.222': (2, True),
-    '149.154.167.223': (2, True), '149.154.162.123': (2, True),
-    # DC3
-    '149.154.175.100': (3, False), '149.154.175.101': (3, False),
-    '149.154.175.102': (3, True),
-    # DC4
-    '149.154.167.91': (4, False), '149.154.167.92': (4, False),
-    '149.154.164.250': (4, True), '149.154.166.120': (4, True),
-    '149.154.166.121': (4, True), '149.154.167.118': (4, True),
-    '149.154.165.111': (4, True),
-    # DC5
-    '91.108.56.100': (5, False), '91.108.56.101': (5, False),
-    '91.108.56.116': (5, False), '91.108.56.126': (5, False),
-    '149.154.171.5':  (5, False),
-    '91.108.56.102': (5, True), '91.108.56.128': (5, True),
-    '91.108.56.151': (5, True),
-}
+_IP_TO_DC: Dict[str, Tuple[int, bool]] = _IP_TO_DC
 
 _dc_opt: Dict[int, Optional[str]] = {}
 
@@ -75,7 +59,6 @@ _ws_blacklist: Set[Tuple[int, bool]] = set()
 
 # Rate-limit re-attempts per (dc, is_media)
 _dc_fail_until: Dict[Tuple[int, bool], float] = {}
-_DC_FAIL_COOLDOWN = 60.0  # seconds
 
 
 _ssl_ctx = ssl.create_default_context()
@@ -362,18 +345,22 @@ def _dc_from_init(data: bytes) -> Tuple[Optional[int], bool]:
     Extract DC ID from the 64-byte MTProto obfuscation init packet.
     Returns (dc_id, is_media).
     """
+    if len(data) < INIT_PACKET_SIZE:
+        return None, False
+    
     try:
-        key = bytes(data[8:40])
-        iv = bytes(data[40:56])
+        key = bytes(data[INIT_KEY_OFFSET:INIT_KEY_OFFSET + INIT_KEY_SIZE])
+        iv = bytes(data[INIT_IV_OFFSET:INIT_IV_OFFSET + INIT_IV_SIZE])
         cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
         encryptor = cipher.encryptor()
         keystream = encryptor.update(b'\x00' * 64) + encryptor.finalize()
-        plain = bytes(a ^ b for a, b in zip(data[56:64], keystream[56:64]))
+        plain = bytes(a ^ b for a, b in zip(
+            data[56:64], keystream[56:64]))
         proto = struct.unpack('<I', plain[0:4])[0]
         dc_raw = struct.unpack('<h', plain[4:6])[0]
         log.debug("dc_from_init: proto=0x%08X dc_raw=%d plain=%s",
                   proto, dc_raw, plain.hex())
-        if proto in (0xEFEFEFEF, 0xEEEEEEEE, 0xDDDDDDDD):
+        if proto in (PROTO_OBFUSCATED, PROTO_ABRIDGED, PROTO_PADDED_ABRIDGED):
             dc = abs(dc_raw)
             if 1 <= dc <= 5:
                 return dc, (dc_raw < 0)
@@ -389,22 +376,22 @@ def _patch_init_dc(data: bytes, dc: int) -> bytes:
     Mobile clients with useSecret=0 leave bytes 60-61 as random.
     The WS relay needs a valid dc_id to route correctly.
     """
-    if len(data) < 64:
+    if len(data) < INIT_PACKET_SIZE:
         return data
 
     new_dc = struct.pack('<h', dc)
     try:
-        key_raw = bytes(data[8:40])
-        iv = bytes(data[40:56])
+        key_raw = bytes(data[INIT_KEY_OFFSET:INIT_KEY_OFFSET + INIT_KEY_SIZE])
+        iv = bytes(data[INIT_IV_OFFSET:INIT_IV_OFFSET + INIT_IV_SIZE])
         cipher = Cipher(algorithms.AES(key_raw), modes.CTR(iv))
         enc = cipher.encryptor()
         ks = enc.update(b'\x00' * 64) + enc.finalize()
-        patched = bytearray(data[:64])
-        patched[60] = ks[60] ^ new_dc[0]
-        patched[61] = ks[61] ^ new_dc[1]
+        patched = bytearray(data[:INIT_PACKET_SIZE])
+        patched[INIT_DC_OFFSET] = ks[INIT_DC_OFFSET] ^ new_dc[0]
+        patched[INIT_DC_OFFSET + 1] = ks[INIT_DC_OFFSET + 1] ^ new_dc[1]
         log.debug("init patched: dc_id -> %d", dc)
-        if len(data) > 64:
-            return bytes(patched) + data[64:]
+        if len(data) > INIT_PACKET_SIZE:
+            return bytes(patched) + data[INIT_PACKET_SIZE:]
         return bytes(patched)
     except Exception:
         return data
@@ -422,8 +409,8 @@ class _MsgSplitter:
     """
 
     def __init__(self, init_data: bytes):
-        key_raw = bytes(init_data[8:40])
-        iv = bytes(init_data[40:56])
+        key_raw = bytes(init_data[INIT_KEY_OFFSET:INIT_KEY_OFFSET + INIT_KEY_SIZE])
+        iv = bytes(init_data[INIT_IV_OFFSET:INIT_IV_OFFSET + INIT_IV_SIZE])
         cipher = Cipher(algorithms.AES(key_raw), modes.CTR(iv))
         self._dec = cipher.encryptor()
         self._dec.update(b'\x00' * 64)  # skip init packet
@@ -969,11 +956,11 @@ async def _handle_client(reader, writer):
                     "[%s] DC%d%s blacklisted for WS (all 302)",
                     label, dc, media_tag)
             elif ws_failed_redirect:
-                _dc_fail_until[dc_key] = now + _DC_FAIL_COOLDOWN
+                _dc_fail_until[dc_key] = now + DC_FAIL_COOLDOWN
             else:
-                _dc_fail_until[dc_key] = now + _DC_FAIL_COOLDOWN
+                _dc_fail_until[dc_key] = now + DC_FAIL_COOLDOWN
                 log.info("[%s] DC%d%s WS cooldown for %ds",
-                         label, dc, media_tag, int(_DC_FAIL_COOLDOWN))
+                         label, dc, media_tag, int(DC_FAIL_COOLDOWN))
 
             log.info("[%s] DC%d%s -> TCP fallback to %s:%d",
                      label, dc, media_tag, dst, port)

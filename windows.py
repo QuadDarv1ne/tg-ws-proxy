@@ -18,22 +18,32 @@ from typing import Dict, Optional
 from PIL import Image, ImageDraw, ImageFont
 
 import proxy.tg_ws_proxy as tg_ws_proxy
+from proxy.constants import (
+    APP_NAME,
+    APP_DIR_NAME,
+    CONFIG_FILE_NAME,
+    LOG_FILE_NAME,
+    FIRST_RUN_MARKER_NAME,
+    IPV6_WARN_MARKER_NAME,
+    LOCK_FILE_EXT,
+    DEFAULT_CONFIG,
+    TG_BLUE,
+    TG_BLUE_HOVER,
+    UI_BG,
+    UI_FIELD_BG,
+    UI_FIELD_BORDER,
+    UI_TEXT_PRIMARY,
+    UI_TEXT_SECONDARY,
+    UI_FONT_FAMILY,
+    WSAEADDRINUSE,
+)
 
 
-APP_NAME = "TgWsProxy"
-APP_DIR = Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
-CONFIG_FILE = APP_DIR / "config.json"
-LOG_FILE = APP_DIR / "proxy.log"
-FIRST_RUN_MARKER = APP_DIR / ".first_run_done"
-IPV6_WARN_MARKER = APP_DIR / ".ipv6_warned"
-
-
-DEFAULT_CONFIG = {
-    "port": 1080,
-    "host": "127.0.0.1",
-    "dc_ip": ["2:149.154.167.220", "4:149.154.167.220"],
-    "verbose": False,
-}
+APP_DIR = Path(os.environ.get("APPDATA", Path.home())) / APP_DIR_NAME
+CONFIG_FILE = APP_DIR / CONFIG_FILE_NAME
+LOG_FILE = APP_DIR / LOG_FILE_NAME
+FIRST_RUN_MARKER = APP_DIR / FIRST_RUN_MARKER_NAME
+IPV6_WARN_MARKER = APP_DIR / IPV6_WARN_MARKER_NAME
 
 
 _proxy_thread: Optional[threading.Thread] = None
@@ -148,7 +158,14 @@ def setup_logging(verbose: bool = False):
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
 
-    fh = logging.FileHandler(str(LOG_FILE), encoding="utf-8")
+    # RotatingFileHandler: 5MB max, keep 3 backup files
+    from logging.handlers import RotatingFileHandler
+    fh = RotatingFileHandler(
+        str(LOG_FILE),
+        maxBytes=5 * 1024 * 1024,  # 5MB
+        backupCount=3,
+        encoding="utf-8"
+    )
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter(
         "%(asctime)s  %(levelname)-5s  %(name)s  %(message)s",
@@ -207,7 +224,7 @@ def _check_port_available(port: int, host: str) -> bool:
             s.bind((host, port))
             return True
     except OSError as e:
-        if e.winerror == 10048:  # WSAEADDRINUSE
+        if e.winerror == WSAEADDRINUSE:
             return False
         raise
 
@@ -347,69 +364,60 @@ def _edit_config_dialog():
     icon_path = str(Path(__file__).parent / "icon.ico")
     root.iconbitmap(icon_path)
 
-    TG_BLUE = "#3390ec"
-    TG_BLUE_HOVER = "#2b7cd4"
-    BG = "#ffffff"
-    FIELD_BG = "#f0f2f5"
-    FIELD_BORDER = "#d6d9dc"
-    TEXT_PRIMARY = "#000000"
-    TEXT_SECONDARY = "#707579"
-    FONT_FAMILY = "Segoe UI"
-
     w, h = 420, 480
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-    root.configure(fg_color=BG)
+    root.configure(fg_color=UI_BG)
 
-    frame = ctk.CTkFrame(root, fg_color=BG, corner_radius=0)
+    frame = ctk.CTkFrame(root, fg_color=UI_BG, corner_radius=0)
     frame.pack(fill="both", expand=True, padx=24, pady=20)
 
     # Host
     ctk.CTkLabel(frame, text="IP-адрес прокси",
-                 font=(FONT_FAMILY, 13), text_color=TEXT_PRIMARY,
+                 font=(UI_FONT_FAMILY, 13), text_color=UI_TEXT_PRIMARY,
                  anchor="w").pack(anchor="w", pady=(0, 4))
     host_var = ctk.StringVar(value=cfg.get("host", "127.0.0.1"))
     host_entry = ctk.CTkEntry(frame, textvariable=host_var, width=200, height=36,
-                              font=(FONT_FAMILY, 13), corner_radius=10,
-                              fg_color=FIELD_BG, border_color=FIELD_BORDER,
-                              border_width=1, text_color=TEXT_PRIMARY)
+                              font=(UI_FONT_FAMILY, 13), corner_radius=10,
+                              fg_color=UI_FIELD_BG, border_color=UI_FIELD_BORDER,
+                              border_width=1, text_color=UI_TEXT_PRIMARY)
     host_entry.pack(anchor="w", pady=(0, 12))
 
     # Port
     ctk.CTkLabel(frame, text="Порт прокси",
-                 font=(FONT_FAMILY, 13), text_color=TEXT_PRIMARY,
+                 font=(UI_FONT_FAMILY, 13), text_color=UI_TEXT_PRIMARY,
                  anchor="w").pack(anchor="w", pady=(0, 4))
     port_var = ctk.StringVar(value=str(cfg.get("port", 1080)))
     port_entry = ctk.CTkEntry(frame, textvariable=port_var, width=120, height=36,
-                              font=(FONT_FAMILY, 13), corner_radius=10,
-                              fg_color=FIELD_BG, border_color=FIELD_BORDER,
-                              border_width=1, text_color=TEXT_PRIMARY)
+                              font=(UI_FONT_FAMILY, 13), corner_radius=10,
+                              fg_color=UI_FIELD_BG, border_color=UI_FIELD_BORDER,
+                              border_width=1, text_color=UI_TEXT_PRIMARY)
     port_entry.pack(anchor="w", pady=(0, 12))
 
     # DC-IP mappings
     ctk.CTkLabel(frame, text="DC → IP маппинги (по одному на строку, формат DC:IP)",
-                 font=(FONT_FAMILY, 13), text_color=TEXT_PRIMARY,
+                 font=(UI_FONT_FAMILY, 13), text_color=UI_TEXT_PRIMARY,
                  anchor="w").pack(anchor="w", pady=(0, 4))
     dc_textbox = ctk.CTkTextbox(frame, width=370, height=120,
                                 font=("Consolas", 12), corner_radius=10,
-                                fg_color=FIELD_BG, border_color=FIELD_BORDER,
-                                border_width=1, text_color=TEXT_PRIMARY)
+                                fg_color=UI_FIELD_BG, border_color=UI_FIELD_BORDER,
+                                border_width=1, text_color=UI_TEXT_PRIMARY)
     dc_textbox.pack(anchor="w", pady=(0, 12))
     dc_textbox.insert("1.0", "\n".join(cfg.get("dc_ip", DEFAULT_CONFIG["dc_ip"])))
 
     # Verbose
     verbose_var = ctk.BooleanVar(value=cfg.get("verbose", False))
     ctk.CTkCheckBox(frame, text="Подробное логирование (verbose)",
-                    variable=verbose_var, font=(FONT_FAMILY, 13),
-                    text_color=TEXT_PRIMARY,
+                    variable=verbose_var, font=(UI_FONT_FAMILY, 13),
+                    text_color=UI_TEXT_PRIMARY,
                     fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                     corner_radius=6, border_width=2,
-                    border_color=FIELD_BORDER).pack(anchor="w", pady=(0, 8))
+                    border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 8))
 
     # Info label
     ctk.CTkLabel(frame, text="Изменения вступят в силу после перезапуска прокси.",
-                 font=(FONT_FAMILY, 11), text_color=TEXT_SECONDARY,
+                 font=(UI_FONT_FAMILY, 11), text_color=UI_TEXT_SECONDARY,
                  anchor="w").pack(anchor="w", pady=(0, 16))
 
     def on_save():
@@ -521,15 +529,6 @@ def _show_first_run():
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
 
-    TG_BLUE = "#3390ec"
-    TG_BLUE_HOVER = "#2b7cd4"
-    BG = "#ffffff"
-    FIELD_BG = "#f0f2f5"
-    FIELD_BORDER = "#d6d9dc"
-    TEXT_PRIMARY = "#000000"
-    TEXT_SECONDARY = "#707579"
-    FONT_FAMILY = "Segoe UI"
-
     root = ctk.CTk()
     root.title("TG WS Proxy")
     root.resizable(False, False)
@@ -541,9 +540,9 @@ def _show_first_run():
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-    root.configure(fg_color=BG)
+    root.configure(fg_color=UI_BG)
 
-    frame = ctk.CTkFrame(root, fg_color=BG, corner_radius=0)
+    frame = ctk.CTkFrame(root, fg_color=UI_BG, corner_radius=0)
     frame.pack(fill="both", expand=True, padx=28, pady=24)
 
     title_frame = ctk.CTkFrame(frame, fg_color="transparent")
@@ -555,8 +554,8 @@ def _show_first_run():
     accent_bar.pack(side="left", padx=(0, 12))
 
     ctk.CTkLabel(title_frame, text="Прокси запущен и работает в системном трее",
-                 font=(FONT_FAMILY, 17, "bold"),
-                 text_color=TEXT_PRIMARY).pack(side="left")
+                 font=(UI_FONT_FAMILY, 17, "bold"),
+                 text_color=UI_TEXT_PRIMARY).pack(side="left")
 
     # Info sections
     sections = [
@@ -572,25 +571,25 @@ def _show_first_run():
     for text, bold in sections:
         weight = "bold" if bold else "normal"
         ctk.CTkLabel(frame, text=text,
-                     font=(FONT_FAMILY, 13, weight),
-                     text_color=TEXT_PRIMARY,
+                     font=(UI_FONT_FAMILY, 13, weight),
+                     text_color=UI_TEXT_PRIMARY,
                      anchor="w", justify="left").pack(anchor="w", pady=1)
 
     # Spacer
     ctk.CTkFrame(frame, fg_color="transparent", height=16).pack()
 
     # Separator
-    ctk.CTkFrame(frame, fg_color=FIELD_BORDER, height=1,
+    ctk.CTkFrame(frame, fg_color=UI_FIELD_BORDER, height=1,
                  corner_radius=0).pack(fill="x", pady=(0, 12))
 
     # Checkbox
     auto_var = ctk.BooleanVar(value=True)
     ctk.CTkCheckBox(frame, text="Открыть прокси в Telegram сейчас",
-                    variable=auto_var, font=(FONT_FAMILY, 13),
-                    text_color=TEXT_PRIMARY,
+                    variable=auto_var, font=(UI_FONT_FAMILY, 13),
+                    text_color=UI_TEXT_PRIMARY,
                     fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                     corner_radius=6, border_width=2,
-                    border_color=FIELD_BORDER).pack(anchor="w", pady=(0, 16))
+                    border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 16))
 
     def on_ok():
         FIRST_RUN_MARKER.touch()
@@ -600,7 +599,7 @@ def _show_first_run():
             _on_open_in_telegram()
 
     ctk.CTkButton(frame, text="Начать", width=180, height=42,
-                  font=(FONT_FAMILY, 15, "bold"), corner_radius=10,
+                  font=(UI_FONT_FAMILY, 15, "bold"), corner_radius=10,
                   fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                   text_color="#ffffff",
                   command=on_ok).pack(pady=(0, 0))
