@@ -198,9 +198,35 @@ def _load_icon():
 
 
 
+def _check_port_available(port: int, host: str) -> bool:
+    """Check if port is available for binding."""
+    import socket as _sock
+    try:
+        with _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM) as s:
+            s.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+            s.bind((host, port))
+            return True
+    except OSError as e:
+        if e.winerror == 10048:  # WSAEADDRINUSE
+            return False
+        raise
+
+
 def _run_proxy_thread(port: int, dc_opt: Dict[int, str], verbose: bool,
                       host: str = '127.0.0.1'):
     global _async_stop
+    
+    # Check port availability before starting
+    if not _check_port_available(port, host):
+        log.error("Port %d on %s is already in use", port, host)
+        _show_error(f"Не удалось запустить прокси:\nПорт {host}:{port} уже используется другим приложением.\n\nЗакройте приложение, использующее этот порт, или измените порт в настройках прокси и перезапустите.")
+        return
+    
+    # Check IPv6 and log warning if enabled
+    if _has_ipv6_enabled():
+        log.warning("IPv6 is enabled on this system. If you experience connection issues, "
+                    "try disabling IPv6 in Telegram Desktop proxy settings or system-wide.")
+    
     loop = _asyncio.new_event_loop()
     _asyncio.set_event_loop(loop)
     stop_ev = _asyncio.Event()
@@ -213,6 +239,10 @@ def _run_proxy_thread(port: int, dc_opt: Dict[int, str], verbose: bool,
         log.error("Proxy thread crashed: %s", exc)
         if "10048" in str(exc) or "Address already in use" in str(exc):
             _show_error("Не удалось запустить прокси:\nПорт уже используется другим приложением.\n\nЗакройте приложение, использующее этот порт, или измените порт в настройках прокси и перезапустите.")
+        # Log IPv6-related errors
+        err_str = str(exc).lower()
+        if "ipv6" in err_str or "af_inet6" in err_str or "errno 10047" in err_str:
+            log.error("IPv6-related error detected. Consider disabling IPv6 in Telegram Desktop settings.")
     finally:
         loop.close()
         _async_stop = None
