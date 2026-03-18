@@ -17,8 +17,9 @@ import struct
 import sys
 import threading
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Callable
+from typing import Dict, List, Optional, Tuple, Callable, DefaultDict
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 try:
@@ -112,6 +113,128 @@ def generate_qr_code(server: str, port: int, secret: str, output_path: Optional[
 
     # Return ASCII art for console display
     return qr.print_ascii(invert=True) or ""
+
+
+class RateLimiter:
+    """
+    Rate limiter for MTProto connections.
+    
+    Limits connections and traffic per IP address.
+    """
+    
+    def __init__(
+        self,
+        max_connections_per_ip: int = 10,
+        max_bytes_per_second: int = 10 * 1024 * 1024,  # 10 MB/s default
+        window_seconds: int = 60,
+        ip_whitelist: Optional[List[str]] = None,
+        ip_blacklist: Optional[List[str]] = None,
+    ):
+        self.max_connections_per_ip = max_connections_per_ip
+        self.max_bytes_per_second = max_bytes_per_second
+        self.window_seconds = window_seconds
+        
+        # IP lists
+        self.ip_whitelist = set(ip_whitelist) if ip_whitelist else set()
+        self.ip_blacklist = set(ip_blacklist) if ip_blacklist else set()
+        
+        # Track connections per IP
+        self.connections_per_ip: DefaultDict[str, int] = defaultdict(int)
+        
+        # Track bytes per IP with timestamps
+        self.bytes_per_ip: DefaultDict[str, List[Tuple[float, int]]] = defaultdict(list)
+        
+        # Lock for thread safety
+        self._lock = threading.Lock()
+    
+    def is_ip_allowed(self, ip: str) -> bool:
+        """Check if IP is allowed (not blacklisted, or whitelisted)."""
+        if ip in self.ip_whitelist:
+            return True
+        if ip in self.ip_blacklist:
+            return False
+        return True
+    
+    def add_to_blacklist(self, ip: str):
+        """Add IP to blacklist."""
+        with self._lock:
+            self.ip_blacklist.add(ip)
+    
+    def add_to_whitelist(self, ip: str):
+        """Add IP to whitelist."""
+        with self._lock:
+            self.ip_whitelist.add(ip)
+    
+    def remove_from_blacklist(self, ip: str):
+        """Remove IP from blacklist."""
+        with self._lock:
+            self.ip_blacklist.discard(ip)
+    
+    def remove_from_whitelist(self, ip: str):
+        """Remove IP from whitelist."""
+        with self._lock:
+            self.ip_whitelist.discard(ip)
+    
+    def check_connection_limit(self, ip: str) -> bool:
+        """
+        Check if IP has exceeded connection limit.
+        Returns True if connection is allowed.
+        """
+        with self._lock:
+            return self.connections_per_ip[ip] < self.max_connections_per_ip
+    
+    def increment_connections(self, ip: str):
+        """Increment connection count for IP."""
+        with self._lock:
+            self.connections_per_ip[ip] += 1
+    
+    def decrement_connections(self, ip: str):
+        """Decrement connection count for IP."""
+        with self._lock:
+            self.connections_per_ip[ip] = max(0, self.connections_per_ip[ip] - 1)
+    
+    def check_rate_limit(self, ip: str, bytes_to_send: int) -> bool:
+        """
+        Check if IP has exceeded rate limit.
+        Returns True if request is allowed.
+        """
+        now = time.time()
+        window_start = now - self.window_seconds
+        
+        with self._lock:
+            # Clean old entries
+            self.bytes_per_ip[ip] = [
+                (t, b) for t, b in self.bytes_per_ip[ip] if t > window_start
+            ]
+            
+            # Calculate current rate
+            total_bytes = sum(b for _, b in self.bytes_per_ip[ip])
+            current_rate = total_bytes / self.window_seconds
+            
+            if current_rate + bytes_to_send > self.max_bytes_per_second:
+                return False
+            
+            return True
+    
+    def record_bytes(self, ip: str, bytes_count: int):
+        """Record bytes transferred for IP."""
+        now = time.time()
+        with self._lock:
+            self.bytes_per_ip[ip].append((now, bytes_count))
+    
+    def cleanup(self):
+        """Clean up old entries (call periodically)."""
+        now = time.time()
+        window_start = now - self.window_seconds
+        
+        with self._lock:
+            # Clean bytes records
+            for ip in list(self.bytes_per_ip.keys()):
+                self.bytes_per_ip[ip] = [
+                    (t, b) for t, b in self.bytes_per_ip[ip] if t > window_start
+                ]
+                if not self.bytes_per_ip[ip]:
+                    del self.bytes_per_ip[ip]
 
 
 class MTProtoTransport:
@@ -232,6 +355,9 @@ class MTProtoProxy:
         rotate_interval_days: int = 7,
         on_secret_rotate: Optional[Callable[[List[str]], None]] = None,
         traffic_limit_gb: Optional[float] = None,  # Per-secret traffic limit in GB
+        rate_limit_enabled: bool = False,
+        rate_limit_connections: int = 10,
+        rate_limit_bytes_per_sec: int = 10 * 1024 * 1024,
     ):
         self.secrets = secrets  # Support multiple secrets
         self.host = host
@@ -244,10 +370,19 @@ class MTProtoProxy:
         self.on_secret_rotate = on_secret_rotate
         self._rotate_thread: Optional[threading.Thread] = None
         self._stop_rotate = threading.Event()
-        
+
         # Traffic limit settings
         self.traffic_limit_gb = traffic_limit_gb
         self.traffic_limit_bytes = int(traffic_limit_gb * 1024**3) if traffic_limit_gb else None
+        
+        # Rate limiting settings
+        self.rate_limit_enabled = rate_limit_enabled
+        self.rate_limiter = RateLimiter(
+            max_connections_per_ip=rate_limit_connections,
+            max_bytes_per_second=rate_limit_bytes_per_sec,
+            ip_whitelist=ip_whitelist,
+            ip_blacklist=ip_blacklist,
+        ) if rate_limit_enabled else None
 
         # Create transport for each secret
         self.transports = {secret: MTProtoTransport(secret) for secret in secrets}
@@ -390,11 +525,27 @@ class MTProtoProxy:
     
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """Handle incoming MTProto client connection."""
-        self.connections_total += 1
-        self.connections_active += 1
-
         peer = writer.get_extra_info('peername')
         label = f"{peer[0]}:{peer[1]}" if peer else "?"
+        ip = peer[0] if peer else "unknown"
+
+        # Check IP whitelist/blacklist
+        if self.rate_limiter:
+            if not self.rate_limiter.is_ip_allowed(ip):
+                log.warning("[%s] IP blocked (blacklisted): %s", label, ip)
+                writer.close()
+                return
+        
+        # Check rate limit (connection count)
+        if self.rate_limiter:
+            if not self.rate_limiter.check_connection_limit(ip):
+                log.warning("[%s] Rate limit exceeded (connections)", label)
+                writer.close()
+                return
+            self.rate_limiter.increment_connections(ip)
+        
+        self.connections_total += 1
+        self.connections_active += 1
 
         log.info("[%s] MTProto client connected", label)
 
@@ -407,6 +558,10 @@ class MTProtoProxy:
                 return
 
             self.bytes_received += len(init_data)
+            
+            # Record bytes for rate limiting
+            if self.rate_limiter:
+                self.rate_limiter.record_bytes(ip, len(init_data))
 
             # Try to decrypt with each secret (multi-user support)
             transport = None
@@ -476,7 +631,7 @@ class MTProtoProxy:
                 return
 
             # Keep connection alive and forward data
-            await self._forward_data(reader, writer, label, used_secret)
+            await self._forward_data(reader, writer, label, used_secret, ip)
 
         except asyncio.TimeoutError:
             log.debug("[%s] Connection timeout", label)
@@ -491,6 +646,9 @@ class MTProtoProxy:
             # Decrement active connections for the used secret
             if 'used_secret' in locals() and used_secret in self.stats_per_secret:
                 self.stats_per_secret[used_secret]["connections_active"] -= 1
+            # Decrement connection count for rate limiting
+            if self.rate_limiter:
+                self.rate_limiter.decrement_connections(ip)
             try:
                 writer.close()
                 await writer.wait_closed()
@@ -500,7 +658,7 @@ class MTProtoProxy:
 
     async def _forward_data(self, client_reader: asyncio.StreamReader,
                            client_writer: asyncio.StreamWriter, label: str,
-                           used_secret: str):
+                           used_secret: str, ip: str):
         """Forward data between client and Telegram server."""
         async def client_to_server():
             try:
@@ -508,6 +666,14 @@ class MTProtoProxy:
                     data = await client_reader.read(65536)
                     if not data:
                         break
+                    
+                    # Check rate limit
+                    if self.rate_limiter:
+                        if not self.rate_limiter.check_rate_limit(ip, len(data)):
+                            log.warning("[%s] Rate limit exceeded (bytes)", label)
+                            break
+                        self.rate_limiter.record_bytes(ip, len(data))
+                    
                     self.bytes_received += len(data)
                     self.stats_per_secret[used_secret]["bytes_received"] += len(data)
                     log.debug("[%s] Client -> Server: %d bytes", label, len(data))
@@ -568,6 +734,11 @@ def run_mtproto_proxy(
     auto_rotate: bool = False,
     rotate_interval_days: int = 7,
     traffic_limit_gb: Optional[float] = None,
+    rate_limit_enabled: bool = False,
+    rate_limit_connections: int = 10,
+    rate_limit_bytes_per_sec: int = 10 * 1024 * 1024,
+    ip_whitelist: Optional[List[str]] = None,
+    ip_blacklist: Optional[List[str]] = None,
 ):
     """
     Run MTProto proxy server (blocking).
@@ -583,6 +754,9 @@ def run_mtproto_proxy(
         auto_rotate: Enable automatic secret rotation.
         rotate_interval_days: Rotate secrets every N days.
         traffic_limit_gb: Traffic limit per secret in GB (None for unlimited).
+        rate_limit_enabled: Enable rate limiting.
+        rate_limit_connections: Max connections per IP.
+        rate_limit_bytes_per_sec: Max bytes per second per IP.
     """
     # Handle backward compatibility
     if secrets is None:
@@ -621,6 +795,9 @@ def run_mtproto_proxy(
         auto_rotate=auto_rotate,
         rotate_interval_days=rotate_interval_days,
         traffic_limit_gb=traffic_limit_gb,
+        rate_limit_enabled=rate_limit_enabled,
+        rate_limit_connections=rate_limit_connections,
+        rate_limit_bytes_per_sec=rate_limit_bytes_per_sec,
     )
 
     try:
@@ -632,9 +809,22 @@ def run_mtproto_proxy(
 def main() -> None:
     """CLI entry point."""
     import argparse
+    from .mtproto_config import MTProtoConfig, load_config, save_config
 
     parser = argparse.ArgumentParser(
         description='MTProto Proxy for Telegram Mobile Apps'
+    )
+    parser.add_argument(
+        '--config', '-c',
+        type=str,
+        default=None,
+        help='Path to JSON configuration file'
+    )
+    parser.add_argument(
+        '--save-config',
+        type=str,
+        default=None,
+        help='Save current CLI settings to JSON file'
     )
     parser.add_argument(
         '--secrets',
@@ -692,6 +882,35 @@ def main() -> None:
         help='Traffic limit per secret in GB (None for unlimited)'
     )
     parser.add_argument(
+        '--rate-limit',
+        action='store_true',
+        help='Enable rate limiting per IP'
+    )
+    parser.add_argument(
+        '--rate-limit-connections',
+        type=int,
+        default=10,
+        help='Max connections per IP (default: 10)'
+    )
+    parser.add_argument(
+        '--rate-limit-mbps',
+        type=float,
+        default=10,
+        help='Max MB/s per IP (default: 10)'
+    )
+    parser.add_argument(
+        '--ip-whitelist',
+        type=str,
+        default=None,
+        help='Comma-separated list of allowed IPs'
+    )
+    parser.add_argument(
+        '--ip-blacklist',
+        type=str,
+        default=None,
+        help='Comma-separated list of blocked IPs'
+    )
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Debug logging'
@@ -699,12 +918,49 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Load config from file if specified
+    if args.config:
+        config = load_config(args.config)
+        log.info("Loaded config from: %s", args.config)
+        
+        # CLI args override config file
+        if not args.secrets and not args.secret:
+            args.secrets = ','.join(config.secrets) if config.secrets else None
+        if args.host == MTPROTO_DEFAULT_HOST:
+            args.host = config.host
+        if args.port == MTPROTO_DEFAULT_PORT:
+            args.port = config.port
+        if not args.auto_rotate:
+            args.auto_rotate = config.auto_rotate
+        if args.rotate_days == 7:
+            args.rotate_days = config.rotate_days
+        if args.traffic_limit_gb is None:
+            args.traffic_limit_gb = config.traffic_limit_gb
+        if not args.rate_limit:
+            args.rate_limit = config.rate_limit_enabled
+        if args.rate_limit_connections == 10:
+            args.rate_limit_connections = config.rate_limit_connections
+        if args.rate_limit_mbps == 10.0:
+            args.rate_limit_mbps = config.rate_limit_mbps
+        if not args.ip_whitelist:
+            args.ip_whitelist = ','.join(config.ip_whitelist) if config.ip_whitelist else None
+        if not args.ip_blacklist:
+            args.ip_blacklist = ','.join(config.ip_blacklist) if config.ip_blacklist else None
+        if not args.qr:
+            args.qr = config.qr_output if config.generate_qr else None
+        if not args.verbose:
+            args.verbose = config.verbose
+
     # Parse secrets
     secrets = None
     if args.secrets:
         secrets = [s.strip() for s in args.secrets.split(',')]
     elif args.secret:
         secrets = [args.secret]
+
+    # Parse IP lists
+    ip_whitelist = [ip.strip() for ip in args.ip_whitelist.split(',')] if args.ip_whitelist else None
+    ip_blacklist = [ip.strip() for ip in args.ip_blacklist.split(',')] if args.ip_blacklist else None
 
     # Auto-detect server IP if not provided
     server_ip = args.server
@@ -718,6 +974,27 @@ def main() -> None:
         except Exception:
             server_ip = "127.0.0.1"
 
+    # Save config if requested
+    if args.save_config:
+        config = MTProtoConfig(
+            host=args.host,
+            port=args.port,
+            secrets=secrets or [],
+            auto_rotate=args.auto_rotate,
+            rotate_days=args.rotate_days,
+            traffic_limit_gb=args.traffic_limit_gb,
+            rate_limit_enabled=args.rate_limit,
+            rate_limit_connections=args.rate_limit_connections,
+            rate_limit_mbps=args.rate_limit_mbps,
+            ip_whitelist=ip_whitelist,
+            ip_blacklist=ip_blacklist,
+            generate_qr=args.qr is not None,
+            qr_output=args.qr if args.qr != 'console' else None,
+            verbose=args.verbose,
+        )
+        save_config(config, args.save_config)
+        log.info("Config saved to: %s", args.save_config)
+
     run_mtproto_proxy(
         secrets=secrets,
         host=args.host,
@@ -728,6 +1005,11 @@ def main() -> None:
         auto_rotate=args.auto_rotate,
         rotate_interval_days=args.rotate_days,
         traffic_limit_gb=args.traffic_limit_gb,
+        rate_limit_enabled=args.rate_limit,
+        rate_limit_connections=args.rate_limit_connections,
+        rate_limit_bytes_per_sec=int(args.rate_limit_mbps * 1024 * 1024),
+        ip_whitelist=ip_whitelist,
+        ip_blacklist=ip_blacklist,
     )
 
 
