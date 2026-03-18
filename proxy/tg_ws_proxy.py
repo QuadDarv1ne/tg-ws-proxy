@@ -10,8 +10,16 @@ import ssl
 import struct
 import sys
 import time
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, TypedDict
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+
+class ProxyConfig(TypedDict, total=False):
+    """Configuration for the proxy server."""
+    port: int
+    host: str
+    dc_ip: List[str]
+    verbose: bool
 
 from .constants import (
     DEFAULT_PORT,
@@ -448,14 +456,16 @@ class _MsgSplitter:
         return parts
 
 
-def _ws_domains(dc: int, is_media) -> List[str]:
+def _ws_domains(dc: int, is_media: Optional[bool]) -> List[str]:
     if is_media is None or is_media:
         return [f'kws{dc}-1.web.telegram.org', f'kws{dc}.web.telegram.org']
     return [f'kws{dc}.web.telegram.org', f'kws{dc}-1.web.telegram.org']
 
 
 class Stats:
-    def __init__(self):
+    """Proxy statistics tracker."""
+    
+    def __init__(self) -> None:
         self.connections_total = 0
         self.connections_ws = 0
         self.connections_tcp_fallback = 0
@@ -1075,7 +1085,18 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
 
 
 def parse_dc_ip_list(dc_ip_list: List[str]) -> Dict[int, str]:
-    """Parse list of 'DC:IP' strings into {dc: ip} dict."""
+    """
+    Parse list of 'DC:IP' strings into {dc: ip} dict.
+    
+    Args:
+        dc_ip_list: List of strings in format 'DC:IP' (e.g., ['2:149.154.167.220'])
+    
+    Returns:
+        Dictionary mapping DC IDs to IP addresses
+    
+    Raises:
+        ValueError: If any entry has invalid format
+    """
     dc_opt: Dict[int, str] = {}
     for entry in dc_ip_list:
         if ':' not in entry:
@@ -1090,14 +1111,27 @@ def parse_dc_ip_list(dc_ip_list: List[str]) -> Dict[int, str]:
     return dc_opt
 
 
-def run_proxy(port: int, dc_opt: Dict[int, str],
-              stop_event: Optional[asyncio.Event] = None,
-              host: str = '127.0.0.1'):
-    """Run the proxy (blocking). Can be called from threads."""
+def run_proxy(
+    port: int,
+    dc_opt: Dict[int, str],
+    stop_event: Optional[asyncio.Event] = None,
+    host: str = '127.0.0.1'
+) -> None:
+    """
+    Run the proxy server (blocking).
+    
+    Can be called from threads. Use stop_event to gracefully shutdown.
+    
+    Args:
+        port: Port to listen on
+        dc_opt: Dictionary mapping DC IDs to target IPs
+        stop_event: Optional event to signal shutdown
+        host: Host to bind to (default: 127.0.0.1)
+    """
     asyncio.run(_run(port, dc_opt, stop_event, host))
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description='Telegram Desktop WebSocket Bridge Proxy')
     ap.add_argument('--port', type=int, default=DEFAULT_PORT,

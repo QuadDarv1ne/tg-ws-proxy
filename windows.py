@@ -129,11 +129,12 @@ def _acquire_lock() -> bool:
     return True
 
 
-def _ensure_dirs():
+def _ensure_dirs() -> None:
     APP_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_config() -> dict:
+    """Load configuration from file or return defaults."""
     _ensure_dirs()
     if CONFIG_FILE.exists():
         try:
@@ -147,13 +148,14 @@ def load_config() -> dict:
     return dict(DEFAULT_CONFIG)
 
 
-def save_config(cfg: dict):
+def save_config(cfg: dict) -> None:
+    """Save configuration to file."""
     _ensure_dirs()
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
 
-def setup_logging(verbose: bool = False):
+def setup_logging(verbose: bool = False) -> None:
     _ensure_dirs()
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
@@ -265,7 +267,8 @@ def _run_proxy_thread(port: int, dc_opt: Dict[int, str], verbose: bool,
         _async_stop = None
 
 
-def start_proxy():
+def start_proxy() -> None:
+    """Start the proxy server in a background thread."""
     global _proxy_thread, _config
     if _proxy_thread and _proxy_thread.is_alive():
         log.info("Proxy already running")
@@ -292,7 +295,8 @@ def start_proxy():
     _proxy_thread.start()
 
 
-def stop_proxy():
+def stop_proxy() -> None:
+    """Stop the proxy server gracefully."""
     global _proxy_thread, _async_stop
     if _async_stop:
         loop, stop_ev = _async_stop
@@ -303,7 +307,8 @@ def stop_proxy():
     log.info("Proxy stopped")
 
 
-def restart_proxy():
+def restart_proxy() -> None:
+    """Restart the proxy server."""
     log.info("Restarting proxy...")
     stop_proxy()
     time.sleep(0.3)
