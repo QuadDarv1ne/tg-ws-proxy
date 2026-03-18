@@ -809,9 +809,22 @@ def run_mtproto_proxy(
 def main() -> None:
     """CLI entry point."""
     import argparse
+    from .mtproto_config import MTProtoConfig, load_config, save_config
 
     parser = argparse.ArgumentParser(
         description='MTProto Proxy for Telegram Mobile Apps'
+    )
+    parser.add_argument(
+        '--config', '-c',
+        type=str,
+        default=None,
+        help='Path to JSON configuration file'
+    )
+    parser.add_argument(
+        '--save-config',
+        type=str,
+        default=None,
+        help='Save current CLI settings to JSON file'
     )
     parser.add_argument(
         '--secrets',
@@ -905,6 +918,39 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Load config from file if specified
+    if args.config:
+        config = load_config(args.config)
+        log.info("Loaded config from: %s", args.config)
+        
+        # CLI args override config file
+        if not args.secrets and not args.secret:
+            args.secrets = ','.join(config.secrets) if config.secrets else None
+        if args.host == MTPROTO_DEFAULT_HOST:
+            args.host = config.host
+        if args.port == MTPROTO_DEFAULT_PORT:
+            args.port = config.port
+        if not args.auto_rotate:
+            args.auto_rotate = config.auto_rotate
+        if args.rotate_days == 7:
+            args.rotate_days = config.rotate_days
+        if args.traffic_limit_gb is None:
+            args.traffic_limit_gb = config.traffic_limit_gb
+        if not args.rate_limit:
+            args.rate_limit = config.rate_limit_enabled
+        if args.rate_limit_connections == 10:
+            args.rate_limit_connections = config.rate_limit_connections
+        if args.rate_limit_mbps == 10.0:
+            args.rate_limit_mbps = config.rate_limit_mbps
+        if not args.ip_whitelist:
+            args.ip_whitelist = ','.join(config.ip_whitelist) if config.ip_whitelist else None
+        if not args.ip_blacklist:
+            args.ip_blacklist = ','.join(config.ip_blacklist) if config.ip_blacklist else None
+        if not args.qr:
+            args.qr = config.qr_output if config.generate_qr else None
+        if not args.verbose:
+            args.verbose = config.verbose
+
     # Parse secrets
     secrets = None
     if args.secrets:
@@ -927,6 +973,27 @@ def main() -> None:
             s.close()
         except Exception:
             server_ip = "127.0.0.1"
+
+    # Save config if requested
+    if args.save_config:
+        config = MTProtoConfig(
+            host=args.host,
+            port=args.port,
+            secrets=secrets or [],
+            auto_rotate=args.auto_rotate,
+            rotate_days=args.rotate_days,
+            traffic_limit_gb=args.traffic_limit_gb,
+            rate_limit_enabled=args.rate_limit,
+            rate_limit_connections=args.rate_limit_connections,
+            rate_limit_mbps=args.rate_limit_mbps,
+            ip_whitelist=ip_whitelist,
+            ip_blacklist=ip_blacklist,
+            generate_qr=args.qr is not None,
+            qr_output=args.qr if args.qr != 'console' else None,
+            verbose=args.verbose,
+        )
+        save_config(config, args.save_config)
+        log.info("Config saved to: %s", args.save_config)
 
     run_mtproto_proxy(
         secrets=secrets,
