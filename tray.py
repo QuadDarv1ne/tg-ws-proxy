@@ -16,7 +16,7 @@ import time
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Dict, Optional, Callable
+from typing import Dict, List, Optional, Callable, Tuple
 
 import psutil
 
@@ -70,7 +70,7 @@ from proxy.constants import (
 )
 
 
-APP_DIR = Path(os.environ.get("APPDATA", Path.home()) / ".config") / APP_DIR_NAME
+APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()) + "/.config")) / APP_DIR_NAME
 CONFIG_FILE = APP_DIR / CONFIG_FILE_NAME
 LOG_FILE = APP_DIR / LOG_FILE_NAME
 FIRST_RUN_MARKER = APP_DIR / FIRST_RUN_MARKER_NAME
@@ -895,6 +895,36 @@ def _show_first_run() -> None:
         FIRST_RUN_MARKER.touch()
         return
 
+    _show_first_run_dialog()
+
+
+def _get_first_run_sections(host: str, port: int, tg_url: str) -> List[Tuple[str, bool]]:
+    """Get instruction sections for first-run dialog."""
+    return [
+        ("Как подключить Telegram Desktop:", True),
+        ("  Автоматически:", True),
+        (f"  ПКМ по иконке в трее → «Открыть в Telegram»", False),
+        (f"  Или ссылка: {tg_url}", False),
+        ("\n  Вручную:", True),
+        ("  Настройки → Продвинутые → Тип подключения → Прокси", False),
+        (f"  SOCKS5 → {host} : {port} (без логина/пароля)", False),
+    ]
+
+
+def _on_first_run_ok(
+    root: "ctk.CTk",
+    auto_var: "ctk.BooleanVar",
+) -> None:
+    """Handle first-run dialog OK button."""
+    FIRST_RUN_MARKER.touch()
+    open_tg = auto_var.get()
+    root.destroy()
+    if open_tg:
+        _on_open_in_telegram()
+
+
+def _show_first_run_dialog() -> None:
+    """Show first-run wizard dialog."""
     host = _config.get("host", DEFAULT_CONFIG["host"])
     port = _config.get("port", DEFAULT_CONFIG["port"])
     tg_url = f"tg://socks?server={host}&port={port}"
@@ -916,6 +946,17 @@ def _show_first_run() -> None:
     frame = ctk.CTkFrame(root, fg_color=UI_BG, corner_radius=0)
     frame.pack(fill="both", expand=True, padx=28, pady=24)
 
+    _build_first_run_title(frame)
+    _build_first_run_instructions(frame, host, port, tg_url)
+    auto_var = _build_first_run_checkbox(frame)
+    _build_first_run_button(frame, root, auto_var)
+
+    root.protocol("WM_DELETE_WINDOW", lambda: _on_first_run_ok(root, auto_var))
+    root.mainloop()
+
+
+def _build_first_run_title(frame: "ctk.CTkFrame") -> None:
+    """Build title section of first-run dialog."""
     title_frame = ctk.CTkFrame(frame, fg_color="transparent")
     title_frame.pack(anchor="w", pady=(0, 16), fill="x")
 
@@ -927,15 +968,15 @@ def _show_first_run() -> None:
                  font=(UI_FONT_FAMILY, 17, "bold"),
                  text_color=UI_TEXT_PRIMARY).pack(side="left")
 
-    sections = [
-        ("Как подключить Telegram Desktop:", True),
-        ("  Автоматически:", True),
-        (f"  ПКМ по иконке в трее → «Открыть в Telegram»", False),
-        (f"  Или ссылка: {tg_url}", False),
-        ("\n  Вручную:", True),
-        ("  Настройки → Продвинутые → Тип подключения → Прокси", False),
-        (f"  SOCKS5 → {host} : {port} (без логина/пароля)", False),
-    ]
+
+def _build_first_run_instructions(
+    frame: "ctk.CTkFrame",
+    host: str,
+    port: int,
+    tg_url: str
+) -> None:
+    """Build instructions section of first-run dialog."""
+    sections = _get_first_run_sections(host, port, tg_url)
 
     for text, bold in sections:
         weight = "bold" if bold else "normal"
@@ -948,6 +989,9 @@ def _show_first_run() -> None:
     ctk.CTkFrame(frame, fg_color=UI_FIELD_BORDER, height=1,
                  corner_radius=0).pack(fill="x", pady=(0, 12))
 
+
+def _build_first_run_checkbox(frame: "ctk.CTkFrame") -> "ctk.BooleanVar":
+    """Build checkbox section of first-run dialog."""
     auto_var = ctk.BooleanVar(value=True)
     ctk.CTkCheckBox(frame, text="Открыть прокси в Telegram сейчас",
                     variable=auto_var, font=(UI_FONT_FAMILY, 13),
@@ -955,22 +999,20 @@ def _show_first_run() -> None:
                     fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                     corner_radius=6, border_width=2,
                     border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 16))
+    return auto_var
 
-    def on_ok():
-        FIRST_RUN_MARKER.touch()
-        open_tg = auto_var.get()
-        root.destroy()
-        if open_tg:
-            _on_open_in_telegram()
 
+def _build_first_run_button(
+    frame: "ctk.CTkFrame",
+    root: "ctk.CTk",
+    auto_var: "ctk.BooleanVar"
+) -> None:
+    """Build OK button section of first-run dialog."""
     ctk.CTkButton(frame, text="Начать", width=180, height=42,
                   font=(UI_FONT_FAMILY, 15, "bold"), corner_radius=10,
                   fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                   text_color="#ffffff",
-                  command=on_ok).pack(pady=(0, 0))
-
-    root.protocol("WM_DELETE_WINDOW", on_ok)
-    root.mainloop()
+                  command=lambda: _on_first_run_ok(root, auto_var)).pack(pady=(0, 0))
 
 
 def _check_for_updates() -> None:
@@ -1144,10 +1186,7 @@ def run_tray() -> None:
 
     start_proxy()
 
-    _show_first_run()
-    _check_ipv6_warning()
-    _check_for_updates()
-
+    # Create tray icon first
     icon_image = _load_icon()
     _tray_icon = pystray.Icon(
         APP_NAME,
@@ -1156,6 +1195,12 @@ def run_tray() -> None:
         menu=_build_menu())
 
     log.info("Tray icon running")
+
+    # Show first-run dialog in background thread so icon is visible
+    threading.Thread(target=_show_first_run, daemon=True).start()
+    threading.Thread(target=_check_ipv6_warning, daemon=True).start()
+    _check_for_updates()
+
     _tray_icon.run()
 
     stop_proxy()
@@ -1172,6 +1217,10 @@ def main() -> None:
         run_tray()
     finally:
         _release_lock()
+
+
+if __name__ == "__main__":
+    main()
 
 
 # Import asyncio at module level

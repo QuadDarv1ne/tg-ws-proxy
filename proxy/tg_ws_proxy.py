@@ -13,6 +13,7 @@ import time
 from typing import Dict, List, Optional, Set, Tuple, TypedDict
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .stats import Stats
 
 class ProxyConfig(TypedDict, total=False):
     """Configuration for the proxy server."""
@@ -495,46 +496,6 @@ def _ws_domains(dc: int, is_media: Optional[bool]) -> List[str]:
     return [f'kws{dc}.web.telegram.org', f'kws{dc}-1.web.telegram.org']
 
 
-class Stats:
-    """Proxy statistics tracker."""
-    
-    def __init__(self) -> None:
-        self.connections_total = 0
-        self.connections_ws = 0
-        self.connections_tcp_fallback = 0
-        self.connections_http_rejected = 0
-        self.connections_passthrough = 0
-        self.ws_errors = 0
-        self.bytes_up = 0
-        self.bytes_down = 0
-        self.pool_hits = 0
-        self.pool_misses = 0
-
-    def summary(self) -> str:
-        return (f"total={self.connections_total} ws={self.connections_ws} "
-                f"tcp_fb={self.connections_tcp_fallback} "
-                f"http_skip={self.connections_http_rejected} "
-                f"pass={self.connections_passthrough} "
-                f"err={self.ws_errors} "
-                f"pool={self.pool_hits}/{self.pool_hits+self.pool_misses} "
-                f"up={_human_bytes(self.bytes_up)} "
-                f"down={_human_bytes(self.bytes_down)}")
-
-    def to_dict(self) -> dict:
-        """Return stats as a dictionary."""
-        return {
-            "connections_total": self.connections_total,
-            "connections_ws": self.connections_ws,
-            "connections_tcp_fallback": self.connections_tcp_fallback,
-            "connections_http_rejected": self.connections_http_rejected,
-            "connections_passthrough": self.connections_passthrough,
-            "ws_errors": self.ws_errors,
-            "bytes_up": self.bytes_up,
-            "bytes_down": self.bytes_down,
-            "pool_misses": self.pool_misses,
-        }
-
-
 # Global instance for backward compatibility
 _server_instance: Optional[ProxyServer] = None
 
@@ -667,7 +628,7 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
                 chunk = await reader.read(65536)
                 if not chunk:
                     break
-                stats.bytes_up += len(chunk)
+                stats.add_bytes(up=len(chunk))
                 up_bytes += len(chunk)
                 up_packets += 1
                 if splitter:
@@ -744,9 +705,9 @@ async def _bridge_tcp(reader, writer, remote_reader, remote_writer,
                 if not data:
                     break
                 if 'up' in tag:
-                    stats.bytes_up += len(data)
+                    stats.add_bytes(up=len(data))
                 else:
-                    stats.bytes_down += len(data)
+                    stats.add_bytes(down=len(data))
                 dst_w.write(data)
                 await dst_w.drain()
         except asyncio.CancelledError:
@@ -826,7 +787,6 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
 async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optional[str]],
                          ws_pool: _WsPool, ws_blacklist: Set[Tuple[int, bool]],
                          dc_fail_until: Dict[Tuple[int, bool], float]):
-    stats.connections_total += 1
     peer = writer.get_extra_info('peername')
     label = f"{peer[0]}:{peer[1]}" if peer else "?"
 
@@ -837,6 +797,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
         hdr = await asyncio.wait_for(reader.readexactly(2), timeout=10)
         if hdr[0] != 5:
             log.debug("[%s] not SOCKS5 (ver=%d)", label, hdr[0])
+            stats.add_connection('passthrough')
             writer.close()
             return
         nmethods = hdr[1]
@@ -1064,21 +1025,36 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
                          dc=dc, dst=dst, port=port, is_media=is_media,
                          splitter=splitter)
 
-    except asyncio.TimeoutError:
-        log.warning("[%s] timeout during SOCKS5 handshake", label)
-    except asyncio.IncompleteReadError:
-        log.debug("[%s] client disconnected", label)
-    except asyncio.CancelledError:
-        log.debug("[%s] cancelled", label)
-    except ConnectionResetError:
-        log.debug("[%s] connection reset", label)
-    except Exception as exc:
-        log.error("[%s] unexpected: %s", label, exc)
+    except Exception:
+        _handle_client_error(label)
     finally:
-        try:
-            writer.close()
-        except BaseException:
-            pass
+        _close_client_writer(writer)
+
+
+def _handle_client_error(label: str) -> None:
+    """Handle client connection errors with appropriate logging."""
+    exc = sys.exc_info()[1]
+    
+    # Expected/common errors - log at DEBUG level
+    if isinstance(exc, asyncio.TimeoutError):
+        log.warning("[%s] timeout during SOCKS5 handshake", label)
+    elif isinstance(exc, asyncio.IncompleteReadError):
+        log.debug("[%s] client disconnected", label)
+    elif isinstance(exc, asyncio.CancelledError):
+        log.debug("[%s] cancelled", label)
+    elif isinstance(exc, ConnectionResetError):
+        log.debug("[%s] connection reset", label)
+    # Unexpected errors - log at ERROR level
+    else:
+        log.error("[%s] unexpected: %s", label, exc)
+
+
+def _close_client_writer(writer) -> None:
+    """Safely close client writer connection."""
+    try:
+        writer.close()
+    except BaseException:
+        pass
 
 
 async def _run(port: int, dc_opt: Dict[int, Optional[str]],
