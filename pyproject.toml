@@ -54,6 +54,10 @@ Issues = "https://github.com/Flowseal/tg-ws-proxy/issues"
 
 [project.scripts]
 tg-ws-proxy = "proxy.tg_ws_proxy:main"
+tg-ws-tray = "tray:main"
+
+[project.gui-scripts]
+tg-ws-tray-gui = "tray:main"
 
 [tool.setuptools.packages.find]
 include = ["proxy*"]

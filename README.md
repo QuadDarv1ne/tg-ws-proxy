@@ -54,7 +54,23 @@ pip install -r requirements.txt
 python windows.py
 ```
 
-### Консольный режим
+### Linux (Tray-приложение)
+
+```bash
+# Ubuntu/Debian: установите зависимости для tray-иконки
+sudo apt install python3-pil python3-pil.imagetk libappindicator3-1
+
+# Запуск
+python linux.py
+```
+
+### macOS (Tray-приложение)
+
+```bash
+python macos.py
+```
+
+### Консольный режим (все платформы)
 
 ```bash
 python proxy/tg_ws_proxy.py [--port PORT] [--dc-ip DC:IP ...] [-v]
@@ -98,11 +114,18 @@ python proxy/tg_ws_proxy.py -v
 
 ## Конфигурация
 
-Tray-приложение хранит данные в `%APPDATA%/TgWsProxy`:
+Tray-приложение хранит данные в платформо-специфичной директории:
+
+| Платформа | Путь |
+|-----------|------|
+| Windows | `%APPDATA%/TgWsProxy` |
+| macOS | `~/Library/Application Support/TgWsProxy` |
+| Linux | `~/.config/TgWsProxy` |
 
 ```json
 {
   "port": 1080,
+  "host": "127.0.0.1",
   "dc_ip": [
     "2:149.154.167.220",
     "4:149.154.167.220"

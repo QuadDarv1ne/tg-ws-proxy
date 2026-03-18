@@ -198,6 +198,7 @@ requirements-build.txt — для сборки (pyinstaller)
 6. ✅ RotatingFileHandler для логов
 7. ✅ Type hints для публичного API
 8. ✅ UI статистики в трее
+9. ✅ Кроссплатформенная поддержка (Windows, Linux, macOS)
 
 ### Средний приоритет
 1. CONTRIBUTING.md
@@ -223,11 +224,12 @@ requirements-build.txt — для сборки (pyinstaller)
 - CI с тестами и линтингом
 
 ### v1.3.0 (Features)
-- Статистика в трее
+- ✅ Статистика в трее
+- ✅ Кроссплатформенность (Windows, Linux, macOS)
 - Автозапуск
 - Проверка обновлений
 
 ### v2.0.0 (Architecture)
 - Рефакторинг глобального состояния
-- Поддержка Linux/macOS
 - Docker образ
+- Android/iOS поддержка (Termux)
