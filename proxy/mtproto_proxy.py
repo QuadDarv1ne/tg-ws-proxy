@@ -637,7 +637,6 @@ class MTProtoProxy:
                 log.info("[%s] MTProto proxy handshake complete", label)
             else:
                 log.warning("[%s] Invalid MTProto packet format", label)
-                self.stats_per_secret[used_secret]["connections_active"] -= 1
                 return
 
             # Keep connection alive and forward data
