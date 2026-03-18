@@ -12,5 +12,12 @@ pystray>=0.19.0
 # Windows-specific
 pyperclip>=1.8.0; sys_platform == "win32"
 
+# QR code generation
+qrcode>=7.4.0
+
+# Web dashboard (optional)
+flask>=3.0.0
+flask-cors>=4.0.0
+
 # Linux-specific
 # pylibappindicator; sys_platform == "linux"  # Optional, for AppIndicator support
