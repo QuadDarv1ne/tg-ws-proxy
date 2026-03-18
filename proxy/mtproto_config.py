@@ -20,11 +20,12 @@ log = logging.getLogger('tg-mtproto-config')
 @dataclass
 class MTProtoConfig:
     """MTProto Proxy configuration."""
-    
+
     # Server settings
     host: str = "0.0.0.0"
     port: int = 443
-    
+    dc_id: int = 2  # Telegram DC ID (1-5)
+
     # Secrets
     secrets: List[str] = field(default_factory=list)
     
@@ -57,6 +58,7 @@ class MTProtoConfig:
         return cls(
             host=data.get('host', cls.host),
             port=data.get('port', cls.port),
+            dc_id=data.get('dc_id', cls.dc_id),
             secrets=data.get('secrets', []),
             auto_rotate=data.get('auto_rotate', False),
             rotate_days=data.get('rotate_days', 7),
@@ -78,11 +80,12 @@ class MTProtoConfig:
     def to_cli_args(self) -> List[str]:
         """Convert config to CLI arguments list."""
         args = []
-        
+
         # Server
         args.extend(['--host', self.host])
         args.extend(['--port', str(self.port)])
-        
+        args.extend(['--dc-id', str(self.dc_id)])
+
         # Secrets
         if self.secrets:
             args.extend(['--secrets', ','.join(self.secrets)])
