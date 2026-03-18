@@ -20,9 +20,11 @@
 - ✅ v2.1.0 Released (MTProto proxy для мобильных)
 - ✅ v2.2.0 Released (расширенные возможности MTProto)
 - ✅ v2.3.0 Released (rate limiting, IP фильтрация, JSON конфиг, диагностика, тесты)
+- ✅ v2.4.0 Released (консольная панель управления TUI)
 - ✅ pyproject.toml с метаданными и настройками линтеров
 - ✅ IPv6 warning (один раз за сессию, маркер `.ipv6_warned`)
 - ✅ Проверка порта перед запуском
+- ✅ Консольная панель управления (TUI) на rich
 
 ---
 
@@ -342,3 +344,22 @@
 - Загрузка конфига из JSON файла
 - Тест DNS, TCP, WebSocket до Telegram DC
 - 275 строк интеграционных тестов
+
+### v2.4.0 (Console Dashboard) — ✅ Released
+- ✅ Консольная панель управления (TUI) на rich
+- ✅ Real-time статистика подключений
+- ✅ Мониторинг трафика (upload/download)
+- ✅ История событий с временными метками
+- ✅ Мониторинг WebSocket пула (hit rate)
+
+**Выполнено:**
+- Создан модуль `proxy/dashboard.py`
+- Добавлена зависимость `rich>=13.0.0`
+- Интеграция TUI в spec-файлы (Windows, Linux, macOS)
+- Поддержка простого текстового режима (без rich)
+- Запуск через `python -m proxy.dashboard`
+
+**Сборка:**
+- Windows: `TgWsProxy.exe` (~35 MB с rich)
+- Linux: `pyinstaller packaging/linux.spec`
+- macOS: `pyinstaller packaging/macos.spec`
