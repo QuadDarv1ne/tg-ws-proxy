@@ -641,12 +641,7 @@ class MTProtoProxy:
                 return
 
             # Keep connection alive and forward data
-            try:
-                await self._forward_data(reader, writer, label, used_secret, ip)
-            finally:
-                # Always decrement stats after forward_data completes (normally or not)
-                if used_secret in self.stats_per_secret:
-                    self.stats_per_secret[used_secret]["connections_active"] -= 1
+            await self._forward_data(reader, writer, label, used_secret, ip)
 
         except asyncio.TimeoutError:
             log.debug("[%s] Connection timeout", label)
@@ -658,6 +653,9 @@ class MTProtoProxy:
             log.error("[%s] Unexpected error: %s", label, exc)
         finally:
             self.connections_active -= 1
+            # Decrement per-secret stats if handshake was successful
+            if 'used_secret' in locals() and used_secret in self.stats_per_secret:
+                self.stats_per_secret[used_secret]["connections_active"] -= 1
             # Decrement connection count for rate limiting
             if self.rate_limiter:
                 self.rate_limiter.decrement_connections(ip)
