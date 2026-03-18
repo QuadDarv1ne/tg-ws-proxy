@@ -9,11 +9,18 @@ block_cipher = None
 import customtkinter
 ctk_path = os.path.dirname(customtkinter.__file__)
 
+# Rich library for console dashboard
+import rich
+rich_path = os.path.dirname(rich.__file__)
+
 a = Analysis(
     [os.path.join(os.path.dirname(SPEC), os.pardir, 'windows.py')],
     pathex=[],
     binaries=[],
-    datas=[(ctk_path, 'customtkinter/')],
+    datas=[
+        (ctk_path, 'customtkinter/'),
+        (rich_path, 'rich/'),
+    ],
     hiddenimports=[
         'pystray._win32',
         'PIL._tkinter_finder',
@@ -22,6 +29,12 @@ a = Analysis(
         'cryptography.hazmat.primitives.ciphers.algorithms',
         'cryptography.hazmat.primitives.ciphers.modes',
         'cryptography.hazmat.backends.openssl',
+        'rich',
+        'rich.console',
+        'rich.live',
+        'rich.table',
+        'rich.panel',
+        'markdown_it',
     ],
     hookspath=[],
     hooksconfig={},

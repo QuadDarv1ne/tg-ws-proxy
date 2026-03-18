@@ -19,5 +19,8 @@ qrcode>=7.4.0
 flask>=3.0.0
 flask-cors>=4.0.0
 
+# Console dashboard (optional, for better TUI)
+rich>=13.0.0
+
 # Linux-specific
 # pylibappindicator; sys_platform == "linux"  # Optional, for AppIndicator support
