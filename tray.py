@@ -13,6 +13,7 @@ import os
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
 from pathlib import Path
 from typing import Dict, Optional, Callable
@@ -74,6 +75,12 @@ CONFIG_FILE = APP_DIR / CONFIG_FILE_NAME
 LOG_FILE = APP_DIR / LOG_FILE_NAME
 FIRST_RUN_MARKER = APP_DIR / FIRST_RUN_MARKER_NAME
 IPV6_WARN_MARKER = APP_DIR / IPV6_WARN_MARKER_NAME
+UPDATE_CHECK_MARKER = APP_DIR / ".update_checked"
+
+# GitHub repository for update checks
+GITHUB_REPO = "Flowseal/tg-ws-proxy"
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+CURRENT_VERSION = "1.3.0"  # Updated with each release
 
 
 _proxy_thread: Optional[threading.Thread] = None
@@ -479,6 +486,166 @@ def _on_show_stats(icon=None, item=None) -> None:
     threading.Thread(target=_show_stats_dialog, daemon=True).start()
 
 
+def _on_toggle_autostart(icon=None, item=None) -> None:
+    """Show autostart toggle dialog."""
+    threading.Thread(target=_toggle_autostart_dialog, daemon=True).start()
+
+
+def _toggle_autostart_dialog() -> None:
+    """Show autostart toggle dialog."""
+    is_enabled = _is_autostart_enabled()
+    
+    if IS_WINDOWS:
+        result = ctypes.windll.user32.MessageBoxW(
+            0,
+            f"Автозапуск сейчас {'включен' if is_enabled else 'выключен'}.\n\n"
+            f"{'Отключить' if is_enabled else 'Включить'} автозапуск?",
+            "TG WS Proxy — Автозапуск",
+            0x34)
+        if result == 6:
+            _set_autostart(not is_enabled)
+            _show_info(
+                f"Автозапуск {'включен' if not is_enabled else 'выключен'}.")
+    elif HAS_GUI:
+        import tkinter as tk
+        from tkinter import messagebox
+        
+        root = tk.Tk()
+        root.withdraw()
+        result = messagebox.askyesno(
+            "TG WS Proxy — Автозапуск",
+            f"Автозапуск сейчас {'включен' if is_enabled else 'выключен'}.\n\n"
+            f"{'Отключить' if is_enabled else 'Включить'} автозапуск?",
+            parent=root)
+        root.destroy()
+        if result:
+            _set_autostart(not is_enabled)
+            _show_info(
+                f"Автозапуск {'включен' if not is_enabled else 'выключен'}.")
+
+
+def _get_startup_path() -> Path:
+    """Get platform-specific startup path."""
+    if IS_WINDOWS:
+        return Path(os.environ.get("APPDATA", "")) / \
+               "Microsoft" / "Windows" / "StartMenu" / "Programs" / "Startup"
+    elif IS_MACOS:
+        return Path.home() / "Library" / "LaunchAgents"
+    else:  # Linux
+        xdg_config = os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
+        return Path(xdg_config) / "autostart"
+
+
+def _get_app_executable() -> str:
+    """Get path to current executable or Python script."""
+    if getattr(sys, "frozen", False):
+        return sys.executable
+    else:
+        return os.path.abspath(sys.argv[0])
+
+
+def _is_autostart_enabled() -> bool:
+    """Check if autostart is enabled."""
+    startup_path = _get_startup_path()
+    app_exe = _get_app_executable()
+    
+    if IS_WINDOWS:
+        link_file = startup_path / "TG WS Proxy.lnk"
+        return link_file.exists()
+    elif IS_MACOS:
+        plist_file = startup_path / "com.tgwsproxy.launcher.plist"
+        return plist_file.exists()
+    else:  # Linux
+        desktop_file = startup_path / "tg-ws-proxy.desktop"
+        return desktop_file.exists()
+
+
+def _set_autostart(enable: bool) -> None:
+    """Enable or disable autostart."""
+    startup_path = _get_startup_path()
+    startup_path.mkdir(parents=True, exist_ok=True)
+    app_exe = _get_app_executable()
+    
+    if IS_WINDOWS:
+        _set_autostart_windows(startup_path, app_exe, enable)
+    elif IS_MACOS:
+        _set_autostart_macos(startup_path, app_exe, enable)
+    else:  # Linux
+        _set_autostart_linux(startup_path, app_exe, enable)
+
+
+def _set_autostart_windows(startup_path: Path, app_exe: str, enable: bool) -> None:
+    """Set autostart on Windows using registry."""
+    import winreg
+    
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    value_name = "TG WS Proxy"
+    
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
+                           winreg.KEY_SET_VALUE) as key:
+            if enable:
+                winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ,
+                                  f'"{app_exe}"')
+            else:
+                try:
+                    winreg.DeleteValue(key, value_name)
+                except FileNotFoundError:
+                    pass
+    except Exception as exc:
+        log.error("Failed to set autostart: %s", exc)
+
+
+def _set_autostart_macos(startup_path: Path, app_exe: str, enable: bool) -> None:
+    """Set autostart on macOS using LaunchAgent."""
+    plist_file = startup_path / "com.tgwsproxy.launcher.plist"
+    
+    if enable:
+        plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" 
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tgwsproxy.launcher</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{app_exe}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{LOG_FILE}</string>
+</dict>
+</plist>"""
+        plist_file.write_text(plist_content)
+    else:
+        if plist_file.exists():
+            plist_file.unlink()
+
+
+def _set_autostart_linux(startup_path: Path, app_exe: str, enable: bool) -> None:
+    """Set autostart on Linux using .desktop file."""
+    desktop_file = startup_path / "tg-ws-proxy.desktop"
+    
+    if enable:
+        desktop_content = f"""[Desktop Entry]
+Type=Application
+Name=TG WS Proxy
+Comment=Telegram WebSocket Proxy
+Exec={app_exe}
+Icon=network-workgroup
+Terminal=false
+Categories=Network;ProxyServer;
+StartupNotify=false
+"""
+        desktop_file.write_text(desktop_content)
+        os.chmod(desktop_file, 0o755)
+    else:
+        if desktop_file.exists():
+            desktop_file.unlink()
+
+
 def _on_open_logs(icon=None, item=None) -> None:
     """Open log file."""
     log.info("Opening log file: %s", LOG_FILE)
@@ -806,6 +973,89 @@ def _show_first_run() -> None:
     root.mainloop()
 
 
+def _check_for_updates() -> None:
+    """Check for updates on GitHub (non-blocking)."""
+    threading.Thread(target=_check_updates_background, daemon=True).start()
+
+
+def _check_updates_background() -> None:
+    """Check for updates in background thread."""
+    # Check once per day
+    if UPDATE_CHECK_MARKER.exists():
+        try:
+            last_check = float(UPDATE_CHECK_MARKER.read_text().strip())
+            if time.time() - last_check < 86400:  # 24 hours
+                return
+        except (ValueError, OSError):
+            pass
+
+    try:
+        req = urllib.request.Request(
+            GITHUB_API_URL,
+            headers={"User-Agent": f"tg-ws-proxy/{CURRENT_VERSION}"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            latest_version = data.get("tag_name", "").lstrip("v")
+            release_url = data.get("html_url", "")
+            prerelease = data.get("prerelease", False)
+
+            if _compare_versions(latest_version, CURRENT_VERSION) > 0:
+                if not prerelease:
+                    log.info("New version available: %s (current: %s)",
+                             latest_version, CURRENT_VERSION)
+                    UPDATE_CHECK_MARKER.touch()
+                    # Show notification on next tray menu open
+                    _show_update_notification(latest_version, release_url)
+            else:
+                UPDATE_CHECK_MARKER.write_text(str(time.time()))
+    except Exception as exc:
+        log.debug("Update check failed: %s", exc)
+
+
+def _compare_versions(v1: str, v2: str) -> int:
+    """Compare two version strings. Returns >0 if v1 > v2, <0 if v1 < v2, 0 if equal."""
+    try:
+        parts1 = [int(x) for x in v1.split(".")]
+        parts2 = [int(x) for x in v2.split(".")]
+        for a, b in zip(parts1, parts2):
+            if a != b:
+                return a - b
+        return len(parts1) - len(parts2)
+    except ValueError:
+        return 0
+
+
+def _show_update_notification(latest_version: str, release_url: str) -> None:
+    """Show update available notification."""
+    msg = (
+        f"Доступна новая версия {latest_version}!\n\n"
+        f"Текущая версия: {CURRENT_VERSION}\n\n"
+        f"Открыть страницу релиза?"
+    )
+
+    if IS_WINDOWS:
+        result = ctypes.windll.user32.MessageBoxW(
+            0, msg, "TG WS Proxy — Обновление", 0x34)  # MB_YESNO | MB_ICONINFORMATION
+        if result == 6:  # IDYES
+            webbrowser.open(release_url)
+    elif HAS_GUI:
+        import tkinter as tk
+        from tkinter import messagebox
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        result = messagebox.askyesno(
+            "TG WS Proxy — Обновление", msg, parent=root)
+        root.destroy()
+        if result:
+            webbrowser.open(release_url)
+    else:
+        log.info("Update available: %s -> %s | %s",
+                 CURRENT_VERSION, latest_version, release_url)
+
+
 def _check_ipv6_warning() -> None:
     """Check and show IPv6 warning if needed."""
     _ensure_dirs()
@@ -858,12 +1108,13 @@ def run_tray() -> None:
     global _tray_icon, _config
 
     # Platform-specific app dir
-    global APP_DIR, CONFIG_FILE, LOG_FILE, FIRST_RUN_MARKER, IPV6_WARN_MARKER
+    global APP_DIR, CONFIG_FILE, LOG_FILE, FIRST_RUN_MARKER, IPV6_WARN_MARKER, UPDATE_CHECK_MARKER
     APP_DIR = _get_app_dir()
     CONFIG_FILE = APP_DIR / CONFIG_FILE_NAME
     LOG_FILE = APP_DIR / LOG_FILE_NAME
     FIRST_RUN_MARKER = APP_DIR / FIRST_RUN_MARKER_NAME
     IPV6_WARN_MARKER = APP_DIR / IPV6_WARN_MARKER_NAME
+    UPDATE_CHECK_MARKER = APP_DIR / ".update_checked"
 
     _config = load_config()
     save_config(_config)
@@ -895,6 +1146,7 @@ def run_tray() -> None:
 
     _show_first_run()
     _check_ipv6_warning()
+    _check_for_updates()
 
     icon_image = _load_icon()
     _tray_icon = pystray.Icon(
