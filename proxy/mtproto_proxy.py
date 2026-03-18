@@ -642,7 +642,14 @@ class MTProtoProxy:
                 return
 
             # Keep connection alive and forward data
-            await self._forward_data(reader, writer, label, used_secret, ip)
+            forward_completed = False
+            try:
+                await self._forward_data(reader, writer, label, used_secret, ip)
+                forward_completed = True
+            finally:
+                # Decrement stats if forward_data didn't complete normally
+                if not forward_completed:
+                    self.stats_per_secret[used_secret]["connections_active"] -= 1
 
         except asyncio.TimeoutError:
             log.debug("[%s] Connection timeout", label)
@@ -654,9 +661,6 @@ class MTProtoProxy:
             log.error("[%s] Unexpected error: %s", label, exc)
         finally:
             self.connections_active -= 1
-            # Decrement active connections for the used secret
-            if 'used_secret' in locals() and used_secret in self.stats_per_secret:
-                self.stats_per_secret[used_secret]["connections_active"] -= 1
             # Decrement connection count for rate limiting
             if self.rate_limiter:
                 self.rate_limiter.decrement_connections(ip)
@@ -688,6 +692,8 @@ class MTProtoProxy:
                 await client_writer.wait_closed()
             except Exception:
                 pass
+            # Decrement stats on connection failure
+            self.stats_per_secret[used_secret]["connections_active"] -= 1
             return
         except (ConnectionRefusedError, OSError) as exc:
             log.error("[%s] Cannot connect to Telegram DC%d: %s", label, self.dc_id, exc)
@@ -696,6 +702,8 @@ class MTProtoProxy:
                 await client_writer.wait_closed()
             except Exception:
                 pass
+            # Decrement stats on connection failure
+            self.stats_per_secret[used_secret]["connections_active"] -= 1
             return
         
         async def client_to_server():
@@ -775,6 +783,8 @@ class MTProtoProxy:
                 await client_writer.wait_closed()
             except Exception:
                 pass
+            # Decrement stats on connection end
+            self.stats_per_secret[used_secret]["connections_active"] -= 1
     
     def get_stats(self) -> dict:
         """Get proxy statistics."""
