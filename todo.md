@@ -17,6 +17,7 @@
 - ✅ CI/CD (GitHub Actions)
 - ✅ v1.3.0 Released
 - ✅ v2.0.0 Released (рефакторинг глобального состояния)
+- ✅ v2.1.0 Released (MTProto proxy для мобильных)
 - ✅ pyproject.toml с метаданными и настройками линтеров
 - ✅ IPv6 warning (один раз за сессию, маркер `.ipv6_warned`)
 - ✅ Проверка порта перед запуском
@@ -145,6 +146,15 @@
 - Настройка на Linux/macOS
 - Использование с другими клиентами (не только Telegram Desktop)
 **Приоритет:** Низкий — основная документация в README.md.
+
+### 4. MTProto proxy для мобильных
+**Статус:** ✅ Решено — создан `proxy/mtproto_proxy.py`.
+**Реализация:**
+- MTProto Intermediate Transport
+- AES-256 IGE шифрование
+- Генерация секретного ключа
+- Поддержка Telegram Android/iOS
+**Порт:** 443 (по умолчанию, для маскировки под HTTPS)
 
 ---
 
@@ -286,3 +296,15 @@
 - Улучшена тестируемость и поддерживаемость кода
 - Исправлена ошибка `_TCP_NODELAY` (NameError)
 - Исправлены переменные в `windows.py` (FONT_FAMILY → UI_FONT_FAMILY и др.)
+
+### v2.1.0 (Mobile Support) — ✅ Released
+- ✅ MTProto proxy для мобильных устройств
+- ✅ AES-256 IGE шифрование
+- ✅ Поддержка Telegram Android/iOS
+
+**Выполнено:**
+- Создан модуль `proxy/mtproto_proxy.py`
+- Добавлены константы MTProto в `constants.py`
+- Реализован MTProto Intermediate Transport
+- CLI для запуска прокси с генерацией секрета
+- Порт 443 для маскировки под HTTPS

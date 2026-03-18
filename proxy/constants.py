@@ -149,6 +149,32 @@ UI_TEXT_SECONDARY = "#707579"
 UI_FONT_FAMILY = "Segoe UI"
 
 # =============================================================================
+# MTProto constants
+# =============================================================================
+
+# MTProto protocol magic bytes
+MTPROTO_MAGIC = b'\xef\xef\xef\xef'  # 0xEEEEEEEE
+MTPROTO_MAGIC_ABRIDGED = b'\xef\xef\xef\xef'
+MTPROTO_MAGIC_INTERMEDIATE = b'\xee\xee\xee\xee'
+
+# MTProto transport types
+MTPROTO_TRANSPORT_ABRIDGED = 'abridged'
+MTPROTO_TRANSPORT_INTERMEDIATE = 'intermediate'
+MTPROTO_TRANSPORT_PADDED_INTERMEDIATE = 'padded_intermediate'
+
+# Encryption settings
+MTPROTO_AES_KEY_SIZE = 32  # 256 bits
+MTPROTO_AES_IV_SIZE = 32   # 256 bits for IGE mode
+MTPROTO_BLOCK_SIZE = 16    # AES block size
+
+# Secret key length (32 hex chars = 16 bytes)
+MTPROTO_SECRET_LENGTH = 32
+
+# Default MTProto port (443 for HTTPS masquerading)
+MTPROTO_DEFAULT_PORT = 443
+MTPROTO_DEFAULT_HOST = "0.0.0.0"
+
+# =============================================================================
 # Error codes
 # =============================================================================
 
