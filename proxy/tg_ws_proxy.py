@@ -58,20 +58,52 @@ _TG_RANGES = TG_RANGES
 # IP -> (dc_id, is_media)
 _IP_TO_DC: Dict[str, Tuple[int, bool]] = _IP_TO_DC
 
-_dc_opt: Dict[int, Optional[str]] = {}
-
-# DCs where WS is known to fail (302 redirect)
-# Raw TCP fallback will be used instead
-# Keyed by (dc, is_media)
-_ws_blacklist: Set[Tuple[int, bool]] = set()
-
-# Rate-limit re-attempts per (dc, is_media)
-_dc_fail_until: Dict[Tuple[int, bool], float] = {}
-
-
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
+
+
+class ProxyServer:
+    """
+    Main proxy server class that encapsulates all global state.
+    
+    This class manages:
+    - DC configuration and routing
+    - WebSocket connection pool
+    - Statistics tracking
+    - Client connection handling
+    """
+    
+    def __init__(self, dc_opt: Dict[int, Optional[str]], host: str = '127.0.0.1', port: int = DEFAULT_PORT):
+        self.dc_opt = dc_opt
+        self.host = host
+        self.port = port
+        
+        # DCs where WS is known to fail (302 redirect)
+        # Raw TCP fallback will be used instead
+        # Keyed by (dc, is_media)
+        self.ws_blacklist: Set[Tuple[int, bool]] = set()
+        
+        # Rate-limit re-attempts per (dc, is_media)
+        self.dc_fail_until: Dict[Tuple[int, bool], float] = {}
+        
+        # Statistics
+        self.stats = Stats()
+        
+        # WebSocket connection pool
+        self.ws_pool = _WsPool(self.stats)
+        
+        # Server instance for graceful shutdown
+        self._server_instance: Optional[asyncio.Server] = None
+        self._server_stop_event: Optional[asyncio.Event] = None
+    
+    def get_stats(self) -> dict:
+        """Get current proxy statistics."""
+        return self.stats.to_dict()
+    
+    def get_stats_summary(self) -> str:
+        """Get current stats as a human-readable summary."""
+        return self.stats.summary()
 
 
 def _set_sock_opts(transport):
@@ -498,26 +530,33 @@ class Stats:
             "ws_errors": self.ws_errors,
             "bytes_up": self.bytes_up,
             "bytes_down": self.bytes_down,
-            "pool_hits": self.pool_hits,
             "pool_misses": self.pool_misses,
         }
 
 
-_stats = Stats()
+# Global instance for backward compatibility
+_server_instance: Optional[ProxyServer] = None
 
 
 def get_stats() -> dict:
-    """Get current proxy statistics."""
-    return _stats.to_dict()
+    """Get current proxy statistics (backward compatibility)."""
+    global _server_instance
+    if _server_instance:
+        return _server_instance.get_stats()
+    return Stats().to_dict()
 
 
 def get_stats_summary() -> str:
-    """Get current stats as a human-readable summary."""
-    return _stats.summary()
+    """Get current stats as human-readable summary (backward compatibility)."""
+    global _server_instance
+    if _server_instance:
+        return _server_instance.get_stats_summary()
+    return Stats().summary()
 
 
 class _WsPool:
-    def __init__(self):
+    def __init__(self, stats: Stats):
+        self.stats = stats
         self._idle: Dict[Tuple[int, bool], list] = {}
         self._refilling: Set[Tuple[int, bool]] = set()
 
@@ -534,13 +573,13 @@ class _WsPool:
             if age > _WS_POOL_MAX_AGE or ws._closed:
                 asyncio.create_task(self._quiet_close(ws))
                 continue
-            _stats.pool_hits += 1
+            self.stats.pool_hits += 1
             log.debug("WS pool hit for DC%d%s (age=%.1fs, left=%d)",
                       dc, 'm' if is_media else '', age, len(bucket))
             self._schedule_refill(key, target_ip, domains)
             return ws
 
-        _stats.pool_misses += 1
+        self.stats.pool_misses += 1
         self._schedule_refill(key, target_ip, domains)
         return None
 
@@ -607,10 +646,7 @@ class _WsPool:
         log.info("WS pool warmup started for %d DC(s)", len(dc_opt))
 
 
-_ws_pool = _WsPool()
-
-
-async def _bridge_ws(reader, writer, ws: RawWebSocket, label,
+async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
                      dc=None, dst=None, port=None, is_media=False,
                      splitter: _MsgSplitter = None):
     """Bidirectional TCP <-> WebSocket forwarding."""
@@ -630,7 +666,7 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label,
                 chunk = await reader.read(65536)
                 if not chunk:
                     break
-                _stats.bytes_up += len(chunk)
+                stats.bytes_up += len(chunk)
                 up_bytes += len(chunk)
                 up_packets += 1
                 if splitter:
@@ -653,7 +689,7 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label,
                 data = await ws.recv()
                 if data is None:
                     break
-                _stats.bytes_down += len(data)
+                stats.bytes_down += len(data)
                 down_bytes += len(data)
                 down_packets += 1
                 writer.write(data)
@@ -697,7 +733,7 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label,
 
 
 async def _bridge_tcp(reader, writer, remote_reader, remote_writer,
-                      label, dc=None, dst=None, port=None,
+                      label, stats: Stats, dc=None, dst=None, port=None,
                       is_media=False):
     """Bidirectional TCP <-> TCP forwarding (for fallback)."""
     async def forward(src, dst_w, tag):
@@ -707,9 +743,9 @@ async def _bridge_tcp(reader, writer, remote_reader, remote_writer,
                 if not data:
                     break
                 if 'up' in tag:
-                    _stats.bytes_up += len(data)
+                    stats.bytes_up += len(data)
                 else:
-                    _stats.bytes_down += len(data)
+                    stats.bytes_down += len(data)
                 dst_w.write(data)
                 await dst_w.drain()
         except asyncio.CancelledError:
@@ -778,16 +814,18 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
                     label, dst, port, exc)
         return False
 
-    _stats.connections_tcp_fallback += 1
+    stats.connections_tcp_fallback += 1
     rw.write(init)
     await rw.drain()
-    await _bridge_tcp(reader, writer, rr, rw, label,
+    await _bridge_tcp(reader, writer, rr, rw, label, stats,
                       dc=dc, dst=dst, port=port, is_media=is_media)
     return True
 
 
-async def _handle_client(reader, writer):
-    _stats.connections_total += 1
+async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optional[str]],
+                         ws_pool: _WsPool, ws_blacklist: Set[Tuple[int, bool]],
+                         dc_fail_until: Dict[Tuple[int, bool], float]):
+    stats.connections_total += 1
     peer = writer.get_extra_info('peername')
     label = f"{peer[0]}:{peer[1]}" if peer else "?"
 
@@ -844,7 +882,7 @@ async def _handle_client(reader, writer):
 
         # -- Non-Telegram IP -> direct passthrough --
         if not _is_telegram_ip(dst):
-            _stats.connections_passthrough += 1
+            stats.connections_passthrough += 1
             log.debug("[%s] passthrough -> %s:%d", label, dst, port)
             try:
                 rr, rw = await asyncio.wait_for(
@@ -885,7 +923,7 @@ async def _handle_client(reader, writer):
 
         # HTTP transport -> reject
         if _is_http_transport(init):
-            _stats.connections_http_rejected += 1
+            stats.connections_http_rejected += 1
             log.debug("[%s] HTTP transport to %s:%d (rejected)",
                       label, dst, port)
             writer.close()
@@ -894,15 +932,15 @@ async def _handle_client(reader, writer):
         # -- Extract DC ID --
         dc, is_media = _dc_from_init(init)
         init_patched = False
-        
+
         # Android (may be ios too) with useSecret=0 has random dc_id bytes — patch it
         if dc is None and dst in _IP_TO_DC:
             dc, is_media = _IP_TO_DC.get(dst)
-            if dc in _dc_opt:
+            if dc in dc_opt:
                 init = _patch_init_dc(init, dc if is_media else -dc)
                 init_patched = True
 
-        if dc is None or dc not in _dc_opt:
+        if dc is None or dc not in dc_opt:
             log.warning("[%s] unknown DC%s for %s:%d -> TCP passthrough",
                         label, dc, dst, port)
             await _tcp_fallback(reader, writer, dst, port, init, label)
@@ -914,7 +952,7 @@ async def _handle_client(reader, writer):
                      else (" media?" if is_media is None else ""))
 
         # -- WS blacklist check --
-        if dc_key in _ws_blacklist:
+        if dc_key in ws_blacklist:
             log.debug("[%s] DC%d%s WS blacklisted -> TCP %s:%d",
                       label, dc, media_tag, dst, port)
             ok = await _tcp_fallback(reader, writer, dst, port, init,
@@ -925,7 +963,7 @@ async def _handle_client(reader, writer):
             return
 
         # -- Cooldown check --
-        fail_until = _dc_fail_until.get(dc_key, 0)
+        fail_until = dc_fail_until.get(dc_key, 0)
         if now < fail_until:
             remaining = fail_until - now
             log.debug("[%s] DC%d%s WS cooldown (%.0fs) -> TCP",
@@ -939,12 +977,12 @@ async def _handle_client(reader, writer):
 
         # -- Try WebSocket via direct connection --
         domains = _ws_domains(dc, is_media)
-        target = _dc_opt[dc]
+        target = dc_opt[dc]
         ws = None
         ws_failed_redirect = False
         all_redirects = True
 
-        ws = await _ws_pool.get(dc, is_media, target, domains)
+        ws = await ws_pool.get(dc, is_media, target, domains)
         if ws:
             log.info("[%s] DC%d%s (%s:%d) -> pool hit via %s",
                      label, dc, media_tag, dst, port, target)
@@ -959,7 +997,7 @@ async def _handle_client(reader, writer):
                     all_redirects = False
                     break
                 except WsHandshakeError as exc:
-                    _stats.ws_errors += 1
+                    stats.ws_errors += 1
                     if exc.is_redirect:
                         ws_failed_redirect = True
                         log.warning("[%s] DC%d%s got %d from %s -> %s",
@@ -972,7 +1010,7 @@ async def _handle_client(reader, writer):
                         log.warning("[%s] DC%d%s WS handshake: %s",
                                     label, dc, media_tag, exc.status_line)
                 except Exception as exc:
-                    _stats.ws_errors += 1
+                    stats.ws_errors += 1
                     all_redirects = False
                     err_str = str(exc)
                     if ('CERTIFICATE_VERIFY_FAILED' in err_str or
@@ -986,14 +1024,14 @@ async def _handle_client(reader, writer):
         # -- WS failed -> fallback --
         if ws is None:
             if ws_failed_redirect and all_redirects:
-                _ws_blacklist.add(dc_key)
+                ws_blacklist.add(dc_key)
                 log.warning(
                     "[%s] DC%d%s blacklisted for WS (all 302)",
                     label, dc, media_tag)
             elif ws_failed_redirect:
-                _dc_fail_until[dc_key] = now + DC_FAIL_COOLDOWN
+                dc_fail_until[dc_key] = now + DC_FAIL_COOLDOWN
             else:
-                _dc_fail_until[dc_key] = now + DC_FAIL_COOLDOWN
+                dc_fail_until[dc_key] = now + DC_FAIL_COOLDOWN
                 log.info("[%s] DC%d%s WS cooldown for %ds",
                          label, dc, media_tag, int(DC_FAIL_COOLDOWN))
 
@@ -1007,8 +1045,8 @@ async def _handle_client(reader, writer):
             return
 
         # -- WS success --
-        _dc_fail_until.pop(dc_key, None)
-        _stats.connections_ws += 1
+        dc_fail_until.pop(dc_key, None)
+        stats.connections_ws += 1
 
         splitter = None
         if init_patched:
@@ -1021,7 +1059,7 @@ async def _handle_client(reader, writer):
         await ws.send(init)
 
         # Bidirectional bridge
-        await _bridge_ws(reader, writer, ws, label,
+        await _bridge_ws(reader, writer, ws, label, stats,
                          dc=dc, dst=dst, port=port, is_media=is_media,
                          splitter=splitter)
 
@@ -1042,20 +1080,29 @@ async def _handle_client(reader, writer):
             pass
 
 
-_server_instance = None
-_server_stop_event = None
-
-
 async def _run(port: int, dc_opt: Dict[int, Optional[str]],
                stop_event: Optional[asyncio.Event] = None,
                host: str = '127.0.0.1'):
-    global _dc_opt, _server_instance, _server_stop_event
-    _dc_opt = dc_opt
-    _server_stop_event = stop_event
+    global _server_instance
+    
+    # Create proxy server instance with encapsulated state
+    server_instance = ProxyServer(dc_opt, host, port)
+    _server_instance = server_instance
+
+    # Create a wrapper for _handle_client that passes server state
+    async def handle_client_wrapper(reader, writer):
+        await _handle_client(
+            reader, writer,
+            stats=server_instance.stats,
+            dc_opt=server_instance.dc_opt,
+            ws_pool=server_instance.ws_pool,
+            ws_blacklist=server_instance.ws_blacklist,
+            dc_fail_until=server_instance.dc_fail_until
+        )
 
     server = await asyncio.start_server(
-        _handle_client, host, port)
-    _server_instance = server
+        handle_client_wrapper, host, port)
+    server_instance._server_instance = server
 
     for sock in server.sockets:
         try:
@@ -1080,12 +1127,12 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
             await asyncio.sleep(60)
             bl = ', '.join(
                 f'DC{d}{"m" if m else ""}'
-                for d, m in sorted(_ws_blacklist)) or 'none'
-            log.info("stats: %s | ws_bl: %s", _stats.summary(), bl)
+                for d, m in sorted(server_instance.ws_blacklist)) or 'none'
+            log.info("stats: %s | ws_bl: %s", server_instance.stats.summary(), bl)
 
     asyncio.create_task(log_stats())
 
-    await _ws_pool.warmup(dc_opt)
+    await server_instance.ws_pool.warmup(dc_opt)
 
     if stop_event:
         async def wait_stop():
@@ -1186,7 +1233,7 @@ def main() -> None:
     try:
         asyncio.run(_run(args.port, dc_opt, host=args.host))
     except KeyboardInterrupt:
-        log.info("Shutting down. Final stats: %s", _stats.summary())
+        log.info("Shutting down. Final stats: %s", get_stats_summary())
 
 
 if __name__ == '__main__':
