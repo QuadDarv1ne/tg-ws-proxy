@@ -1,26 +1,30 @@
 # Core dependencies for TG WS Proxy
 # Works on Windows, Linux, and macOS
 
-cryptography>=41.0.0
+cryptography==42.0.5
 
 # Tray and GUI (cross-platform)
-customtkinter>=5.2.0
-Pillow>=9.0.0
-psutil>=5.9.0
-pystray>=0.19.0
+customtkinter==5.2.2
+Pillow==10.3.0
+psutil==5.9.8
+pystray==0.19.5
 
 # Windows-specific
-pyperclip>=1.8.0; sys_platform == "win32"
+pyperclip==1.9.0; sys_platform == "win32"
+
+# macOS-specific (native menu bar)
+rumps==0.4.0; sys_platform == "darwin"
 
 # QR code generation
-qrcode>=7.4.0
+qrcode==7.4.2
 
 # Web dashboard (optional)
-flask>=3.0.0
-flask-cors>=4.0.0
+flask==3.0.3
+flask-cors==4.0.0
 
 # Console dashboard (optional, for better TUI)
-rich>=13.0.0
+rich==13.7.1
+markdown-it-py==3.0.0
 
 # Linux-specific
 # pylibappindicator; sys_platform == "linux"  # Optional, for AppIndicator support
