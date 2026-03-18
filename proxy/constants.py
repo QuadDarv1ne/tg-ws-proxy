@@ -1,0 +1,156 @@
+"""Constants for TG WS Proxy."""
+
+from __future__ import annotations
+
+import struct
+import socket as _socket
+
+# =============================================================================
+# Network defaults
+# =============================================================================
+
+DEFAULT_PORT = 1080
+DEFAULT_HOST = "127.0.0.1"
+
+# Socket options
+TCP_NODELAY = True
+RECV_BUF_SIZE = 65536
+SEND_BUF_SIZE = 65536
+
+# WebSocket pool settings
+WS_POOL_SIZE = 4
+WS_POOL_MAX_AGE = 120.0  # seconds
+
+# Timeout settings
+WS_CONNECT_TIMEOUT = 10.0
+WS_HANDSHAKE_TIMEOUT = 8.0
+SOCKS5_HANDSHAKE_TIMEOUT = 10.0
+INIT_READ_TIMEOUT = 15.0
+TCP_FALLBACK_TIMEOUT = 10.0
+
+# Rate limiting
+DC_FAIL_COOLDOWN = 60.0  # seconds
+
+# =============================================================================
+# MTProto constants
+# =============================================================================
+
+# MTProto protocol magic bytes
+MTPROTO_OBFUSCATION_MAGIC = b'\x00' * 8
+
+# Valid protocol identifiers
+PROTO_OBFUSCATED = 0xEFEFEFEF
+PROTO_ABRIDGED = 0xEEEEEEEE
+PROTO_PADDED_ABRIDGED = 0xDDDDDDDD
+
+# Init packet structure
+INIT_PACKET_SIZE = 64
+INIT_KEY_OFFSET = 8
+INIT_KEY_SIZE = 32
+INIT_IV_OFFSET = 40
+INIT_IV_SIZE = 16
+INIT_DC_OFFSET = 60
+INIT_DC_SIZE = 2
+
+# Abridged protocol prefix
+ABRIDGED_SHORT_PREFIX = 0x7F
+
+# =============================================================================
+# Telegram IP ranges
+# =============================================================================
+
+TG_RANGES = [
+    # 185.76.151.0/24
+    (struct.unpack('!I', _socket.inet_aton('185.76.151.0'))[0],
+     struct.unpack('!I', _socket.inet_aton('185.76.151.255'))[0]),
+    # 149.154.160.0/20
+    (struct.unpack('!I', _socket.inet_aton('149.154.160.0'))[0],
+     struct.unpack('!I', _socket.inet_aton('149.154.175.255'))[0]),
+    # 91.105.192.0/23
+    (struct.unpack('!I', _socket.inet_aton('91.105.192.0'))[0],
+     struct.unpack('!I', _socket.inet_aton('91.105.193.255'))[0]),
+    # 91.108.0.0/16
+    (struct.unpack('!I', _socket.inet_aton('91.108.0.0'))[0],
+     struct.unpack('!I', _socket.inet_aton('91.108.255.255'))[0]),
+]
+
+# =============================================================================
+# Telegram DC mappings
+# =============================================================================
+
+# IP -> (dc_id, is_media)
+_IP_TO_DC: dict[str, tuple[int, bool]] = {
+    # DC1
+    '149.154.175.50': (1, False), '149.154.175.51': (1, False),
+    '149.154.175.53': (1, False), '149.154.175.54': (1, False),
+    '149.154.175.52': (1, True),
+    # DC2
+    '149.154.167.41': (2, False), '149.154.167.50': (2, False),
+    '149.154.167.51': (2, False), '149.154.167.220': (2, False),
+    '95.161.76.100':  (2, False),
+    '149.154.167.151': (2, True), '149.154.167.222': (2, True),
+    '149.154.167.223': (2, True), '149.154.162.123': (2, True),
+    # DC3
+    '149.154.175.100': (3, False), '149.154.175.101': (3, False),
+    '149.154.175.102': (3, True),
+    # DC4
+    '149.154.167.91': (4, False), '149.154.167.92': (4, False),
+    '149.154.164.250': (4, True), '149.154.166.120': (4, True),
+    '149.154.166.121': (4, True), '149.154.167.118': (4, True),
+    '149.154.165.111': (4, True),
+    # DC5
+    '91.108.56.100': (5, False), '91.108.56.101': (5, False),
+    '91.108.56.116': (5, False), '91.108.56.126': (5, False),
+    '149.154.171.5':  (5, False),
+    '91.108.56.102': (5, True), '91.108.56.128': (5, True),
+    '91.108.56.151': (5, True),
+}
+
+# =============================================================================
+# WebSocket domains
+# =============================================================================
+
+WS_DOMAIN_TEMPLATE = "kws{dc}.web.telegram.org"
+WS_DOMAIN_MEDIA_TEMPLATE = "kws{dc}-1.web.telegram.org"
+
+# =============================================================================
+# Application constants
+# =============================================================================
+
+APP_NAME = "TgWsProxy"
+APP_DIR_NAME = "TgWsProxy"
+
+# Config file names
+CONFIG_FILE_NAME = "config.json"
+LOG_FILE_NAME = "proxy.log"
+FIRST_RUN_MARKER_NAME = ".first_run_done"
+IPV6_WARN_MARKER_NAME = ".ipv6_warned"
+LOCK_FILE_EXT = ".lock"
+
+# Default configuration
+DEFAULT_CONFIG = {
+    "port": DEFAULT_PORT,
+    "host": DEFAULT_HOST,
+    "dc_ip": ["2:149.154.167.220", "4:149.154.167.220"],
+    "verbose": False,
+}
+
+# =============================================================================
+# UI colors (Telegram brand)
+# =============================================================================
+
+TG_BLUE = "#3390ec"
+TG_BLUE_HOVER = "#2b7cd4"
+UI_BG = "#ffffff"
+UI_FIELD_BG = "#f0f2f5"
+UI_FIELD_BORDER = "#d6d9dc"
+UI_TEXT_PRIMARY = "#000000"
+UI_TEXT_SECONDARY = "#707579"
+UI_FONT_FAMILY = "Segoe UI"
+
+# =============================================================================
+# Error codes
+# =============================================================================
+
+WSAEADDRINUSE = 10048
+WSAEPROTONOSUPPORT = 10047

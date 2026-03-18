@@ -14,13 +14,17 @@ from proxy.tg_ws_proxy import (
     _is_http_transport,
     parse_dc_ip_list,
 )
+from proxy.constants import (
+    INIT_PACKET_SIZE,
+    PROTO_OBFUSCATED,
+)
 
 
 class TestDcFromInit:
     """Tests for _dc_from_init function."""
 
     def _make_init_packet(self, dc_id: int, is_media: bool = False,
-                          proto: int = 0xEFEFEFEF) -> bytes:
+                          proto: int = PROTO_OBFUSCATED) -> bytes:
         """Create a valid MTProto init packet for testing."""
         key = b'\x00' * 32  # 32 bytes
         iv = b'\x00' * 16   # 16 bytes

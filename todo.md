@@ -192,14 +192,15 @@ requirements-build.txt — для сборки (pyinstaller)
 ### Высокий приоритет
 1. ✅ IPv6 warning в рантайме
 2. ✅ Предварительная проверка порта
-3. Unit-тесты для критической логики
-4. Type hints для публичного API
+3. ✅ Unit-тесты для критической логики
+4. ✅ Вынос констант в constants.py
+5. ✅ Магические числа в именованные константы
+6. ✅ RotatingFileHandler для логов
 
 ### Средний приоритет
-1. Разделение зависимостей
-2. UI статистики
-3. RotatingFileHandler для логов
-4. CONTRIBUTING.md
+1. Type hints для публичного API
+2. UI статистики в трее
+3. CONTRIBUTING.md
 
 ### Низкий приоритет
 1. Prometheus metrics
