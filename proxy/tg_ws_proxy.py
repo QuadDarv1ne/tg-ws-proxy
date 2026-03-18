@@ -54,6 +54,7 @@ _WS_POOL_SIZE = WS_POOL_SIZE
 _WS_POOL_MAX_AGE = WS_POOL_MAX_AGE
 
 _TG_RANGES = TG_RANGES
+_TCP_NODELAY = TCP_NODELAY
 
 # IP -> (dc_id, is_media)
 _IP_TO_DC: Dict[str, Tuple[int, bool]] = _IP_TO_DC
