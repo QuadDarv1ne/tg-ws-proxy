@@ -609,7 +609,6 @@ class MTProtoProxy:
                                     total_traffic / (1024**3))
                     writer.write(b'')  # Close connection
                     await writer.drain()
-                    self.stats_per_secret[used_secret]["connections_active"] -= 1
                     return
 
             # Update stats for this secret
