@@ -487,8 +487,33 @@ class Stats:
                 f"up={_human_bytes(self.bytes_up)} "
                 f"down={_human_bytes(self.bytes_down)}")
 
+    def to_dict(self) -> dict:
+        """Return stats as a dictionary."""
+        return {
+            "connections_total": self.connections_total,
+            "connections_ws": self.connections_ws,
+            "connections_tcp_fallback": self.connections_tcp_fallback,
+            "connections_http_rejected": self.connections_http_rejected,
+            "connections_passthrough": self.connections_passthrough,
+            "ws_errors": self.ws_errors,
+            "bytes_up": self.bytes_up,
+            "bytes_down": self.bytes_down,
+            "pool_hits": self.pool_hits,
+            "pool_misses": self.pool_misses,
+        }
+
 
 _stats = Stats()
+
+
+def get_stats() -> dict:
+    """Get current proxy statistics."""
+    return _stats.to_dict()
+
+
+def get_stats_summary() -> str:
+    """Get current stats as a human-readable summary."""
+    return _stats.summary()
 
 
 class _WsPool:

@@ -658,6 +658,82 @@ def _show_ipv6_dialog():
         "TG WS Proxy")
 
 
+def _on_show_stats(icon=None, item=None):
+    """Show proxy statistics in a dialog."""
+    threading.Thread(target=_show_stats_dialog, daemon=True).start()
+
+
+def _show_stats_dialog():
+    """Display statistics dialog."""
+    if ctk is None:
+        return
+    
+    stats = tg_ws_proxy.get_stats()
+    
+    ctk.set_appearance_mode("light")
+    ctk.set_default_color_theme("blue")
+
+    root = ctk.CTk()
+    root.title("TG WS Proxy — Статистика")
+    root.resizable(False, False)
+    root.attributes("-topmost", True)
+    icon_path = str(Path(__file__).parent / "icon.ico")
+    root.iconbitmap(icon_path)
+
+    w, h = 380, 340
+    sw = root.winfo_screenwidth()
+    sh = root.winfo_screenheight()
+    root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+    root.configure(fg_color=UI_BG)
+
+    frame = ctk.CTkFrame(root, fg_color=UI_BG, corner_radius=0)
+    frame.pack(fill="both", expand=True, padx=24, pady=20)
+
+    ctk.CTkLabel(frame, text="Статистика прокси",
+                 font=(UI_FONT_FAMILY, 16, "bold"),
+                 text_color=UI_TEXT_PRIMARY).pack(anchor="w", pady=(0, 16))
+
+    # Connection stats
+    stats_text = (
+        f"Всего подключений: {stats['connections_total']}\n"
+        f"WebSocket: {stats['connections_ws']}\n"
+        f"TCP fallback: {stats['connections_tcp_fallback']}\n"
+        f"HTTP (отклонено): {stats['connections_http_rejected']}\n"
+        f"Passthrough: {stats['connections_passthrough']}\n"
+        f"Ошибки WS: {stats['ws_errors']}\n"
+        f"\n"
+        f"Трафик вверх: {_human_bytes(stats['bytes_up'])}\n"
+        f"Трафик вниз: {_human_bytes(stats['bytes_down'])}\n"
+        f"\n"
+        f"Pool hits: {stats['pool_hits']}/{stats['pool_hits'] + stats['pool_misses']}"
+    )
+    
+    ctk.CTkLabel(frame, text=stats_text,
+                 font=(UI_FONT_FAMILY, 12),
+                 text_color=UI_TEXT_PRIMARY,
+                 anchor="w", justify="left").pack(anchor="w", pady=(0, 16))
+
+    def on_close():
+        root.destroy()
+
+    ctk.CTkButton(frame, text="Закрыть", width=140, height=36,
+                  font=(UI_FONT_FAMILY, 13), corner_radius=10,
+                  fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
+                  text_color="#ffffff",
+                  command=on_close).pack()
+
+    root.mainloop()
+
+
+def _human_bytes(n: int) -> str:
+    """Format bytes as human-readable string."""
+    for unit in ('B', 'KB', 'MB', 'GB'):
+        if abs(n) < 1024:
+            return f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+
 def _build_menu():
     if pystray is None:
         return None
@@ -669,6 +745,7 @@ def _build_menu():
             _on_open_in_telegram,
             default=True),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Статистика", _on_show_stats),
         pystray.MenuItem("Перезапустить прокси", _on_restart),
         pystray.MenuItem("Настройки...", _on_edit_config),
         pystray.MenuItem("Открыть логи", _on_open_logs),

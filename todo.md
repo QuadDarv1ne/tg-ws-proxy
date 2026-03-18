@@ -197,10 +197,10 @@ requirements-build.txt — для сборки (pyinstaller)
 5. ✅ Магические числа в именованные константы
 6. ✅ RotatingFileHandler для логов
 7. ✅ Type hints для публичного API
+8. ✅ UI статистики в трее
 
 ### Средний приоритет
-1. UI статистики в трее
-2. CONTRIBUTING.md
+1. CONTRIBUTING.md
 
 ### Низкий приоритет
 1. Prometheus metrics
