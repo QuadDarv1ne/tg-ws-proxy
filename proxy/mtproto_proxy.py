@@ -589,7 +589,8 @@ class MTProtoProxy:
                         log.debug("[%s] Handshake decrypted with secret %s...%s (%d bytes)",
                                   label, secret[:8], secret[-4:], len(decrypted))
                         break
-                except Exception:
+                except ValueError:
+                    # Invalid decryption - try next secret
                     continue
 
             if transport is None or decrypted is None or used_secret is None:
@@ -680,12 +681,17 @@ class MTProtoProxy:
                 timeout=10.0
             )
             log.info("[%s] Connected to Telegram server DC%d %s:%d", label, self.dc_id, tg_host, tg_port)
-        except Exception as exc:
-            log.error("[%s] Failed to connect to Telegram DC%d: %s", label, self.dc_id, exc)
-            # Close client connection on upstream failure
+        except asyncio.TimeoutError:
+            log.error("[%s] Timeout connecting to Telegram DC%d", label, self.dc_id)
             try:
-                client_writer.write(b'\x00\x00\x00\x00')  # Send empty response
-                await client_writer.drain()
+                client_writer.close()
+                await client_writer.wait_closed()
+            except Exception:
+                pass
+            return
+        except (ConnectionRefusedError, OSError) as exc:
+            log.error("[%s] Cannot connect to Telegram DC%d: %s", label, self.dc_id, exc)
+            try:
                 client_writer.close()
                 await client_writer.wait_closed()
             except Exception:
