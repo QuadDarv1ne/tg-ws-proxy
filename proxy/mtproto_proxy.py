@@ -364,6 +364,10 @@ class MTProtoProxy:
         ip_whitelist: Optional[List[str]] = None,
         ip_blacklist: Optional[List[str]] = None,
     ):
+        # Validate dc_id
+        if not isinstance(dc_id, int) or dc_id < 1 or dc_id > 5:
+            raise ValueError(f"dc_id must be an integer between 1 and 5, got {dc_id}")
+        
         self.secrets = secrets  # Support multiple secrets
         self.host = host
         self.port = port
@@ -669,7 +673,7 @@ class MTProtoProxy:
         # Get Telegram server IP from DC_ID
         tg_host = self.dc_ip.get(self.dc_id) or DC_IP_MAP.get(self.dc_id, "149.154.167.220")
         tg_port = 443
-        
+
         try:
             tg_reader, tg_writer = await asyncio.wait_for(
                 asyncio.open_connection(tg_host, tg_port),
@@ -678,6 +682,14 @@ class MTProtoProxy:
             log.info("[%s] Connected to Telegram server DC%d %s:%d", label, self.dc_id, tg_host, tg_port)
         except Exception as exc:
             log.error("[%s] Failed to connect to Telegram DC%d: %s", label, self.dc_id, exc)
+            # Close client connection on upstream failure
+            try:
+                client_writer.write(b'\x00\x00\x00\x00')  # Send empty response
+                await client_writer.drain()
+                client_writer.close()
+                await client_writer.wait_closed()
+            except Exception:
+                pass
             return
         
         async def client_to_server():
@@ -819,6 +831,11 @@ def run_mtproto_proxy(
         if not validate_secret(s):
             log.error("Invalid secret: %s... (must be %d hex characters)", s[:8], MTPROTO_SECRET_LENGTH)
             sys.exit(1)
+
+    # Validate dc_id
+    if not isinstance(dc_id, int) or dc_id < 1 or dc_id > 5:
+        log.error("Invalid dc_id: %s (must be integer between 1 and 5)", dc_id)
+        sys.exit(1)
 
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
@@ -987,6 +1004,8 @@ def main() -> None:
             args.host = config.host
         if args.port == MTPROTO_DEFAULT_PORT:
             args.port = config.port
+        if args.dc_id == DEFAULT_DC_ID:
+            args.dc_id = config.dc_id
         if not args.auto_rotate:
             args.auto_rotate = config.auto_rotate
         if args.rotate_days == 7:
@@ -1036,6 +1055,7 @@ def main() -> None:
         config = MTProtoConfig(
             host=args.host,
             port=args.port,
+            dc_id=args.dc_id,
             secrets=secrets or [],
             auto_rotate=args.auto_rotate,
             rotate_days=args.rotate_days,
