@@ -1440,8 +1440,25 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
     if stop_event:
         async def wait_stop():
             await stop_event.wait()
+            log.info("Graceful shutdown initiated...")
+            
+            # Close server socket first (stop accepting new connections)
             server.close()
             await server.wait_closed()
+            log.info("Server socket closed")
+            
+            # Close all idle WebSocket connections in pool
+            for key, bucket in server_instance.ws_pool._idle.items():
+                dc, is_media = key
+                for ws, _ in bucket:
+                    try:
+                        await ws.close()
+                    except Exception:
+                        pass
+            log.info("WebSocket pool closed")
+            
+            log.info("Graceful shutdown completed")
+            
         asyncio.create_task(wait_stop())
 
     async with server:
