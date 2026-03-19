@@ -774,7 +774,7 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
                     label, dst, port, exc)
         return False
 
-    stats.connections_tcp_fallback += 1
+    stats.add_connection('tcp_fallback', dc=dc)
     rw.write(init)
     await rw.drain()
     await _bridge_tcp(reader, writer, rr, rw, label, stats,
@@ -795,7 +795,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
         hdr = await asyncio.wait_for(reader.readexactly(2), timeout=10)
         if hdr[0] != 5:
             log.debug("[%s] not SOCKS5 (ver=%d)", label, hdr[0])
-            stats.add_connection('passthrough')
+            stats.add_connection('passthrough', dc=None)
             writer.close()
             return
         nmethods = hdr[1]
@@ -960,7 +960,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
                         log.warning("[%s] DC%d%s WS handshake: %s",
                                     label, dc, media_tag, exc.status_line)
                 except Exception as exc:
-                    stats.ws_errors += 1
+                    stats.add_ws_error(dc=dc)
                     all_redirects = False
                     err_str = str(exc)
                     if ('CERTIFICATE_VERIFY_FAILED' in err_str or
@@ -996,7 +996,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
 
         # -- WS success --
         dc_fail_until.pop(dc_key, None)
-        stats.connections_ws += 1
+        stats.add_connection('ws', dc=dc)
 
         splitter = None
         if init_patched:

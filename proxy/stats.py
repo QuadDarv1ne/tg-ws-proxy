@@ -6,8 +6,9 @@ Provides Stats class for tracking proxy connections, traffic, and performance me
 
 from __future__ import annotations
 
+import json
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 def _human_bytes(n: int) -> str:
@@ -17,6 +18,18 @@ def _human_bytes(n: int) -> str:
             return f"{n:.1f}{unit}"
         n /= 1024
     return f"{n:.1f}TB"
+
+
+def _human_time(seconds: float) -> str:
+    """Convert seconds to human-readable format."""
+    if seconds < 1:
+        return f"{seconds*1000:.0f}ms"
+    elif seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        return f"{seconds/60:.0f}m"
+    else:
+        return f"{seconds/3600:.1f}h"
 
 
 class Stats:
@@ -34,15 +47,32 @@ class Stats:
         self.pool_hits = 0
         self.pool_misses = 0
 
+        # DC statistics
+        self.dc_stats: Dict[int, Dict[str, int]] = {}  # dc_id -> {connections, errors}
+        self._current_dc: Optional[int] = None
+
+        # Latency tracking (last ping per DC)
+        self.latency_ms: Dict[int, float] = {}  # dc_id -> latency in ms
+        self._latency_history: Dict[int, List[float]] = {}  # dc_id -> [latencies]
+
+        # Session tracking
+        self.session_start = time.time()
+        self.last_connection_time: Optional[float] = None
+        self.peak_connections_per_minute = 0
+
         # History tracking (last N events)
         self._history_size = history_size
-        self.connection_history: List[dict] = []  # [{time, type, dc}, ...]
+        self.connection_history: List[dict] = []  # [{time, type, dc, duration}, ...]
         self.traffic_history: List[dict] = []  # [{time, bytes_up, bytes_down}, ...]
         self._last_traffic_snapshot = (0, 0)
+        self._traffic_snapshot_time = time.time()
 
-    def add_connection(self, conn_type: str, dc: int = None) -> None:
+    def add_connection(self, conn_type: str, dc: Optional[int] = None) -> None:
         """Record a new connection in history."""
         self.connections_total += 1
+        self.last_connection_time = time.time()
+        self._current_dc = dc
+
         if conn_type == 'ws':
             self.connections_ws += 1
         elif conn_type == 'tcp_fallback':
@@ -52,6 +82,12 @@ class Stats:
         elif conn_type == 'passthrough':
             self.connections_passthrough += 1
 
+        # Update DC stats
+        if dc is not None:
+            if dc not in self.dc_stats:
+                self.dc_stats[dc] = {'connections': 0, 'errors': 0}
+            self.dc_stats[dc]['connections'] += 1
+
         self.connection_history.append({
             'time': time.time(),
             'type': conn_type,
@@ -60,14 +96,48 @@ class Stats:
         if len(self.connection_history) > self._history_size:
             self.connection_history.pop(0)
 
+        # Update peak connections per minute
+        cpm = self.get_connections_per_minute()
+        if cpm > self.peak_connections_per_minute:
+            self.peak_connections_per_minute = cpm
+
     def add_bytes(self, up: int = 0, down: int = 0) -> None:
         """Record traffic update."""
         self.bytes_up += up
         self.bytes_down += down
 
-    def add_ws_error(self) -> None:
+        # Record traffic snapshot every second
+        now = time.time()
+        if now - self._traffic_snapshot_time >= 1.0:
+            self.traffic_history.append({
+                'time': now,
+                'bytes_up': up,
+                'bytes_down': down
+            })
+            if len(self.traffic_history) > self._history_size:
+                self.traffic_history.pop(0)
+            self._traffic_snapshot_time = now
+
+    def add_ws_error(self, dc: Optional[int] = None) -> None:
         """Record a WebSocket error."""
         self.ws_errors += 1
+        if dc is not None and dc in self.dc_stats:
+            self.dc_stats[dc]['errors'] += 1
+
+    def record_latency(self, dc: int, latency_ms: float) -> None:
+        """Record latency measurement for a DC."""
+        self.latency_ms[dc] = latency_ms
+        if dc not in self._latency_history:
+            self._latency_history[dc] = []
+        self._latency_history[dc].append(latency_ms)
+        if len(self._latency_history[dc]) > 60:  # Keep last 60 measurements
+            self._latency_history[dc].pop(0)
+
+    def get_average_latency(self, dc: int) -> Optional[float]:
+        """Get average latency for a DC."""
+        if dc not in self._latency_history or not self._latency_history[dc]:
+            return None
+        return sum(self._latency_history[dc]) / len(self._latency_history[dc])
 
     def get_connections_per_minute(self) -> float:
         """Calculate connections per minute from history."""
@@ -91,8 +161,39 @@ class Stats:
         down = sum(t['bytes_down'] for t in recent)
         return (up, down)
 
+    def get_session_duration(self) -> float:
+        """Get session duration in seconds."""
+        return time.time() - self.session_start
+
+    def get_best_dc(self) -> Optional[int]:
+        """Get DC with lowest average latency."""
+        if not self.latency_ms:
+            return None
+        return min(self.latency_ms, key=self.latency_ms.get)
+
+    def get_dc_stats(self) -> Dict[int, Dict]:
+        """Get statistics per DC."""
+        result = {}
+        for dc, stats in self.dc_stats.items():
+            result[dc] = {
+                'connections': stats['connections'],
+                'errors': stats['errors'],
+                'latency_ms': self.latency_ms.get(dc),
+                'avg_latency_ms': self.get_average_latency(dc)
+            }
+        return result
+
+    def export_to_json(self) -> str:
+        """Export statistics to JSON format."""
+        data = self.to_dict()
+        data['session_duration_seconds'] = self.get_session_duration()
+        data['peak_connections_per_minute'] = self.peak_connections_per_minute
+        data['dc_stats'] = self.get_dc_stats()
+        return json.dumps(data, indent=2, default=str)
+
     def summary(self) -> str:
         """Return human-readable stats summary."""
+        uptime = _human_time(self.get_session_duration())
         return (f"total={self.connections_total} ws={self.connections_ws} "
                 f"tcp_fb={self.connections_tcp_fallback} "
                 f"http_skip={self.connections_http_rejected} "
@@ -100,7 +201,8 @@ class Stats:
                 f"err={self.ws_errors} "
                 f"pool={self.pool_hits}/{self.pool_hits+self.pool_misses} "
                 f"up={_human_bytes(self.bytes_up)} "
-                f"down={_human_bytes(self.bytes_down)}")
+                f"down={_human_bytes(self.bytes_down)} "
+                f"uptime={uptime}")
 
     def to_dict(self) -> dict:
         """Return stats as a dictionary."""
@@ -118,7 +220,12 @@ class Stats:
             "pool_hits": self.pool_hits,
             "pool_misses": self.pool_misses,
             "connections_per_minute": round(conn_per_min, 1),
+            "peak_connections_per_minute": self.peak_connections_per_minute,
             "traffic_up_per_minute": traffic_per_min[0],
             "traffic_down_per_minute": traffic_per_min[1],
             "connection_history": self.connection_history[-10:],  # Last 10
+            "dc_stats": self.get_dc_stats(),
+            "latency_ms": self.latency_ms,
+            "session_duration_seconds": self.get_session_duration(),
+            "best_dc": self.get_best_dc(),
         }

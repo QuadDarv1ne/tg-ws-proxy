@@ -908,7 +908,7 @@ def _show_stats_dialog() -> None:
     root.resizable(False, False)
     root.attributes("-topmost", True)
 
-    w, h = 380, 340
+    w, h = 450, 480
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
@@ -919,35 +919,95 @@ def _show_stats_dialog() -> None:
 
     ctk.CTkLabel(frame, text="Статистика прокси",
                  font=(UI_FONT_FAMILY, 16, "bold"),
-                 text_color=UI_TEXT_PRIMARY).pack(anchor="w", pady=(0, 16))
+                 text_color=UI_TEXT_PRIMARY).pack(anchor="w", pady=(0, 12))
 
+    # Session info
+    session_duration = stats.get('session_duration_seconds', 0)
+    uptime_str = f"{int(session_duration // 3600)}ч {(int(session_duration) % 3600) // 60}м {int(session_duration) % 60}с"
+    ctk.CTkLabel(frame, text=f"Время работы: {uptime_str}",
+                 font=(UI_FONT_FAMILY, 11),
+                 text_color=UI_TEXT_SECONDARY,
+                 anchor="w").pack(anchor="w", pady=(0, 8))
+
+    # Main stats
     stats_text = (
         f"Всего подключений: {stats['connections_total']}\n"
-        f"WebSocket: {stats['connections_ws']}\n"
-        f"TCP fallback: {stats['connections_tcp_fallback']}\n"
-        f"HTTP (отклонено): {stats['connections_http_rejected']}\n"
-        f"Passthrough: {stats['connections_passthrough']}\n"
+        f"  WebSocket: {stats['connections_ws']}\n"
+        f"  TCP fallback: {stats['connections_tcp_fallback']}\n"
+        f"  HTTP (отклонено): {stats['connections_http_rejected']}\n"
+        f"  Passthrough: {stats['connections_passthrough']}\n"
         f"Ошибки WS: {stats['ws_errors']}\n"
         f"\n"
         f"Трафик вверх: {_human_bytes(stats['bytes_up'])}\n"
         f"Трафик вниз: {_human_bytes(stats['bytes_down'])}\n"
         f"\n"
-        f"Pool hits: {stats['pool_hits']}/{stats['pool_hits'] + stats['pool_misses']}"
+        f"Pool hits: {stats['pool_hits']}/{stats['pool_hits'] + stats['pool_misses']}\n"
+        f"Подключений/мин: {stats['connections_per_minute']} (пик: {stats.get('peak_connections_per_minute', 0)})"
     )
 
     ctk.CTkLabel(frame, text=stats_text,
                  font=(UI_FONT_FAMILY, 12),
                  text_color=UI_TEXT_PRIMARY,
-                 anchor="w", justify="left").pack(anchor="w", pady=(0, 16))
+                 anchor="w", justify="left").pack(anchor="w", pady=(0, 12))
 
-    def on_close():
-        root.destroy()
+    # DC stats
+    dc_stats = stats.get('dc_stats', {})
+    if dc_stats:
+        dc_frame = ctk.CTkFrame(frame, fg_color=UI_FIELD_BG, corner_radius=8)
+        dc_frame.pack(fill="x", pady=(0, 12))
+        
+        ctk.CTkLabel(dc_frame, text="Статистика по DC:",
+                     font=(UI_FONT_FAMILY, 12, "bold"),
+                     text_color=UI_TEXT_PRIMARY,
+                     anchor="w").pack(anchor="w", padx=12, pady=(8, 4))
+        
+        for dc_id, dc_data in sorted(dc_stats.items()):
+            latency_str = f"{dc_data.get('latency_ms', 'N/A'):.0f}мс" if dc_data.get('latency_ms') else "N/A"
+            dc_text = (f"  DC{dc_id}: {dc_data['connections']} подкл., "
+                      f"{dc_data['errors']} ошибок, пинг {latency_str}")
+            ctk.CTkLabel(dc_frame, text=dc_text,
+                        font=(UI_FONT_FAMILY, 11),
+                        text_color=UI_TEXT_SECONDARY,
+                        anchor="w").pack(anchor="w", padx=12, pady=2)
+        
+        best_dc = stats.get('best_dc')
+        if best_dc:
+            ctk.CTkLabel(dc_frame, text=f"  Лучший DC: {best_dc}",
+                        font=(UI_FONT_FAMILY, 11, "bold"),
+                        text_color=TG_BLUE,
+                        anchor="w").pack(anchor="w", padx=12, pady=(4, 8))
 
-    ctk.CTkButton(frame, text="Закрыть", width=140, height=36,
-                  font=(UI_FONT_FAMILY, 13), corner_radius=10,
+    # Export button
+    def on_export():
+        try:
+            json_data = tg_ws_proxy.get_stats().get('dc_stats', {})
+            from tkinter import filedialog
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json")],
+                title="Экспорт статистики")
+            if file_path:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(tg_ws_proxy.Stats().export_to_json())
+                _show_info(f"Статистика экспортирована в:\n{file_path}")
+        except Exception as e:
+            _show_error(f"Ошибка экспорта: {e}")
+
+    btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+    btn_frame.pack(fill="x", pady=(8, 0))
+    
+    ctk.CTkButton(btn_frame, text="Экспорт JSON", width=120, height=32,
+                  font=(UI_FONT_FAMILY, 12), corner_radius=8,
+                  fg_color=UI_FIELD_BG, hover_color=UI_FIELD_BORDER,
+                  text_color=UI_TEXT_PRIMARY, border_width=1,
+                  border_color=UI_FIELD_BORDER,
+                  command=on_export).pack(side="left", padx=(0, 10))
+    
+    ctk.CTkButton(btn_frame, text="Закрыть", width=120, height=32,
+                  font=(UI_FONT_FAMILY, 12), corner_radius=8,
                   fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                   text_color="#ffffff",
-                  command=on_close).pack()
+                  command=root.destroy).pack(side="right")
 
     root.mainloop()
 
