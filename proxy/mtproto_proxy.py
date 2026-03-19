@@ -46,6 +46,22 @@ from .constants import (
 log = logging.getLogger('tg-mtproto-proxy')
 
 
+def _close_writer(writer) -> None:
+    """Safely close writer connection."""
+    try:
+        writer.close()
+    except Exception:
+        pass
+
+
+async def _wait_closed(writer) -> None:
+    """Safely wait for writer to close."""
+    try:
+        await writer.wait_closed()
+    except Exception:
+        pass
+
+
 def generate_secret() -> str:
     """Generate a random MTProto secret key (32 hex characters)."""
     return os.urandom(16).hex()
@@ -568,14 +584,14 @@ class MTProtoProxy:
         if self.rate_limiter:
             if not self.rate_limiter.is_ip_allowed(ip):
                 log.warning("[%s] IP blocked (blacklisted): %s", label, ip)
-                writer.close()
+                _close_writer(writer)
                 return
-        
+
         # Check rate limit (connection count)
         if self.rate_limiter:
             if not self.rate_limiter.check_connection_limit(ip):
                 log.warning("[%s] Rate limit exceeded (connections)", label)
-                writer.close()
+                _close_writer(writer)
                 return
             self.rate_limiter.increment_connections(ip)
         
@@ -683,11 +699,8 @@ class MTProtoProxy:
             # Decrement connection count for rate limiting
             if self.rate_limiter:
                 self.rate_limiter.decrement_connections(ip)
-            try:
-                writer.close()
-                await writer.wait_closed()
-            except Exception:
-                pass
+            _close_writer(writer)
+            await _wait_closed(writer)
             log.info("[%s] MTProto client disconnected", label)
 
     async def _forward_data(self, client_reader: asyncio.StreamReader,
@@ -706,19 +719,13 @@ class MTProtoProxy:
             log.info("[%s] Connected to Telegram server DC%d %s:%d", label, self.dc_id, tg_host, tg_port)
         except asyncio.TimeoutError:
             log.error("[%s] Timeout connecting to Telegram DC%d", label, self.dc_id)
-            try:
-                client_writer.close()
-                await client_writer.wait_closed()
-            except Exception:
-                pass
+            _close_writer(client_writer)
+            await _wait_closed(client_writer)
             return
         except (ConnectionRefusedError, OSError) as exc:
             log.error("[%s] Cannot connect to Telegram DC%d: %s", label, self.dc_id, exc)
-            try:
-                client_writer.close()
-                await client_writer.wait_closed()
-            except Exception:
-                pass
+            _close_writer(client_writer)
+            await _wait_closed(client_writer)
             return
         
         async def client_to_server():
@@ -745,10 +752,7 @@ class MTProtoProxy:
             except (asyncio.CancelledError, ConnectionError, OSError) as exc:
                 log.debug("[%s] client_to_server ended: %s", label, exc)
             finally:
-                try:
-                    tg_writer.close()
-                except Exception:
-                    pass
+                _close_writer(tg_writer)
 
         async def server_to_client():
             try:
@@ -756,21 +760,18 @@ class MTProtoProxy:
                     data = await tg_reader.read(65536)
                     if not data:
                         break
-                    
+
                     self.bytes_sent += len(data)
                     self.stats_per_secret[used_secret]["bytes_sent"] += len(data)
                     log.debug("[%s] Server -> Client: %d bytes", label, len(data))
-                    
+
                     # Forward to client (already encrypted by Telegram)
                     client_writer.write(data)
                     await client_writer.drain()
             except (asyncio.CancelledError, ConnectionError, OSError) as exc:
                 log.debug("[%s] server_to_client ended: %s", label, exc)
             finally:
-                try:
-                    client_writer.close()
-                except Exception:
-                    pass
+                _close_writer(client_writer)
 
         tasks = [
             asyncio.create_task(client_to_server()),
@@ -788,18 +789,12 @@ class MTProtoProxy:
                 except BaseException:
                     pass
             # Cleanup
-            try:
-                tg_writer.close()
-                await tg_writer.wait_closed()
-            except Exception:
-                pass
-            try:
-                client_writer.close()
-                await client_writer.wait_closed()
-            except Exception:
-                pass
+            _close_writer(tg_writer)
+            await _wait_closed(tg_writer)
+            _close_writer(client_writer)
+            await _wait_closed(client_writer)
             # Note: stats decrement is handled by _handle_client
-    
+
     def get_stats(self) -> dict:
         """Get proxy statistics."""
         return {
