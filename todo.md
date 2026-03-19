@@ -106,7 +106,7 @@
 
 ### Код-качество
 - [x] Исправить ruff нарушения (682 → 0 ✅)
-- [ ] Добавить type hints в profiler.py
+- [x] Добавить type hints в profiler.py ✅
 - [ ] Увеличить coverage тестов (>80%)
 - [ ] Пройти mypy без ошибок (11 ошибок — missing stubs)
 

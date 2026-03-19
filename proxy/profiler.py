@@ -11,7 +11,10 @@ import io
 import logging
 import pstats
 import time
-from typing import Any, Callable
+from typing import Callable, ParamSpec, TypeVar
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 log = logging.getLogger("tg-ws-proxy-profiler")
 
@@ -63,7 +66,7 @@ class PerformanceProfiler:
 
         log.info("Profiling completed")
 
-    def profile(self, func: Callable, *args, **kwargs) -> Any:
+    def profile(self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
         """
         Profile a function execution.
 
@@ -82,7 +85,9 @@ class PerformanceProfiler:
         finally:
             self.stop()
 
-    async def profile_async(self, func: Callable, *args, **kwargs) -> Any:
+    async def profile_async(
+        self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs
+    ) -> R:
         """
         Profile an async function execution.
 
@@ -195,11 +200,11 @@ class AsyncPerformanceProfiler:
 
     async def profile_async(
         self,
-        func: Callable,
+        func: Callable[P, R],
         name: str | None = None,
-        *args,
-        **kwargs
-    ) -> Any:
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> R:
         """
         Profile an async function execution.
 
@@ -235,7 +240,7 @@ class AsyncPerformanceProfiler:
         if len(self._timings[name]) > 1000:
             self._timings[name].pop(0)
 
-    def get_stats(self) -> dict[str, dict]:
+    def get_stats(self) -> dict[str, dict[str, float | int]]:
         """
         Get timing statistics for all profiled functions.
 
