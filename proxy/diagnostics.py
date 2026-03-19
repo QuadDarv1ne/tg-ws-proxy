@@ -12,8 +12,7 @@ import socket
 import ssl
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
-
+from typing import List, Optional
 
 log = logging.getLogger('tg-mtproto-diagnostics')
 
@@ -64,17 +63,17 @@ async def test_websocket_connect(ip: str, domain: str, timeout: float = 10.0) ->
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
-    
+
     try:
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(ip, 443, ssl=ssl_ctx, server_hostname=domain),
             timeout=timeout
         )
-        
+
         # Send WebSocket handshake
         import base64
         import os
-        
+
         ws_key = base64.b64encode(os.urandom(16)).decode()
         req = (
             f'GET /apiws HTTP/1.1\r\n'
@@ -87,14 +86,14 @@ async def test_websocket_connect(ip: str, domain: str, timeout: float = 10.0) ->
         )
         writer.write(req.encode())
         await writer.drain()
-        
+
         # Read response
         response = await asyncio.wait_for(reader.read(512), timeout=timeout)
         latency = (time.perf_counter() - start) * 1000
-        
+
         writer.close()
         await writer.wait_closed()
-        
+
         # Check if upgrade was successful
         if b'101' in response:
             return DiagnosticResult(
@@ -117,7 +116,7 @@ async def test_websocket_connect(ip: str, domain: str, timeout: float = 10.0) ->
                 latency_ms=latency,
                 error=f"Unexpected response: {response[:100]}",
             )
-    
+
     except asyncio.TimeoutError:
         return DiagnosticResult(
             name=f"WS {domain} via {ip}",
@@ -177,23 +176,23 @@ DC_IPS = {
 async def run_full_diagnostics() -> List[DiagnosticResult]:
     """Run full diagnostic suite."""
     results = []
-    
+
     log.info("Starting diagnostics...")
-    
+
     # Test DNS
     for dc in range(1, 6):
         for domain in DC_DOMAINS[dc]:
             result = await test_dns_resolve(domain)
             results.append(result)
             log.info("  %s: %s", result.name, "✓" if result.success else f"✗ {result.error}")
-    
+
     # Test TCP connectivity to DC IPs
     for dc, ips in DC_IPS.items():
         for ip in ips:
             result = await test_tcp_connect(ip, 443)
             results.append(result)
             log.info("  %s: %s", result.name, "✓" if result.success else f"✗ {result.error}")
-    
+
     # Test WebSocket endpoints
     for dc, domains in DC_DOMAINS.items():
         ip = DC_IPS[dc][0]
@@ -201,12 +200,12 @@ async def run_full_diagnostics() -> List[DiagnosticResult]:
             result = await test_websocket_connect(ip, domain)
             results.append(result)
             log.info("  %s: %s", result.name, "✓" if result.success else f"✗ {result.error}")
-    
+
     # Summary
     total = len(results)
     success = sum(1 for r in results if r.success)
     log.info("Diagnostics complete: %d/%d tests passed", success, total)
-    
+
     return results
 
 
@@ -215,24 +214,24 @@ def print_diagnostics_report(results: List[DiagnosticResult]):
     print("\n" + "=" * 60)
     print("  MTProto Proxy Diagnostics Report")
     print("=" * 60)
-    
+
     # Group by type
     dns_results = [r for r in results if r.name.startswith('DNS')]
     tcp_results = [r for r in results if r.name.startswith('TCP')]
     ws_results = [r for r in results if r.name.startswith('WS')]
-    
+
     print("\n📡 DNS Resolution:")
     for r in dns_results:
         status = "✓" if r.success else "✗"
         print(f"  {status} {r.name}: {r.latency_ms:.1f}ms" if r.success else f"  {status} {r.name}: {r.error}")
         if r.details:
             print(f"      {r.details}")
-    
+
     print("\n🔌 TCP Connectivity (port 443):")
     for r in tcp_results:
         status = "✓" if r.success else "✗"
         print(f"  {status} {r.name}: {r.latency_ms:.1f}ms" if r.success else f"  {status} {r.name}: {r.error}")
-    
+
     print("\n🌐 WebSocket Endpoints:")
     for r in ws_results:
         status = "✓" if r.success else "✗"
@@ -240,7 +239,7 @@ def print_diagnostics_report(results: List[DiagnosticResult]):
             print(f"  {status} {r.name}: {r.latency_ms:.1f}ms - {r.details}")
         else:
             print(f"  {status} {r.name}: {r.error}")
-    
+
     # Summary
     total = len(results)
     success = sum(1 for r in results if r.success)
@@ -255,12 +254,12 @@ def run_diagnostics_cli():
         level=logging.INFO,
         format='%(message)s'
     )
-    
+
     print("\n🔍 Running MTProto Proxy Diagnostics...\n")
-    
+
     results = asyncio.run(run_full_diagnostics())
     print_diagnostics_report(results)
-    
+
     # Return exit code based on results
     success = sum(1 for r in results if r.success)
     return 0 if success == len(results) else 1

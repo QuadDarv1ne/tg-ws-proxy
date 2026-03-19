@@ -1,22 +1,22 @@
 """Unit tests for critical proxy logic."""
 
-import pytest
 import struct
-import socket as _socket
+
+import pytest
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+from proxy.constants import (
+    PROTO_OBFUSCATED,
+)
 
 # Import functions to test
 from proxy.tg_ws_proxy import (
     _dc_from_init,
-    _patch_init_dc,
-    _MsgSplitter,
-    _is_telegram_ip,
     _is_http_transport,
+    _is_telegram_ip,
+    _MsgSplitter,
+    _patch_init_dc,
     parse_dc_ip_list,
-)
-from proxy.constants import (
-    INIT_PACKET_SIZE,
-    PROTO_OBFUSCATED,
 )
 
 

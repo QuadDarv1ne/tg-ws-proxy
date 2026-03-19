@@ -1,43 +1,42 @@
 from __future__ import annotations
 
+import asyncio as _asyncio
 import ctypes
 import json
 import logging
 import os
-import psutil
 import sys
 import threading
 import time
 import webbrowser
-import pystray
-import pyperclip
-import asyncio as _asyncio
-import customtkinter as ctk
 from pathlib import Path
 from typing import Dict, Optional
+
+import customtkinter as ctk
+import psutil
+import pyperclip
+import pystray
 from PIL import Image, ImageDraw, ImageFont
 
 import proxy.tg_ws_proxy as tg_ws_proxy
 from proxy.constants import (
-    APP_NAME,
     APP_DIR_NAME,
+    APP_NAME,
     CONFIG_FILE_NAME,
-    LOG_FILE_NAME,
+    DEFAULT_CONFIG,
     FIRST_RUN_MARKER_NAME,
     IPV6_WARN_MARKER_NAME,
-    LOCK_FILE_EXT,
-    DEFAULT_CONFIG,
+    LOG_FILE_NAME,
     TG_BLUE,
     TG_BLUE_HOVER,
     UI_BG,
     UI_FIELD_BG,
     UI_FIELD_BORDER,
+    UI_FONT_FAMILY,
     UI_TEXT_PRIMARY,
     UI_TEXT_SECONDARY,
-    UI_FONT_FAMILY,
     WSAEADDRINUSE,
 )
-
 
 APP_DIR = Path(os.environ.get("APPDATA", Path.home())) / APP_DIR_NAME
 CONFIG_FILE = APP_DIR / CONFIG_FILE_NAME
@@ -138,7 +137,7 @@ def load_config() -> dict:
     _ensure_dirs()
     if CONFIG_FILE.exists():
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
                 data = json.load(f)
             for k, v in DEFAULT_CONFIG.items():
                 data.setdefault(k, v)
@@ -188,11 +187,11 @@ def _make_icon_image(size: int = 64):
         raise RuntimeError("Pillow is required for tray icon")
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    
+
     margin = 2
     draw.ellipse([margin, margin, size - margin, size - margin],
                  fill=(0, 136, 204, 255))
-                 
+
     try:
         font = ImageFont.truetype("arial.ttf", size=int(size * 0.55))
     except Exception:
@@ -234,18 +233,18 @@ def _check_port_available(port: int, host: str) -> bool:
 def _run_proxy_thread(port: int, dc_opt: Dict[int, str], verbose: bool,
                       host: str = '127.0.0.1'):
     global _async_stop
-    
+
     # Check port availability before starting
     if not _check_port_available(port, host):
         log.error("Port %d on %s is already in use", port, host)
         _show_error(f"Не удалось запустить прокси:\nПорт {host}:{port} уже используется другим приложением.\n\nЗакройте приложение, использующее этот порт, или измените порт в настройках прокси и перезапустите.")
         return
-    
+
     # Check IPv6 and log warning if enabled
     if _has_ipv6_enabled():
         log.warning("IPv6 is enabled on this system. If you experience connection issues, "
                     "try disabling IPv6 in Telegram Desktop proxy settings or system-wide.")
-    
+
     loop = _asyncio.new_event_loop()
     _asyncio.set_event_loop(loop)
     stop_ev = _asyncio.Event()
@@ -566,7 +565,7 @@ def _show_first_run():
     sections = [
         ("Как подключить Telegram Desktop:", True),
         ("  Автоматически:", True),
-        (f"  ПКМ по иконке в трее → «Открыть в Telegram»", False),
+        ("  ПКМ по иконке в трее → «Открыть в Telegram»", False),
         (f"  Или ссылка: {tg_url}", False),
         ("\n  Вручную:", True),
         ("  Настройки → Продвинутые → Тип подключения → Прокси", False),
@@ -667,9 +666,9 @@ def _show_stats_dialog():
     """Display statistics dialog."""
     if ctk is None:
         return
-    
+
     stats = tg_ws_proxy.get_stats()
-    
+
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
 
@@ -707,7 +706,7 @@ def _show_stats_dialog():
         f"\n"
         f"Pool hits: {stats['pool_hits']}/{stats['pool_hits'] + stats['pool_misses']}"
     )
-    
+
     ctk.CTkLabel(frame, text=stats_text,
                  font=(UI_FONT_FAMILY, 12),
                  text_color=UI_TEXT_PRIMARY,

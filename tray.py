@@ -6,21 +6,21 @@ Supports Windows, Linux (AppIndicator), and macOS (Cocoa).
 
 from __future__ import annotations
 
+import asyncio
 import ctypes
 import json
 import logging
 import os
+import socket as _sock
 import sys
 import threading
 import time
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Dict, List, Optional, Callable, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import psutil
-import socket as _sock
-import asyncio
 
 # Conditional imports for platform-specific functionality
 IS_WINDOWS = sys.platform == "win32"
@@ -53,13 +53,13 @@ else:
 
 import proxy.tg_ws_proxy as tg_ws_proxy
 from proxy.constants import (
-    APP_NAME,
     APP_DIR_NAME,
+    APP_NAME,
     CONFIG_FILE_NAME,
-    LOG_FILE_NAME,
+    DEFAULT_CONFIG,
     FIRST_RUN_MARKER_NAME,
     IPV6_WARN_MARKER_NAME,
-    DEFAULT_CONFIG,
+    LOG_FILE_NAME,
     TG_BLUE,
     TG_BLUE_HOVER,
     UI_BG,
@@ -68,15 +68,14 @@ from proxy.constants import (
     UI_FIELD_BG_DARK,
     UI_FIELD_BORDER,
     UI_FIELD_BORDER_DARK,
+    UI_FONT_FAMILY,
     UI_TEXT_PRIMARY,
     UI_TEXT_PRIMARY_DARK,
     UI_TEXT_SECONDARY,
     UI_TEXT_SECONDARY_DARK,
-    UI_FONT_FAMILY,
     WSAEADDRINUSE,
 )
 from proxy.stats import _human_bytes
-
 
 APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()) + "/.config")) / APP_DIR_NAME
 CONFIG_FILE = APP_DIR / CONFIG_FILE_NAME
@@ -202,7 +201,7 @@ def load_config() -> dict:
     _ensure_dirs()
     if CONFIG_FILE.exists():
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
                 data = json.load(f)
             for k, v in DEFAULT_CONFIG.items():
                 data.setdefault(k, v)
@@ -279,7 +278,7 @@ def _has_ipv6_enabled() -> bool:
         return False
 
 
-def _make_icon_image(size: int = 64) -> "Image.Image":
+def _make_icon_image(size: int = 64) -> Image.Image:
     """Create a default tray icon."""
     if Image is None:
         raise RuntimeError("Pillow is required for tray icon")
@@ -311,7 +310,7 @@ def _make_icon_image(size: int = 64) -> "Image.Image":
     return img
 
 
-def _load_icon() -> Optional["Image.Image"]:
+def _load_icon() -> Optional[Image.Image]:
     """Load or create tray icon."""
     if not HAS_TRAY:
         return None
@@ -357,7 +356,7 @@ def _show_notification(text: str, title: str = "TG WS Proxy") -> None:
     """Show toast notification (if enabled)."""
     if not NOTIFICATIONS_MARKER.exists():
         return
-    
+
     if IS_WINDOWS:
         try:
             from win10toast import ToastNotifier
@@ -604,7 +603,7 @@ def _is_autostart_enabled() -> bool:
     """Check if autostart is enabled."""
     startup_path = _get_startup_path()
     app_exe = _get_app_executable()
-    
+
     if IS_WINDOWS:
         link_file = startup_path / "TG WS Proxy.lnk"
         return link_file.exists()
@@ -621,7 +620,7 @@ def _set_autostart(enable: bool) -> None:
     startup_path = _get_startup_path()
     startup_path.mkdir(parents=True, exist_ok=True)
     app_exe = _get_app_executable()
-    
+
     if IS_WINDOWS:
         _set_autostart_windows(startup_path, app_exe, enable)
     elif IS_MACOS:
@@ -786,7 +785,7 @@ def _edit_config_dialog() -> None:
     root.mainloop()
 
 
-def _create_config_window() -> "ctk.CTk":
+def _create_config_window() -> ctk.CTk:
     """Create and configure config dialog window."""
     ctk.set_appearance_mode("dark" if _dark_theme else "light")
     ctk.set_default_color_theme("blue")
@@ -808,7 +807,7 @@ def _create_config_window() -> "ctk.CTk":
     # Apply theme colors
     bg_color = UI_BG_DARK if _dark_theme else UI_BG
     root.configure(fg_color=bg_color)
-    
+
     # Add keyboard shortcuts
     def on_ctrl_r(event=None):
         """Ctrl+R: Save and restart."""
@@ -829,7 +828,7 @@ def _create_config_window() -> "ctk.CTk":
     return root
 
 
-def _build_config_frame(root: "ctk.CTk") -> "ctk.CTkFrame":
+def _build_config_frame(root: ctk.CTk) -> ctk.CTkFrame:
     """Build main frame for config dialog."""
     bg_color = UI_BG_DARK if _dark_theme else UI_BG
     frame = ctk.CTkFrame(root, fg_color=bg_color, corner_radius=0)
@@ -838,9 +837,9 @@ def _build_config_frame(root: "ctk.CTk") -> "ctk.CTkFrame":
 
 
 def _build_config_fields(
-    frame: "ctk.CTkFrame",
+    frame: ctk.CTkFrame,
     cfg: dict
-) -> Tuple["ctk.StringVar", "ctk.StringVar", "ctk.CTkTextbox", "ctk.BooleanVar"]:
+) -> Tuple[ctk.StringVar, ctk.StringVar, ctk.CTkTextbox, ctk.BooleanVar]:
     """Build configuration input fields."""
     # Theme-aware colors
     field_bg = UI_FIELD_BG_DARK if _dark_theme else UI_FIELD_BG
@@ -946,12 +945,12 @@ def _build_config_fields(
 
 
 def _save_config_and_restart(
-    host_var: "ctk.StringVar",
-    port_var: "ctk.StringVar",
-    dc_textbox: "ctk.CTkTextbox",
-    verbose_var: "ctk.BooleanVar",
-    whitelist_textbox: "ctk.CTkTextbox",
-    root: "ctk.CTk"
+    host_var: ctk.StringVar,
+    port_var: ctk.StringVar,
+    dc_textbox: ctk.CTkTextbox,
+    verbose_var: ctk.BooleanVar,
+    whitelist_textbox: ctk.CTkTextbox,
+    root: ctk.CTk
 ) -> None:
     """Validate and save configuration, then offer restart."""
     host_val = host_var.get().strip()
@@ -1015,7 +1014,7 @@ def _save_config_and_restart(
 
 
 def _build_config_buttons(
-    frame: "ctk.CTkFrame",
+    frame: ctk.CTkFrame,
     on_save: Callable[[], None],
     on_cancel: Callable[[], None]
 ) -> None:
@@ -1059,7 +1058,7 @@ def _show_stats_dialog() -> None:
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-    
+
     # Apply theme colors
     bg_color = UI_BG_DARK if _dark_theme else UI_BG
     root.configure(fg_color=bg_color)
@@ -1109,12 +1108,12 @@ def _show_stats_dialog() -> None:
     if dc_stats:
         dc_frame = ctk.CTkFrame(frame, fg_color=UI_FIELD_BG, corner_radius=8)
         dc_frame.pack(fill="x", pady=(0, 12))
-        
+
         ctk.CTkLabel(dc_frame, text="Статистика по DC:",
                      font=(UI_FONT_FAMILY, 12, "bold"),
                      text_color=UI_TEXT_PRIMARY,
                      anchor="w").pack(anchor="w", padx=12, pady=(8, 4))
-        
+
         for dc_id, dc_data in sorted(dc_stats.items()):
             latency_str = f"{dc_data.get('latency_ms', 'N/A'):.0f}мс" if dc_data.get('latency_ms') else "N/A"
             dc_text = (f"  DC{dc_id}: {dc_data['connections']} подкл., "
@@ -1123,7 +1122,7 @@ def _show_stats_dialog() -> None:
                         font=(UI_FONT_FAMILY, 11),
                         text_color=UI_TEXT_SECONDARY,
                         anchor="w").pack(anchor="w", padx=12, pady=2)
-        
+
         best_dc = stats.get('best_dc')
         if best_dc:
             ctk.CTkLabel(dc_frame, text=f"  Лучший DC: {best_dc}",
@@ -1149,14 +1148,14 @@ def _show_stats_dialog() -> None:
 
     btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
     btn_frame.pack(fill="x", pady=(8, 0))
-    
+
     ctk.CTkButton(btn_frame, text="Экспорт JSON", width=120, height=32,
                   font=(UI_FONT_FAMILY, 12), corner_radius=8,
                   fg_color=UI_FIELD_BG, hover_color=UI_FIELD_BORDER,
                   text_color=UI_TEXT_PRIMARY, border_width=1,
                   border_color=UI_FIELD_BORDER,
                   command=on_export).pack(side="left", padx=(0, 10))
-    
+
     ctk.CTkButton(btn_frame, text="Закрыть", width=120, height=32,
                   font=(UI_FONT_FAMILY, 12), corner_radius=8,
                   fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
@@ -1184,7 +1183,7 @@ def _get_first_run_sections(host: str, port: int, tg_url: str) -> List[Tuple[str
     return [
         ("Как подключить Telegram Desktop:", True),
         ("  Автоматически:", True),
-        (f"  ПКМ по иконке в трее → «Открыть в Telegram»", False),
+        ("  ПКМ по иконке в трее → «Открыть в Telegram»", False),
         (f"  Или ссылка: {tg_url}", False),
         ("\n  Вручную:", True),
         ("  Настройки → Продвинутые → Тип подключения → Прокси", False),
@@ -1193,8 +1192,8 @@ def _get_first_run_sections(host: str, port: int, tg_url: str) -> List[Tuple[str
 
 
 def _on_first_run_ok(
-    root: "ctk.CTk",
-    auto_var: "ctk.BooleanVar",
+    root: ctk.CTk,
+    auto_var: ctk.BooleanVar,
 ) -> None:
     """Handle first-run dialog OK button."""
     FIRST_RUN_MARKER.touch()
@@ -1222,7 +1221,7 @@ def _show_first_run_dialog() -> None:
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-    
+
     # Apply theme colors
     bg_color = UI_BG_DARK if _dark_theme else UI_BG
     root.configure(fg_color=bg_color)
@@ -1242,7 +1241,7 @@ def _show_first_run_dialog() -> None:
     root.mainloop()
 
 
-def _build_first_run_title(frame: "ctk.CTkFrame", text_color: str) -> None:
+def _build_first_run_title(frame: ctk.CTkFrame, text_color: str) -> None:
     """Build title section of first-run dialog."""
     title_frame = ctk.CTkFrame(frame, fg_color="transparent")
     title_frame.pack(anchor="w", pady=(0, 16), fill="x")
@@ -1257,7 +1256,7 @@ def _build_first_run_title(frame: "ctk.CTkFrame", text_color: str) -> None:
 
 
 def _build_first_run_instructions(
-    frame: "ctk.CTkFrame",
+    frame: ctk.CTkFrame,
     host: str,
     port: int,
     tg_url: str,
@@ -1278,7 +1277,7 @@ def _build_first_run_instructions(
                  corner_radius=0).pack(fill="x", pady=(0, 12))
 
 
-def _build_first_run_checkbox(frame: "ctk.CTkFrame", text_color: str) -> "ctk.BooleanVar":
+def _build_first_run_checkbox(frame: ctk.CTkFrame, text_color: str) -> ctk.BooleanVar:
     """Build checkbox section of first-run dialog."""
     auto_var = ctk.BooleanVar(value=True)
     ctk.CTkCheckBox(frame, text="Открыть прокси в Telegram сейчас",
@@ -1291,9 +1290,9 @@ def _build_first_run_checkbox(frame: "ctk.CTkFrame", text_color: str) -> "ctk.Bo
 
 
 def _build_first_run_button(
-    frame: "ctk.CTkFrame",
-    root: "ctk.CTk",
-    auto_var: "ctk.BooleanVar"
+    frame: ctk.CTkFrame,
+    root: ctk.CTk,
+    auto_var: ctk.BooleanVar
 ) -> None:
     """Build OK button section of first-run dialog."""
     ctk.CTkButton(frame, text="Начать", width=180, height=42,
@@ -1410,7 +1409,7 @@ def _show_ipv6_dialog() -> None:
         "TG WS Proxy")
 
 
-def _build_menu() -> Optional["pystray.Menu"]:
+def _build_menu() -> Optional[pystray.Menu]:
     """Build tray icon menu."""
     if not HAS_TRAY or pystray is None:
         return None

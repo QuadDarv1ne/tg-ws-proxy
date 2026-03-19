@@ -19,7 +19,8 @@ import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Callable
+from typing import Callable, Dict, List, Optional, Tuple
+
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 try:
@@ -30,20 +31,16 @@ except ImportError:
 
 
 from .constants import (
-    MTPROTO_MAGIC_INTERMEDIATE,
-    MTPROTO_AES_KEY_SIZE,
-    MTPROTO_AES_IV_SIZE,
-    MTPROTO_BLOCK_SIZE,
-    MTPROTO_SECRET_LENGTH,
-    MTPROTO_DEFAULT_PORT,
-    MTPROTO_DEFAULT_HOST,
-    TG_RANGES,
     DC_IP_MAP,
     DEFAULT_DC_ID,
+    MTPROTO_AES_IV_SIZE,
+    MTPROTO_AES_KEY_SIZE,
+    MTPROTO_BLOCK_SIZE,
+    MTPROTO_DEFAULT_HOST,
+    MTPROTO_DEFAULT_PORT,
+    MTPROTO_SECRET_LENGTH,
 )
-
-from .tg_ws_proxy import _close_writer_safe, _cancel_tasks
-
+from .tg_ws_proxy import _cancel_tasks, _close_writer_safe
 
 log = logging.getLogger('tg-mtproto-proxy')
 
@@ -125,7 +122,7 @@ class RateLimiter:
     
     Limits connections and traffic per IP address.
     """
-    
+
     def __init__(
         self,
         max_connections_per_ip: int = 10,
@@ -137,20 +134,20 @@ class RateLimiter:
         self.max_connections_per_ip = max_connections_per_ip
         self.max_bytes_per_second = max_bytes_per_second
         self.window_seconds = window_seconds
-        
+
         # IP lists
         self.ip_whitelist = set(ip_whitelist) if ip_whitelist else set()
         self.ip_blacklist = set(ip_blacklist) if ip_blacklist else set()
-        
+
         # Track connections per IP
         self.connections_per_ip: DefaultDict[str, int] = defaultdict(int)
-        
+
         # Track bytes per IP with timestamps
         self.bytes_per_ip: DefaultDict[str, List[Tuple[float, int]]] = defaultdict(list)
-        
+
         # Lock for thread safety
         self._lock = threading.Lock()
-    
+
     def is_ip_allowed(self, ip: str) -> bool:
         """Check if IP is allowed (not blacklisted, or whitelisted)."""
         with self._lock:
@@ -179,7 +176,7 @@ class RateLimiter:
         """Remove IP from whitelist."""
         with self._lock:
             self.ip_whitelist.discard(ip)
-    
+
     def check_connection_limit(self, ip: str) -> bool:
         """
         Check if IP has exceeded connection limit.
@@ -191,17 +188,17 @@ class RateLimiter:
             if ip in self.ip_whitelist:
                 return True
             return self.connections_per_ip[ip] < self.max_connections_per_ip
-    
+
     def increment_connections(self, ip: str):
         """Increment connection count for IP."""
         with self._lock:
             self.connections_per_ip[ip] += 1
-    
+
     def decrement_connections(self, ip: str):
         """Decrement connection count for IP."""
         with self._lock:
             self.connections_per_ip[ip] = max(0, self.connections_per_ip[ip] - 1)
-    
+
     def check_rate_limit(self, ip: str, bytes_to_send: int) -> bool:
         """
         Check if IP has exceeded rate limit.
@@ -209,33 +206,33 @@ class RateLimiter:
         """
         now = time.time()
         window_start = now - self.window_seconds
-        
+
         with self._lock:
             # Clean old entries
             self.bytes_per_ip[ip] = [
                 (t, b) for t, b in self.bytes_per_ip[ip] if t > window_start
             ]
-            
+
             # Calculate current rate
             total_bytes = sum(b for _, b in self.bytes_per_ip[ip])
             current_rate = total_bytes / self.window_seconds
-            
+
             if current_rate + bytes_to_send > self.max_bytes_per_second:
                 return False
-            
+
             return True
-    
+
     def record_bytes(self, ip: str, bytes_count: int):
         """Record bytes transferred for IP."""
         now = time.time()
         with self._lock:
             self.bytes_per_ip[ip].append((now, bytes_count))
-    
+
     def cleanup(self):
         """Clean up old entries (call periodically)."""
         now = time.time()
         window_start = now - self.window_seconds
-        
+
         with self._lock:
             # Clean bytes records
             for ip in list(self.bytes_per_ip.keys()):
@@ -342,28 +339,28 @@ class MTProtoPacket:
     - Sequence number (4 bytes, little-endian)
     - Data (variable length)
     """
-    
+
     def __init__(self, length: int = 0, seq: int = 0, data: bytes = b''):
         self.length = length
         self.seq = seq
         self.data = data
-    
+
     def serialize(self) -> bytes:
         """Serialize packet to bytes."""
         header = struct.pack('<II', self.length, self.seq)
         return header + self.data
-    
+
     @classmethod
-    def deserialize(cls, data: bytes) -> Optional['MTProtoPacket']:
+    def deserialize(cls, data: bytes) -> Optional[MTProtoPacket]:
         """Deserialize packet from bytes."""
         if len(data) < 8:
             return None
-        
+
         length, seq = struct.unpack('<II', data[:8])
-        
+
         if len(data) < 8 + length:
             return None
-        
+
         packet_data = data[8:8 + length]
         return cls(length=length, seq=seq, data=packet_data)
 
@@ -398,7 +395,7 @@ class MTProtoProxy:
         # Validate dc_id
         if not isinstance(dc_id, int) or dc_id < 1 or dc_id > 5:
             raise ValueError(f"dc_id must be an integer between 1 and 5, got {dc_id}")
-        
+
         self.secrets = secrets  # Support multiple secrets
         self.host = host
         self.port = port
@@ -450,7 +447,7 @@ class MTProtoProxy:
 
         # Rotation history
         self.rotation_history: List[dict] = []
-    
+
     async def start(self):
         """Start the MTProto proxy server."""
         # Validate all secrets
@@ -483,22 +480,22 @@ class MTProtoProxy:
 
         async with self._server:
             await self._server.serve_forever()
-    
+
     def _start_auto_rotation(self):
         """Start automatic secret rotation in background thread."""
         def rotate_loop():
             next_rotation = datetime.now() + timedelta(days=self.rotate_interval_days)
             log.info("Next secret rotation: %s", next_rotation.strftime("%Y-%m-%d %H:%M"))
-            
+
             while not self._stop_rotate.wait(timeout=60):  # Check every minute
                 if datetime.now() >= next_rotation:
                     self.rotate_secrets()
                     next_rotation = datetime.now() + timedelta(days=self.rotate_interval_days)
                     log.info("Next secret rotation: %s", next_rotation.strftime("%Y-%m-%d %H:%M"))
-        
+
         self._rotate_thread = threading.Thread(target=rotate_loop, daemon=True)
         self._rotate_thread.start()
-    
+
     def rotate_secrets(self, new_secrets: Optional[List[str]] = None):
         """
         Rotate secrets (manual or automatic).
@@ -507,17 +504,17 @@ class MTProtoProxy:
             new_secrets: New secrets to use. If None, generates new ones.
         """
         old_secrets = list(self.secrets)
-        
+
         if new_secrets is None:
             # Generate new secrets (keep old ones for grace period)
             new_secrets = [generate_secret() for _ in self.secrets]
-        
+
         # Add new secrets to the list (keep old for 24h grace period)
         self.secrets = new_secrets + old_secrets
-        
+
         # Update transports
         self.transports = {secret: MTProtoTransport(secret) for secret in self.secrets}
-        
+
         # Update stats for new secrets
         for secret in new_secrets:
             self.stats_per_secret[secret] = {
@@ -526,25 +523,25 @@ class MTProtoProxy:
                 "bytes_received": 0,
                 "bytes_sent": 0,
             }
-        
+
         # Log rotation
         log.info("Secrets rotated: %d old + %d new = %d total",
                  len(old_secrets), len(new_secrets), len(self.secrets))
-        
+
         # Record rotation history
         self.rotation_history.append({
             "timestamp": datetime.now().isoformat(),
             "old_secrets": old_secrets,
             "new_secrets": new_secrets,
         })
-        
+
         # Callback if provided
         if self.on_secret_rotate:
             try:
                 self.on_secret_rotate(self.secrets)
             except Exception as e:
                 log.error("Error in on_secret_rotate callback: %s", e)
-        
+
         # Schedule cleanup of old secrets after 24h grace period
         def cleanup_old():
             time.sleep(86400)  # 24 hours
@@ -555,15 +552,15 @@ class MTProtoProxy:
                     self.transports.pop(old, None)
                     self.stats_per_secret.pop(old, None)
             log.info("Old secrets cleaned up: %d remaining", len(self.secrets))
-        
+
         threading.Thread(target=cleanup_old, daemon=True).start()
-    
+
     def stop_auto_rotation(self):
         """Stop automatic secret rotation."""
         if self._rotate_thread:
             self._stop_rotate.set()
             self._rotate_thread = None
-    
+
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """Handle incoming MTProto client connection."""
         peer = writer.get_extra_info('peername')
@@ -584,7 +581,7 @@ class MTProtoProxy:
                 _close_writer_safe(writer)
                 return
             self.rate_limiter.increment_connections(ip)
-        
+
         self.connections_total += 1
         self.connections_active += 1
 
@@ -599,7 +596,7 @@ class MTProtoProxy:
                 return
 
             self.bytes_received += len(init_data)
-            
+
             # Record bytes for rate limiting
             if self.rate_limiter:
                 self.rate_limiter.record_bytes(ip, len(init_data))
@@ -871,6 +868,7 @@ def run_mtproto_proxy(
 def main() -> None:
     """CLI entry point."""
     import argparse
+
     from .mtproto_config import MTProtoConfig, load_config, save_config
 
     parser = argparse.ArgumentParser(
@@ -898,7 +896,7 @@ def main() -> None:
         '--secret', '-s',
         type=str,
         default=None,
-        help=f'Single secret key (deprecated, use --secrets).'
+        help='Single secret key (deprecated, use --secrets).'
     )
     parser.add_argument(
         '--host',
@@ -990,7 +988,7 @@ def main() -> None:
     if args.config:
         config = load_config(args.config)
         log.info("Loaded config from: %s", args.config)
-        
+
         # CLI args override config file
         if not args.secrets and not args.secret:
             args.secrets = ','.join(config.secrets) if config.secrets else None

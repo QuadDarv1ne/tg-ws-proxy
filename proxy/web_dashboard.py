@@ -8,16 +8,15 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import logging
 import os
 import threading
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Callable, Any
+from typing import Callable, Optional
 
 try:
-    from flask import Flask, jsonify, render_template_string, request, Response
+    from flask import Flask, Response, jsonify, render_template_string, request
     from flask_cors import CORS
     HAS_FLASK = True
 except ImportError:
@@ -1003,17 +1002,17 @@ class WebDashboard:
             format_type = request.args.get('format', 'json')
             stats = self.get_stats()
             stats['exported_at'] = datetime.now().isoformat()
-            
+
             if format_type == 'csv':
                 output = io.StringIO()
                 writer = csv.writer(output)
                 writer.writerow(['Metric', 'Value'])
-                
+
                 # Basic stats
                 for key, value in stats.items():
                     if isinstance(value, (int, float, str)):
                         writer.writerow([key, value])
-                
+
                 output.seek(0)
                 return Response(
                     output.getvalue(),
@@ -1028,7 +1027,7 @@ class WebDashboard:
             """Get current configuration."""
             if self.update_config is None:
                 return jsonify({'error': 'Configuration updates not enabled'}), 403
-            
+
             stats = self.get_stats()
             config = {
                 'host': stats.get('host', '127.0.0.1'),
@@ -1064,14 +1063,14 @@ class WebDashboard:
             try:
                 import qrcode
                 from PIL import Image
-                
+
                 stats = self.get_stats()
                 host = stats.get('host', '127.0.0.1')
                 port = stats.get('port', 1080)
-                
+
                 # Generate tg:// proxy URL
                 proxy_url = f"tg://socks?server={host}&port={port}"
-                
+
                 # Generate QR code
                 qr = qrcode.QRCode(
                     version=1,
@@ -1081,18 +1080,18 @@ class WebDashboard:
                 )
                 qr.add_data(proxy_url)
                 qr.make(fit=True)
-                
+
                 img = qr.make_image(fill_color="black", back_color="white")
-                
+
                 # Save to bytes
                 img_bytes = io.BytesIO()
                 img.save(img_bytes, format='PNG')
                 img_bytes.seek(0)
-                
+
                 return Response(
                     img_bytes.getvalue(),
                     mimetype='image/png',
-                    headers={'Content-Disposition': f'attachment; filename=tg-ws-proxy-qr.png'}
+                    headers={'Content-Disposition': 'attachment; filename=tg-ws-proxy-qr.png'}
                 )
             except ImportError:
                 return jsonify({'error': 'qrcode library not installed'}), 500
@@ -1104,16 +1103,16 @@ class WebDashboard:
         def api_health():
             """Health check endpoint with detailed diagnostics."""
             stats = self.get_stats()
-            
+
             # Determine overall health status
             ws_errors = stats.get('ws_errors', 0)
             pool_misses = stats.get('pool_misses', 0)
             pool_hits = stats.get('pool_hits', 0)
-            
+
             # Calculate pool efficiency
             pool_total = pool_hits + pool_misses
             pool_efficiency = (pool_hits / pool_total * 100) if pool_total > 0 else 100
-            
+
             # Determine status
             if ws_errors < 5 and pool_efficiency >= 80:
                 status = 'ok'
@@ -1121,7 +1120,7 @@ class WebDashboard:
                 status = 'degraded'
             else:
                 status = 'unhealthy'
-            
+
             ws_health = {
                 'status': 'ok' if ws_errors < 10 else 'degraded',
                 'ws_errors': ws_errors,
@@ -1129,7 +1128,7 @@ class WebDashboard:
                 'pool_misses': pool_misses,
                 'pool_efficiency_percent': round(pool_efficiency, 1),
             }
-            
+
             # DC health summary
             dc_stats = stats.get('dc_stats', {})
             dc_health = []
@@ -1157,7 +1156,7 @@ class WebDashboard:
             """Get detailed DC statistics."""
             stats = self.get_stats()
             dc_stats = stats.get('dc_stats', {})
-            
+
             # Format for frontend
             formatted = []
             for dc_id, dc_data in dc_stats.items():
@@ -1168,7 +1167,7 @@ class WebDashboard:
                     'latency_ms': dc_data.get('latency_ms'),
                     'avg_latency_ms': dc_data.get('avg_latency_ms'),
                 })
-            
+
             return jsonify({'dc_stats': formatted})
 
     def start(self):

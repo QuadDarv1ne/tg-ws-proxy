@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import struct
 import socket as _socket
+import struct
 
 # =============================================================================
 # Network defaults
