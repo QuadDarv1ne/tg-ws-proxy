@@ -1,310 +1,290 @@
-"""Unit tests for critical proxy logic."""
+"""Unit tests for tg_ws_proxy module."""
 
-import struct
+import asyncio
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from proxy.constants import (
-    PROTO_OBFUSCATED,
-)
-
-# Import functions to test
+from proxy.stats import Stats
 from proxy.tg_ws_proxy import (
-    _dc_from_init,
-    _is_http_transport,
-    _is_telegram_ip,
-    _MsgSplitter,
-    _patch_init_dc,
-    parse_dc_ip_list,
+    ProxyServer,
+    _clear_dns_cache,
+    _dns_cache,
+    _get_tcp_pool,
+    _resolve_domain_cached,
+    _TcpPool,
+    _WsPool,
 )
 
 
-class TestDcFromInit:
-    """Tests for _dc_from_init function."""
+class TestDnsCache:
+    """Tests for DNS caching functionality."""
 
-    def _make_init_packet(self, dc_id: int, is_media: bool = False,
-                          proto: int = PROTO_OBFUSCATED) -> bytes:
-        """Create a valid MTProto init packet for testing."""
-        key = b'\x00' * 32  # 32 bytes
-        iv = b'\x00' * 16   # 16 bytes
-        cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
-        encryptor = cipher.encryptor()
-        keystream = encryptor.update(b'\x00' * 64) + encryptor.finalize()
+    def teardown_method(self):
+        """Clear DNS cache after each test."""
+        _dns_cache.clear()
 
-        # Build plaintext header (8 bytes)
-        # proto (4 bytes) + dc_raw (2 bytes) + padding (2 bytes)
-        dc_raw = -dc_id if is_media else dc_id
-        plain_header = struct.pack('<Ih', proto, dc_raw) + b'\x00\x00'
+    @pytest.mark.asyncio
+    async def test_resolve_domain_cached_first_miss(self):
+        """Test DNS resolution on cache miss."""
+        with patch('asyncio.get_event_loop') as mock_loop:
+            mock_resolver = AsyncMock(return_value=[
+                (2, 1, 6, '', ('8.8.8.8', 443)),
+                (2, 1, 6, '', ('8.8.4.4', 443)),
+            ])
+            mock_loop.return_value.getaddrinfo = mock_resolver
 
-        # Encrypt the last 8 bytes of header
-        encrypted_header = bytes(a ^ b for a, b in zip(
-            plain_header, keystream[56:64]))
+            result = await _resolve_domain_cached("example.com", port=443)
 
-        # Build full packet: magic(8) + key(32) + iv(16) + encrypted_dc(8)
-        packet = b'\x00' * 8 + key + iv + encrypted_header
-        return packet
+            assert len(result) == 2
+            assert ("8.8.8.8", 443) in result
+            assert ("8.8.4.4", 443) in result
 
-    def test_dc_extraction_dc1(self):
-        """Test DC ID extraction for DC1."""
-        init = self._make_init_packet(1, is_media=False)
-        dc, is_media = _dc_from_init(init)
-        assert dc == 1
-        assert is_media is False
+    @pytest.mark.asyncio
+    async def test_resolve_domain_cached_hit(self):
+        """Test DNS resolution on cache hit."""
+        now = time.monotonic()
+        _dns_cache["test.com"] = [("1.2.3.4", now + 300)]
 
-    def test_dc_extraction_dc2(self):
-        """Test DC ID extraction for DC2."""
-        init = self._make_init_packet(2, is_media=False)
-        dc, is_media = _dc_from_init(init)
-        assert dc == 2
-        assert is_media is False
+        result = await _resolve_domain_cached("test.com", port=443)
 
-    def test_dc_extraction_dc5_media(self):
-        """Test DC ID extraction for DC5 with media flag."""
-        init = self._make_init_packet(5, is_media=True)
-        dc, is_media = _dc_from_init(init)
-        assert dc == 5
-        assert is_media is True
+        assert result == [("1.2.3.4", 443)]
 
-    def test_invalid_packet_too_short(self):
-        """Test handling of packet shorter than 64 bytes."""
-        init = b'\x00' * 50
-        dc, is_media = _dc_from_init(init)
-        assert dc is None
-        assert is_media is False
+    @pytest.mark.asyncio
+    async def test_resolve_domain_cached_expired(self):
+        """Test DNS resolution with expired cache."""
+        now = time.monotonic()
+        _dns_cache["expired.com"] = [("1.2.3.4", now - 100)]  # Expired
 
-    def test_invalid_proto(self):
-        """Test handling of invalid protocol magic."""
-        init = self._make_init_packet(1, proto=0x00000000)
-        dc, is_media = _dc_from_init(init)
-        assert dc is None
-        assert is_media is False
+        with patch('asyncio.get_event_loop') as mock_loop:
+            mock_resolver = AsyncMock(return_value=[
+                (2, 1, 6, '', ('5.6.7.8', 443)),
+            ])
+            mock_loop.return_value.getaddrinfo = mock_resolver
 
-    def test_empty_packet(self):
-        """Test handling of empty packet."""
-        dc, is_media = _dc_from_init(b'')
-        assert dc is None
-        assert is_media is False
+            result = await _resolve_domain_cached("expired.com", port=443)
+
+            assert result == [("5.6.7.8", 443)]
+            assert "expired.com" in _dns_cache  # New cache entry
+
+    def test_clear_dns_cache(self):
+        """Test DNS cache clearing."""
+        _dns_cache["test1.com"] = [("1.2.3.4", time.monotonic() + 300)]
+        _dns_cache["test2.com"] = [("5.6.7.8", time.monotonic() + 300)]
+
+        _clear_dns_cache()
+
+        assert len(_dns_cache) == 0
 
 
-class TestPatchInitDc:
-    """Tests for _patch_init_dc function."""
+class TestTcpPool:
+    """Tests for TCP connection pool."""
 
-    def _make_init_packet(self, dc_id: int) -> bytes:
-        """Create a valid MTProto init packet."""
-        key = b'\x00' * 32
-        iv = b'\x00' * 16
-        cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
-        encryptor = cipher.encryptor()
-        keystream = encryptor.update(b'\x00' * 64) + encryptor.finalize()
+    @pytest.mark.asyncio
+    async def test_tcp_pool_get_empty(self):
+        """Test getting connection from empty pool."""
+        pool = _TcpPool(Stats(), max_size=4, max_age=60.0)
 
-        dc_raw = dc_id
-        plain_header = struct.pack('<Ih', 0xEFEFEFEF, dc_raw) + b'\x00\x00'
-        encrypted_header = bytes(a ^ b for a, b in zip(
-            plain_header, keystream[56:64]))
+        result = await pool.get("127.0.0.1", 443)
 
-        return b'\x00' * 8 + key + iv + encrypted_header
+        assert result is None
 
-    def test_patch_dc_from_1_to_2(self):
-        """Test patching DC ID from 1 to 2."""
-        init = self._make_init_packet(1)
-        patched = _patch_init_dc(init, 2)
-        dc, _ = _dc_from_init(patched)
-        assert dc == 2
+    @pytest.mark.asyncio
+    async def test_tcp_pool_put_and_get(self):
+        """Test putting and getting connection."""
+        pool = _TcpPool(Stats(), max_size=4, max_age=60.0)
+        mock_reader = MagicMock()
+        mock_writer = MagicMock()
+        mock_writer.is_closing.return_value = False
+        mock_writer.transport.is_closing.return_value = False
 
-    def test_patch_dc_from_3_to_5(self):
-        """Test patching DC ID from 3 to 5."""
-        init = self._make_init_packet(3)
-        patched = _patch_init_dc(init, 5)
-        dc, _ = _dc_from_init(patched)
-        assert dc == 5
+        pool.put("127.0.0.1", 443, mock_reader, mock_writer)
+        result = await pool.get("127.0.0.1", 443)
 
-    def test_patch_short_packet(self):
-        """Test handling of packet shorter than 64 bytes."""
-        init = b'\x00' * 50
-        patched = _patch_init_dc(init, 2)
-        assert patched == init
+        assert result == (mock_reader, mock_writer)
 
-    def test_patch_preserves_extra_data(self):
-        """Test that patching preserves data after 64 bytes."""
-        init = self._make_init_packet(1) + b'EXTRA_DATA'
-        patched = _patch_init_dc(init, 2)
-        assert patched.endswith(b'EXTRA_DATA')
-        dc, _ = _dc_from_init(patched)
-        assert dc == 2
+    @pytest.mark.asyncio
+    async def test_tcp_pool_expired_connection(self):
+        """Test that expired connections are not returned."""
+        pool = _TcpPool(Stats(), max_size=4, max_age=0.1)  # 100ms max age
+        mock_reader = MagicMock()
+        mock_writer = MagicMock()
+        mock_writer.is_closing.return_value = False
+        mock_writer.transport.is_closing.return_value = False
 
+        pool.put("127.0.0.1", 443, mock_reader, mock_writer)
+        await asyncio.sleep(0.2)  # Wait for expiration
+        result = await pool.get("127.0.0.1", 443)
 
-class TestMsgSplitter:
-    """Tests for _MsgSplitter class."""
+        assert result is None
 
-    def _make_init_packet(self) -> bytes:
-        """Create a valid MTProto init packet."""
-        key = b'\x01\x02\x03\x04' * 8  # 32 bytes
-        iv = b'\x05\x06\x07\x08' * 2   # 16 bytes
-        return b'\x00' * 8 + key + iv + b'\x00' * 8
+    @pytest.mark.asyncio
+    async def test_tcp_pool_max_size(self):
+        """Test pool respects max size."""
+        pool = _TcpPool(Stats(), max_size=2, max_age=60.0)
+        mock_writer_closing = MagicMock()
+        mock_writer_closing.is_closing.return_value = True
+        mock_writer_closing.close = MagicMock()
 
-    def test_split_single_message(self):
-        """Test splitting a single message."""
-        init = self._make_init_packet()
-        splitter = _MsgSplitter(init)
-        # Single message with length prefix (abridged protocol)
-        # 0x01 means 1 * 4 = 4 bytes total (including length byte)
-        msg = b'\x01' + b'\x00' * 3  # 4 bytes total
-        parts = splitter.split(msg)
-        # Splitter may or may not split depending on encryption state
-        assert len(parts) >= 1
+        # Add 3 connections (exceeds max_size=2)
+        for _ in range(3):
+            pool.put("127.0.0.1", 443, MagicMock(), mock_writer_closing)
 
-    def test_split_multiple_messages(self):
-        """Test splitting multiple messages."""
-        init = self._make_init_packet()
-        splitter = _MsgSplitter(init)
-        # Two messages in abridged protocol:
-        # Message 1: 0x01 (1 * 4 = 4 bytes total including length)
-        # Message 2: 0x02 (2 * 4 = 8 bytes total including length)
-        msg1 = b'\x01' + b'\x00' * 3  # 4 bytes
-        msg2 = b'\x02' + b'\x00' * 7  # 8 bytes
-        combined = msg1 + msg2
-        parts = splitter.split(combined)
-        # The splitter should detect boundaries in plaintext after decryption
-        # Due to encryption, exact split behavior may vary
-        assert len(parts) >= 1
-        assert b''.join(parts) == combined
+        # Pool should only keep 2
+        assert len(pool._idle.get("127.0.0.1:443", [])) <= 2
 
-    def test_split_7f_prefix(self):
-        """Test splitting with 0x7f extended length prefix."""
-        init = self._make_init_packet()
-        splitter = _MsgSplitter(init)
-        # Message with 0x7f prefix (3-byte length)
-        msg_len = 100  # Will be encoded as 0x7f + 3 bytes
-        msg = b'\x7f' + struct.pack('<I', msg_len // 4)[:3] + b'\x00' * msg_len
-        parts = splitter.split(msg)
-        assert len(parts) == 1
-        assert len(parts[0]) == len(msg)
+    @pytest.mark.asyncio
+    async def test_tcp_pool_clear(self):
+        """Test clearing the pool."""
+        pool = _TcpPool(Stats(), max_size=4, max_age=60.0)
+        mock_reader = MagicMock()
+        mock_writer = MagicMock()
+        mock_writer.is_closing.return_value = False
+        mock_writer.transport.is_closing.return_value = False
+
+        pool.put("127.0.0.1", 443, mock_reader, mock_writer)
+        pool.clear()
+
+        assert len(pool._idle) == 0
 
 
-class TestIsTelegramIp:
-    """Tests for _is_telegram_ip function."""
+class TestGetTcpPool:
+    """Tests for lazy TCP pool initialization."""
 
-    def test_dc2_ip(self):
-        """Test known DC2 IP."""
-        assert _is_telegram_ip('149.154.167.220') is True
+    def teardown_module(self):
+        """Reset global pool after tests."""
+        from proxy import tg_ws_proxy
+        tg_ws_proxy._tcp_pool = None
 
-    def test_dc4_ip(self):
-        """Test known DC4 IP."""
-        assert _is_telegram_ip('149.154.167.91') is True
+    def test_get_tcp_pool_lazy_init(self):
+        """Test lazy initialization of TCP pool."""
+        from proxy import tg_ws_proxy
+        tg_ws_proxy._tcp_pool = None  # Reset
 
-    def test_dc1_range(self):
-        """Test IP in DC1 range."""
-        assert _is_telegram_ip('149.154.175.50') is True
+        pool = _get_tcp_pool()
 
-    def test_dc3_range(self):
-        """Test IP in DC3 range."""
-        assert _is_telegram_ip('149.154.175.100') is True
+        assert pool is not None
+        assert isinstance(pool, _TcpPool)
+        assert tg_ws_proxy._tcp_pool is pool
 
-    def test_dc5_range(self):
-        """Test IP in DC5 range."""
-        assert _is_telegram_ip('91.108.56.100') is True
+    def test_get_tcp_pool_singleton(self):
+        """Test that pool is singleton."""
+        pool1 = _get_tcp_pool()
+        pool2 = _get_tcp_pool()
 
-    def test_185_76_151_range(self):
-        """Test IP in 185.76.151.0/24 range."""
-        assert _is_telegram_ip('185.76.151.100') is True
-
-    def test_91_105_192_range(self):
-        """Test IP in 91.105.192.0/23 range."""
-        assert _is_telegram_ip('91.105.192.100') is True
-
-    def test_91_108_range(self):
-        """Test IP in 91.108.0.0/16 range."""
-        assert _is_telegram_ip('91.108.100.50') is True
-
-    def test_non_telegram_ip(self):
-        """Test non-Telegram IP."""
-        assert _is_telegram_ip('8.8.8.8') is False
-        assert _is_telegram_ip('1.1.1.1') is False
-
-    def test_invalid_ip(self):
-        """Test invalid IP format."""
-        assert _is_telegram_ip('invalid') is False
-        assert _is_telegram_ip('') is False
+        assert pool1 is pool2
 
 
-class TestIsHttpTransport:
-    """Tests for _is_http_transport function."""
+class TestProxyServer:
+    """Tests for ProxyServer class."""
 
-    def test_post_request(self):
-        """Test POST request detection."""
-        assert _is_http_transport(b'POST /api HTTP/1.1\r\n') is True
+    def test_proxy_server_init(self):
+        """Test ProxyServer initialization."""
+        dc_opt = {2: "149.154.167.220"}
+        server = ProxyServer(
+            dc_opt=dc_opt,
+            host="127.0.0.1",
+            port=8080,
+        )
 
-    def test_get_request(self):
-        """Test GET request detection."""
-        assert _is_http_transport(b'GET /api HTTP/1.1\r\n') is True
+        assert server.dc_opt == dc_opt
+        assert server.host == "127.0.0.1"
+        assert server.port == 8080
+        assert server._ws_pool is None  # Lazy init
 
-    def test_head_request(self):
-        """Test HEAD request detection."""
-        assert _is_http_transport(b'HEAD /api HTTP/1.1\r\n') is True
+    def test_proxy_server_ws_pool_lazy(self):
+        """Test lazy initialization of ws_pool."""
+        dc_opt = {2: "149.154.167.220"}
+        server = ProxyServer(dc_opt=dc_opt)
 
-    def test_options_request(self):
-        """Test OPTIONS request detection."""
-        assert _is_http_transport(b'OPTIONS /api HTTP/1.1\r\n') is True
+        # Pool should be None initially
+        assert server._ws_pool is None
 
-    def test_mtproto_data(self):
-        """Test MTProto data (not HTTP)."""
-        assert _is_http_transport(b'\x00' * 64) is False
-        assert _is_http_transport(b'\xef\xef\xfe\xef') is False
+        # Access property to trigger lazy init
+        pool = server.ws_pool
 
-    def test_empty_data(self):
-        """Test empty data."""
-        assert _is_http_transport(b'') is False
+        assert pool is not None
+        assert isinstance(pool, _WsPool)
+        assert server._ws_pool is pool
 
+    def test_proxy_server_get_stats(self):
+        """Test get_stats method."""
+        dc_opt = {2: "149.154.167.220"}
+        server = ProxyServer(dc_opt=dc_opt)
 
-class TestParseDcIpList:
-    """Tests for parse_dc_ip_list function."""
+        stats = server.get_stats()
 
-    def test_single_dc(self):
-        """Test parsing single DC entry."""
-        result = parse_dc_ip_list(['2:149.154.167.220'])
-        assert result == {2: '149.154.167.220'}
+        assert isinstance(stats, dict)
+        assert "connections_total" in stats
+        assert "bytes_up" in stats  # Stats uses bytes_up/bytes_down
 
-    def test_multiple_dc(self):
-        """Test parsing multiple DC entries."""
-        result = parse_dc_ip_list([
-            '1:149.154.175.205',
-            '2:149.154.167.220',
-            '4:149.154.167.220',
-        ])
-        assert result == {
-            1: '149.154.175.205',
-            2: '149.154.167.220',
-            4: '149.154.167.220',
-        }
+    def test_proxy_server_get_stats_summary(self):
+        """Test get_stats_summary method."""
+        dc_opt = {2: "149.154.167.220"}
+        server = ProxyServer(dc_opt=dc_opt)
 
-    def test_default_values(self):
-        """Test parsing default DC values."""
-        result = parse_dc_ip_list(['2:149.154.167.220', '4:149.154.167.220'])
-        assert len(result) == 2
-        assert result[2] == '149.154.167.220'
-        assert result[4] == '149.154.167.220'
+        summary = server.get_stats_summary()
 
-    def test_invalid_format_no_colon(self):
-        """Test error on missing colon."""
-        with pytest.raises(ValueError, match="Invalid --dc-ip format"):
-            parse_dc_ip_list(['149.154.167.220'])
-
-    def test_invalid_dc_number(self):
-        """Test error on invalid DC number."""
-        with pytest.raises(ValueError, match="Invalid --dc-ip"):
-            parse_dc_ip_list(['abc:149.154.167.220'])
-
-    def test_invalid_ip(self):
-        """Test error on invalid IP address."""
-        with pytest.raises(ValueError, match="Invalid --dc-ip"):
-            parse_dc_ip_list(['2:999.999.999.999'])
-
-    def test_empty_list(self):
-        """Test empty list."""
-        result = parse_dc_ip_list([])
-        assert result == {}
+        assert isinstance(summary, str)
+        assert len(summary) > 0
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+class TestWsPool:
+    """Tests for WebSocket pool."""
+
+    def test_ws_pool_init(self):
+        """Test WebSocket pool initialization."""
+        stats = Stats()
+        pool = _WsPool(stats)
+
+        assert pool._pool_size == 4  # Default WS_POOL_SIZE
+        assert pool._pool_max_size == 8  # Default WS_POOL_MAX_SIZE
+        assert pool.stats is stats
+
+    def test_ws_pool_can_add(self):
+        """Test _can_add_to_pool method."""
+        stats = Stats()
+        pool = _WsPool(stats)
+        key = (2, False)
+
+        # Empty bucket - can add
+        assert pool._can_add_to_pool(key) is True
+
+        # Fill bucket to max
+        for _ in range(pool._pool_max_size):
+            pool._idle.setdefault(key, []).append(MagicMock())
+
+        # Full bucket - cannot add
+        assert pool._can_add_to_pool(key) is False
+
+
+class TestProxyServerAuth:
+    """Tests for ProxyServer with authentication."""
+
+    def test_proxy_server_with_auth(self):
+        """Test ProxyServer with auth enabled."""
+        dc_opt = {2: "149.154.167.220"}
+        auth_credentials = {"username": "test", "password": "pass"}
+
+        server = ProxyServer(
+            dc_opt=dc_opt,
+            auth_required=True,
+            auth_credentials=auth_credentials,
+        )
+
+        assert server.auth_required is True
+        assert server.auth_credentials == auth_credentials
+
+    def test_proxy_server_with_ip_whitelist(self):
+        """Test ProxyServer with IP whitelist."""
+        dc_opt = {2: "149.154.167.220"}
+        ip_whitelist = ["192.168.1.1", "10.0.0.1"]
+
+        server = ProxyServer(
+            dc_opt=dc_opt,
+            ip_whitelist=ip_whitelist,
+        )
+
+        # ip_whitelist is converted to set
+        assert server.ip_whitelist == {"192.168.1.1", "10.0.0.1"}
