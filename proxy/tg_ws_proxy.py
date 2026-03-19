@@ -43,12 +43,6 @@ from .constants import (
 
 log = logging.getLogger('tg-ws-proxy')
 
-# IP -> (dc_id, is_media)
-_IP_TO_DC: Dict[str, Tuple[int, bool]] = _IP_TO_DC
-
-# Local aliases for frequently used constants
-_TG_RANGES = TG_RANGES
-
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -378,7 +372,7 @@ class RawWebSocket:
 def _is_telegram_ip(ip: str) -> bool:
     try:
         n = struct.unpack('!I', _socket.inet_aton(ip))[0]
-        return any(lo <= n <= hi for lo, hi in _TG_RANGES)
+        return any(lo <= n <= hi for lo, hi in TG_RANGES)
     except OSError:
         return False
 
