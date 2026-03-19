@@ -153,27 +153,28 @@ class RateLimiter:
     
     def is_ip_allowed(self, ip: str) -> bool:
         """Check if IP is allowed (not blacklisted, or whitelisted)."""
-        if ip in self.ip_whitelist:
-            return True
-        if ip in self.ip_blacklist:
-            return False
+        with self._lock:
+            if ip in self.ip_whitelist:
+                return True
+            if ip in self.ip_blacklist:
+                return False
         return True
-    
+
     def add_to_blacklist(self, ip: str):
         """Add IP to blacklist."""
         with self._lock:
             self.ip_blacklist.add(ip)
-    
+
     def add_to_whitelist(self, ip: str):
         """Add IP to whitelist."""
         with self._lock:
             self.ip_whitelist.add(ip)
-    
+
     def remove_from_blacklist(self, ip: str):
         """Remove IP from blacklist."""
         with self._lock:
             self.ip_blacklist.discard(ip)
-    
+
     def remove_from_whitelist(self, ip: str):
         """Remove IP from whitelist."""
         with self._lock:
