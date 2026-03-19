@@ -107,16 +107,16 @@ class ProxyServer:
         self._server_instance: Optional[asyncio.Server] = None
         self._server_stop_event: Optional[asyncio.Event] = None
     
-    def get_stats(self) -> dict:
+    def get_stats(self) -> Dict:
         """Get current proxy statistics."""
         return self.stats.to_dict()
-    
+
     def get_stats_summary(self) -> str:
         """Get current stats as a human-readable summary."""
         return self.stats.summary()
 
 
-def _set_sock_opts(transport):
+def _set_sock_opts(transport: asyncio.Transport) -> None:
     sock = transport.get_extra_info('socket')
     if sock is None:
         return
@@ -500,7 +500,7 @@ def _ws_domains(dc: int, is_media: Optional[bool]) -> List[str]:
 _server_instance: Optional[ProxyServer] = None
 
 
-def get_stats() -> dict:
+def get_stats() -> Dict:
     """Get current proxy statistics (backward compatibility)."""
     global _server_instance
     if _server_instance:
