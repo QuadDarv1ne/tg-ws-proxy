@@ -47,31 +47,87 @@ _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
 
+# DNS cache: {domain: [(ip, expiry_time), ...]}
+_dns_cache: Dict[str, List[Tuple[str, float]]] = {}
+_dns_cache_ttl = 300.0  # 5 minutes default TTL
+
+
+async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 5.0) -> List[Tuple[str, int]]:
+    """
+    Resolve domain with caching.
+    
+    Args:
+        domain: Domain name to resolve
+        port: Target port
+        timeout: Resolution timeout
+        
+    Returns:
+        List of (ip, port) tuples
+    """
+    now = time.monotonic()
+    
+    # Check cache
+    if domain in _dns_cache:
+        # Filter expired entries
+        valid_entries = [(ip, exp) for ip, exp in _dns_cache[domain] if exp > now]
+        if valid_entries:
+            log.debug("DNS cache hit for %s: %d entries", domain, len(valid_entries))
+            return [(ip, port) for ip, _ in valid_entries]
+        else:
+            log.debug("DNS cache expired for %s", domain)
+            del _dns_cache[domain]
+    
+    # Resolve from scratch
+    try:
+        loop = asyncio.get_event_loop()
+        results = await loop.getaddrinfo(domain, port, family=_socket.AF_INET, type=_socket.SOCK_STREAM)
+        
+        # Extract unique IPs
+        ips = list(set(r[4][0] for r in results))
+        expiry = now + _dns_cache_ttl
+        
+        # Update cache
+        _dns_cache[domain] = [(ip, expiry) for ip in ips]
+        log.debug("DNS resolved %s -> %s (cached for %ds)", domain, ips, int(_dns_cache_ttl))
+        
+        return [(ip, port) for ip in ips]
+    except Exception as e:
+        log.debug("DNS resolution failed for %s: %s", domain, e)
+        return []
+
+
+def _clear_dns_cache() -> None:
+    """Clear DNS cache."""
+    _dns_cache.clear()
+    log.info("DNS cache cleared")
+
 
 async def _check_ws_domain_available(dc_id: int, timeout: float = 5.0) -> Tuple[bool, Optional[str]]:
     """
     Check if WebSocket domain for a DC is available.
-    
+
     Returns:
         Tuple of (is_available, error_message)
     """
     from .constants import WS_DOMAIN_TEMPLATE, WS_DOMAIN_MEDIA_TEMPLATE
-    
+
     domains_to_check = [
         WS_DOMAIN_TEMPLATE.format(dc=dc_id),
         WS_DOMAIN_MEDIA_TEMPLATE.format(dc=dc_id),
     ]
-    
+
     for domain in domains_to_check:
         try:
-            # Try to resolve domain
-            loop = asyncio.get_event_loop()
-            await loop.getaddrinfo(domain, 443, family=_socket.AF_INET)
-            log.debug("Domain %s is resolvable", domain)
+            # Use cached DNS resolution
+            resolved = await _resolve_domain_cached(domain, 443, timeout)
+            if resolved:
+                log.debug("Domain %s is resolvable (cached: %s)", domain, resolved[0][0])
+            else:
+                return False, f"Cannot resolve {domain}"
         except Exception as e:
             log.warning("Domain %s is not available: %s", domain, e)
             return False, f"Cannot resolve {domain}"
-    
+
     return True, None
 
 
@@ -647,6 +703,28 @@ def get_stats_summary() -> str:
     if _server_instance:
         return _server_instance.get_stats_summary()
     return Stats().summary()
+
+
+def get_dns_cache_info() -> Dict:
+    """Get DNS cache statistics."""
+    now = time.monotonic()
+    stats = {
+        "domains_cached": len(_dns_cache),
+        "entries": {}
+    }
+    for domain, entries in _dns_cache.items():
+        valid = [(ip, exp) for ip, exp in entries if exp > now]
+        if valid:
+            stats["entries"][domain] = {
+                "count": len(valid),
+                "ttl_remaining": max(0, valid[0][1] - now) if valid else 0
+            }
+    return stats
+
+
+def clear_dns_cache() -> None:
+    """Clear DNS cache."""
+    _clear_dns_cache()
 
 
 class _WsPool:
@@ -1434,6 +1512,29 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
                 log.debug("Pool optimization error: %s", e)
 
     asyncio.create_task(optimize_pool())
+    
+    # Background task for DNS cache cleanup
+    async def cleanup_dns_cache():
+        """Periodically clean expired DNS cache entries."""
+        while True:
+            await asyncio.sleep(300)  # Check every 5 minutes
+            now = time.monotonic()
+            expired_domains = []
+            
+            for domain, entries in _dns_cache.items():
+                valid = [(ip, exp) for ip, exp in entries if exp > now]
+                if valid:
+                    _dns_cache[domain] = valid
+                else:
+                    expired_domains.append(domain)
+            
+            for domain in expired_domains:
+                del _dns_cache[domain]
+            
+            if expired_domains:
+                log.debug("DNS cache cleaned: %d expired domains", len(expired_domains))
+
+    asyncio.create_task(cleanup_dns_cache())
 
     await server_instance.ws_pool.warmup(dc_opt)
 
