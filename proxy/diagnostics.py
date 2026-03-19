@@ -241,10 +241,15 @@ def print_diagnostics_report(results: list[DiagnosticResult]):
 
     # Summary
     total = len(results)
-    success = sum(1 for r in results if r.success)
-    print("\n" + "=" * 60)
-    print(f"  Summary: {success}/{total} tests passed ({100*success/total:.1f}%)")
-    print("=" * 60 + "\n")
+    if total > 0:
+        success = sum(1 for r in results if r.success)
+        print("\n" + "=" * 60)
+        print(f"  Summary: {success}/{total} tests passed ({100*success/total:.1f}%)")
+        print("=" * 60 + "\n")
+    else:
+        print("\n" + "=" * 60)
+        print("  No tests run")
+        print("=" * 60 + "\n")
 
 
 def run_diagnostics_cli():
