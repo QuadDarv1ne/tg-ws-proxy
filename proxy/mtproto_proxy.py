@@ -22,9 +22,6 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Callable, DefaultDict
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-# Check if cryptography has IGE mode (removed in >= 42.0.0)
-_HAS_IGE_MODE = hasattr(modes, 'IGE')
-
 try:
     import qrcode
     HAS_QRCODE = True
