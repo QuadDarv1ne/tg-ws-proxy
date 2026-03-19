@@ -20,6 +20,7 @@ SEND_BUF_SIZE = 65536
 # WebSocket pool settings
 WS_POOL_SIZE = 4
 WS_POOL_MAX_AGE = 120.0  # seconds
+WS_POOL_MAX_SIZE = 8  # maximum connections per DC
 
 # Timeout settings
 WS_CONNECT_TIMEOUT = 10.0
