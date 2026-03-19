@@ -63,10 +63,15 @@ from proxy.constants import (
     TG_BLUE,
     TG_BLUE_HOVER,
     UI_BG,
+    UI_BG_DARK,
     UI_FIELD_BG,
+    UI_FIELD_BG_DARK,
     UI_FIELD_BORDER,
+    UI_FIELD_BORDER_DARK,
     UI_TEXT_PRIMARY,
+    UI_TEXT_PRIMARY_DARK,
     UI_TEXT_SECONDARY,
+    UI_TEXT_SECONDARY_DARK,
     UI_FONT_FAMILY,
     WSAEADDRINUSE,
 )
@@ -93,6 +98,7 @@ _tray_icon: Optional[object] = None
 _config: dict = {}
 _exiting: bool = False
 _lock_file_path: Optional[Path] = None
+_dark_theme: bool = False  # Theme toggle state
 
 log = logging.getLogger("tg-ws-tray")
 
@@ -528,6 +534,14 @@ def _on_toggle_notifications(icon=None, item=None) -> None:
         _show_info("Уведомления включены\n\nТеперь вы будете получать уведомления о подключениях клиентов.", "TG WS Proxy")
 
 
+def _on_toggle_theme(icon=None, item=None) -> None:
+    """Toggle dark/light theme."""
+    global _dark_theme
+    _dark_theme = not _dark_theme
+    theme_state = "включена" if _dark_theme else "выключена"
+    _show_info(f"Тёмная тема {theme_state}", "TG WS Proxy")
+
+
 def _on_toggle_autostart(icon=None, item=None) -> None:
     """Show autostart toggle dialog."""
     is_enabled = _is_autostart_enabled()
@@ -740,7 +754,7 @@ def _edit_config_dialog() -> None:
 
 def _create_config_window() -> "ctk.CTk":
     """Create and configure config dialog window."""
-    ctk.set_appearance_mode("light")
+    ctk.set_appearance_mode("dark" if _dark_theme else "light")
     ctk.set_default_color_theme("blue")
 
     root = ctk.CTk()
@@ -756,13 +770,17 @@ def _create_config_window() -> "ctk.CTk":
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-    root.configure(fg_color=UI_BG)
+    
+    # Apply theme colors
+    bg_color = UI_BG_DARK if _dark_theme else UI_BG
+    root.configure(fg_color=bg_color)
     return root
 
 
 def _build_config_frame(root: "ctk.CTk") -> "ctk.CTkFrame":
     """Build main frame for config dialog."""
-    frame = ctk.CTkFrame(root, fg_color=UI_BG, corner_radius=0)
+    bg_color = UI_BG_DARK if _dark_theme else UI_BG
+    frame = ctk.CTkFrame(root, fg_color=bg_color, corner_radius=0)
     frame.pack(fill="both", expand=True, padx=24, pady=20)
     return frame
 
@@ -772,71 +790,78 @@ def _build_config_fields(
     cfg: dict
 ) -> Tuple["ctk.StringVar", "ctk.StringVar", "ctk.CTkTextbox", "ctk.BooleanVar"]:
     """Build configuration input fields."""
+    # Theme-aware colors
+    field_bg = UI_FIELD_BG_DARK if _dark_theme else UI_FIELD_BG
+    field_border = UI_FIELD_BORDER_DARK if _dark_theme else UI_FIELD_BORDER
+    text_primary = UI_TEXT_PRIMARY_DARK if _dark_theme else UI_TEXT_PRIMARY
+    text_secondary = UI_TEXT_SECONDARY_DARK if _dark_theme else UI_TEXT_SECONDARY
+    hover_color = UI_FIELD_BORDER_DARK if _dark_theme else UI_FIELD_BORDER
+
     # Host
     ctk.CTkLabel(frame, text="IP-адрес прокси",
-                 font=(UI_FONT_FAMILY, 13), text_color=UI_TEXT_PRIMARY,
+                 font=(UI_FONT_FAMILY, 13), text_color=text_primary,
                  anchor="w").pack(anchor="w", pady=(0, 4))
     host_var = ctk.StringVar(value=cfg.get("host", "127.0.0.1"))
     host_entry = ctk.CTkEntry(frame, textvariable=host_var, width=200, height=36,
                               font=(UI_FONT_FAMILY, 13), corner_radius=10,
-                              fg_color=UI_FIELD_BG, border_color=UI_FIELD_BORDER,
-                              border_width=1, text_color=UI_TEXT_PRIMARY)
+                              fg_color=field_bg, border_color=field_border,
+                              border_width=1, text_color=text_primary)
     host_entry.pack(anchor="w", pady=(0, 12))
 
     # Port
     ctk.CTkLabel(frame, text="Порт прокси",
-                 font=(UI_FONT_FAMILY, 13), text_color=UI_TEXT_PRIMARY,
+                 font=(UI_FONT_FAMILY, 13), text_color=text_primary,
                  anchor="w").pack(anchor="w", pady=(0, 4))
     port_var = ctk.StringVar(value=str(cfg.get("port", 1080)))
     port_entry = ctk.CTkEntry(frame, textvariable=port_var, width=120, height=36,
                               font=(UI_FONT_FAMILY, 13), corner_radius=10,
-                              fg_color=UI_FIELD_BG, border_color=UI_FIELD_BORDER,
-                              border_width=1, text_color=UI_TEXT_PRIMARY)
+                              fg_color=field_bg, border_color=field_border,
+                              border_width=1, text_color=text_primary)
     port_entry.pack(anchor="w", pady=(0, 12))
 
     # Quick DC presets
     dc_preset_frame = ctk.CTkFrame(frame, fg_color="transparent")
     dc_preset_frame.pack(anchor="w", pady=(0, 8))
-    
+
     ctk.CTkLabel(dc_preset_frame, text="Быстрые настройки DC:",
-                 font=(UI_FONT_FAMILY, 11), text_color=UI_TEXT_SECONDARY,
+                 font=(UI_FONT_FAMILY, 11), text_color=text_secondary,
                  anchor="w").pack(side="left", padx=(0, 8))
-    
+
     def on_preset_dc2():
         dc_textbox.delete("1.0", "end")
         dc_textbox.insert("1.0", "2:149.154.167.220\n4:149.154.167.220")
-    
+
     def on_preset_all():
         dc_textbox.delete("1.0", "end")
-        dc_textbox.insert("1.0", 
+        dc_textbox.insert("1.0",
             "1:149.154.175.53\n"
             "2:149.154.167.220\n"
             "3:149.154.175.100\n"
             "4:149.154.167.91\n"
             "5:91.108.56.100")
-    
+
     ctk.CTkButton(dc_preset_frame, text="DC 2+4", width=60, height=24,
                   font=(UI_FONT_FAMILY, 11), corner_radius=6,
-                  fg_color=UI_FIELD_BG, hover_color=UI_FIELD_BORDER,
-                  text_color=UI_TEXT_PRIMARY, border_width=1,
-                  border_color=UI_FIELD_BORDER,
+                  fg_color=field_bg, hover_color=hover_color,
+                  text_color=text_primary, border_width=1,
+                  border_color=field_border,
                   command=on_preset_dc2).pack(side="left", padx=(0, 4))
-    
+
     ctk.CTkButton(dc_preset_frame, text="Все DC", width=60, height=24,
                   font=(UI_FONT_FAMILY, 11), corner_radius=6,
-                  fg_color=UI_FIELD_BG, hover_color=UI_FIELD_BORDER,
-                  text_color=UI_TEXT_PRIMARY, border_width=1,
-                  border_color=UI_FIELD_BORDER,
+                  fg_color=field_bg, hover_color=hover_color,
+                  text_color=text_primary, border_width=1,
+                  border_color=field_border,
                   command=on_preset_all).pack(side="left")
 
     # DC-IP mappings
     ctk.CTkLabel(frame, text="DC → IP маппинги (формат DC:IP)",
-                 font=(UI_FONT_FAMILY, 13), text_color=UI_TEXT_PRIMARY,
+                 font=(UI_FONT_FAMILY, 13), text_color=text_primary,
                  anchor="w").pack(anchor="w", pady=(8, 4))
     dc_textbox = ctk.CTkTextbox(frame, width=370, height=120,
                                 font=("Consolas", 12), corner_radius=10,
-                                fg_color=UI_FIELD_BG, border_color=UI_FIELD_BORDER,
-                                border_width=1, text_color=UI_TEXT_PRIMARY)
+                                fg_color=field_bg, border_color=field_border,
+                                border_width=1, text_color=text_primary)
     dc_textbox.pack(anchor="w", pady=(0, 12))
     dc_textbox.insert("1.0", "\n".join(cfg.get("dc_ip", DEFAULT_CONFIG["dc_ip"])))
 
@@ -844,7 +869,7 @@ def _build_config_fields(
     verbose_var = ctk.BooleanVar(value=cfg.get("verbose", False))
     ctk.CTkCheckBox(frame, text="Подробное логирование (verbose)",
                     variable=verbose_var, font=(UI_FONT_FAMILY, 13),
-                    text_color=UI_TEXT_PRIMARY,
+                    text_color=text_primary,
                     fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                     corner_radius=6, border_width=2,
                     border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 8))
@@ -919,6 +944,11 @@ def _build_config_buttons(
     on_cancel: Callable[[], None]
 ) -> None:
     """Build Save/Cancel buttons for config dialog."""
+    # Theme-aware colors
+    field_bg = UI_FIELD_BG_DARK if _dark_theme else UI_FIELD_BG
+    field_border = UI_FIELD_BORDER_DARK if _dark_theme else UI_FIELD_BORDER
+    text_primary = UI_TEXT_PRIMARY_DARK if _dark_theme else UI_TEXT_PRIMARY
+
     btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
     btn_frame.pack(fill="x")
     ctk.CTkButton(btn_frame, text="Сохранить", width=140, height=38,
@@ -928,9 +958,9 @@ def _build_config_buttons(
                   command=on_save).pack(side="left", padx=(0, 10))
     ctk.CTkButton(btn_frame, text="Отмена", width=140, height=38,
                   font=(UI_FONT_FAMILY, 14), corner_radius=10,
-                  fg_color=UI_FIELD_BG, hover_color=UI_FIELD_BORDER,
-                  text_color=UI_TEXT_PRIMARY, border_width=1,
-                  border_color=UI_FIELD_BORDER,
+                  fg_color=field_bg, hover_color=field_border,
+                  text_color=text_primary, border_width=1,
+                  border_color=field_border,
                   command=on_cancel).pack(side="left")
 
 
@@ -941,7 +971,7 @@ def _show_stats_dialog() -> None:
 
     stats = tg_ws_proxy.get_stats()
 
-    ctk.set_appearance_mode("light")
+    ctk.set_appearance_mode("dark" if _dark_theme else "light")
     ctk.set_default_color_theme("blue")
 
     root = ctk.CTk()
@@ -953,21 +983,28 @@ def _show_stats_dialog() -> None:
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-    root.configure(fg_color=UI_BG)
+    
+    # Apply theme colors
+    bg_color = UI_BG_DARK if _dark_theme else UI_BG
+    root.configure(fg_color=bg_color)
 
-    frame = ctk.CTkFrame(root, fg_color=UI_BG, corner_radius=0)
+    frame = ctk.CTkFrame(root, fg_color=bg_color, corner_radius=0)
     frame.pack(fill="both", expand=True, padx=24, pady=20)
+
+    # Apply theme colors to text
+    text_primary = UI_TEXT_PRIMARY_DARK if _dark_theme else UI_TEXT_PRIMARY
+    text_secondary = UI_TEXT_SECONDARY_DARK if _dark_theme else UI_TEXT_SECONDARY
 
     ctk.CTkLabel(frame, text="Статистика прокси",
                  font=(UI_FONT_FAMILY, 16, "bold"),
-                 text_color=UI_TEXT_PRIMARY).pack(anchor="w", pady=(0, 12))
+                 text_color=text_primary).pack(anchor="w", pady=(0, 12))
 
     # Session info
     session_duration = stats.get('session_duration_seconds', 0)
     uptime_str = f"{int(session_duration // 3600)}ч {(int(session_duration) % 3600) // 60}м {int(session_duration) % 60}с"
     ctk.CTkLabel(frame, text=f"Время работы: {uptime_str}",
                  font=(UI_FONT_FAMILY, 11),
-                 text_color=UI_TEXT_SECONDARY,
+                 text_color=text_secondary,
                  anchor="w").pack(anchor="w", pady=(0, 8))
 
     # Main stats
@@ -1097,7 +1134,7 @@ def _show_first_run_dialog() -> None:
     port = _config.get("port", DEFAULT_CONFIG["port"])
     tg_url = f"tg://socks?server={host}&port={port}"
 
-    ctk.set_appearance_mode("light")
+    ctk.set_appearance_mode("dark" if _dark_theme else "light")
     ctk.set_default_color_theme("blue")
 
     root = ctk.CTk()
@@ -1109,21 +1146,27 @@ def _show_first_run_dialog() -> None:
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-    root.configure(fg_color=UI_BG)
+    
+    # Apply theme colors
+    bg_color = UI_BG_DARK if _dark_theme else UI_BG
+    root.configure(fg_color=bg_color)
 
-    frame = ctk.CTkFrame(root, fg_color=UI_BG, corner_radius=0)
+    frame = ctk.CTkFrame(root, fg_color=bg_color, corner_radius=0)
     frame.pack(fill="both", expand=True, padx=28, pady=24)
 
-    _build_first_run_title(frame)
-    _build_first_run_instructions(frame, host, port, tg_url)
-    auto_var = _build_first_run_checkbox(frame)
+    # Apply theme colors to text
+    text_primary = UI_TEXT_PRIMARY_DARK if _dark_theme else UI_TEXT_PRIMARY
+
+    _build_first_run_title(frame, text_primary)
+    _build_first_run_instructions(frame, host, port, tg_url, text_primary)
+    auto_var = _build_first_run_checkbox(frame, text_primary)
     _build_first_run_button(frame, root, auto_var)
 
     root.protocol("WM_DELETE_WINDOW", lambda: _on_first_run_ok(root, auto_var))
     root.mainloop()
 
 
-def _build_first_run_title(frame: "ctk.CTkFrame") -> None:
+def _build_first_run_title(frame: "ctk.CTkFrame", text_color: str) -> None:
     """Build title section of first-run dialog."""
     title_frame = ctk.CTkFrame(frame, fg_color="transparent")
     title_frame.pack(anchor="w", pady=(0, 16), fill="x")
@@ -1134,14 +1177,15 @@ def _build_first_run_title(frame: "ctk.CTkFrame") -> None:
 
     ctk.CTkLabel(title_frame, text="Прокси запущен и работает",
                  font=(UI_FONT_FAMILY, 17, "bold"),
-                 text_color=UI_TEXT_PRIMARY).pack(side="left")
+                 text_color=text_color).pack(side="left")
 
 
 def _build_first_run_instructions(
     frame: "ctk.CTkFrame",
     host: str,
     port: int,
-    tg_url: str
+    tg_url: str,
+    text_color: str
 ) -> None:
     """Build instructions section of first-run dialog."""
     sections = _get_first_run_sections(host, port, tg_url)
@@ -1150,7 +1194,7 @@ def _build_first_run_instructions(
         weight = "bold" if bold else "normal"
         ctk.CTkLabel(frame, text=text,
                      font=(UI_FONT_FAMILY, 13, weight),
-                     text_color=UI_TEXT_PRIMARY,
+                     text_color=text_color,
                      anchor="w", justify="left").pack(anchor="w", pady=1)
 
     ctk.CTkFrame(frame, fg_color="transparent", height=16).pack()
@@ -1158,12 +1202,12 @@ def _build_first_run_instructions(
                  corner_radius=0).pack(fill="x", pady=(0, 12))
 
 
-def _build_first_run_checkbox(frame: "ctk.CTkFrame") -> "ctk.BooleanVar":
+def _build_first_run_checkbox(frame: "ctk.CTkFrame", text_color: str) -> "ctk.BooleanVar":
     """Build checkbox section of first-run dialog."""
     auto_var = ctk.BooleanVar(value=True)
     ctk.CTkCheckBox(frame, text="Открыть прокси в Telegram сейчас",
                     variable=auto_var, font=(UI_FONT_FAMILY, 13),
-                    text_color=UI_TEXT_PRIMARY,
+                    text_color=text_color,
                     fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                     corner_radius=6, border_width=2,
                     border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 16))
@@ -1299,6 +1343,7 @@ def _build_menu() -> Optional["pystray.Menu"]:
     port = _config.get("port", DEFAULT_CONFIG["port"])
     is_autostart = _is_autostart_enabled()
     is_notifications = NOTIFICATIONS_MARKER.exists()
+    theme_text = "Тёмная тема: Вкл" if _dark_theme else "Тёмная тема: Выкл"
 
     return pystray.Menu(
         pystray.MenuItem(
@@ -1316,6 +1361,9 @@ def _build_menu() -> Optional["pystray.Menu"]:
         pystray.MenuItem(
             f"Автозапуск: {'Вкл' if is_autostart else 'Выкл'}",
             _on_toggle_autostart),
+        pystray.MenuItem(
+            theme_text,
+            _on_toggle_theme),
         pystray.MenuItem("Открыть логи", _on_open_logs),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Выход", _on_exit),

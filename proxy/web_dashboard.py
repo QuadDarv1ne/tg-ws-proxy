@@ -30,18 +30,43 @@ log = logging.getLogger('tg-web-dashboard')
 # HTML template for the dashboard
 DASHBOARD_HTML = """
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TG WS Proxy - Dashboard</title>
     <style>
+        :root {
+            --bg-gradient-start: #667eea;
+            --bg-gradient-end: #764ba2;
+            --card-bg: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --text-muted: #888888;
+            --border-color: #e2e8f0;
+            --table-bg: #f8f9fa;
+            --input-bg: #ffffff;
+            --code-bg: #f7fafc;
+        }
+        [data-theme="dark"] {
+            --bg-gradient-start: #2d3748;
+            --bg-gradient-end: #1a202c;
+            --card-bg: #2d3748;
+            --text-primary: #f7fafc;
+            --text-secondary: #cbd5e0;
+            --text-muted: #a0aec0;
+            --border-color: #4a5568;
+            --table-bg: #1a202c;
+            --input-bg: #2d3748;
+            --code-bg: #1a202c;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
             min-height: 100vh;
             padding: 20px;
+            transition: background 0.3s ease;
         }
         .container {
             max-width: 1400px;
@@ -61,18 +86,18 @@ DASHBOARD_HTML = """
             margin-bottom: 30px;
         }
         .stat-card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 15px;
             padding: 25px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
         }
         .stat-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 15px 40px rgba(0,0,0,0.3);
         }
         .stat-card h3 {
-            color: #667eea;
+            color: var(--bg-gradient-start);
             font-size: 0.9rem;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -81,25 +106,26 @@ DASHBOARD_HTML = """
         .stat-card .value {
             font-size: 2.5rem;
             font-weight: bold;
-            color: #333;
+            color: var(--text-primary);
         }
         .stat-card .unit {
             font-size: 1rem;
-            color: #888;
+            color: var(--text-muted);
             margin-left: 5px;
         }
         .section {
-            background: white;
+            background: var(--card-bg);
             border-radius: 15px;
             padding: 25px;
             margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: background 0.3s ease;
         }
         .section h2 {
-            color: #667eea;
+            color: var(--bg-gradient-start);
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid var(--border-color);
         }
         table {
             width: 100%;
@@ -108,15 +134,16 @@ DASHBOARD_HTML = """
         th, td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #f0f0f0;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
         }
         th {
-            background: #f8f9fa;
-            color: #667eea;
+            background: var(--table-bg);
+            color: var(--bg-gradient-start);
             font-weight: 600;
         }
         tr:hover {
-            background: #f8f9fa;
+            background: var(--table-bg);
         }
         .status-indicator {
             display: inline-block;
@@ -126,21 +153,15 @@ DASHBOARD_HTML = """
             margin-right: 8px;
             animation: pulse 2s infinite;
         }
-        .status-online {
-            background: #48bb78;
-        }
-        .status-degraded {
-            background: #ed8936;
-        }
-        .status-offline {
-            background: #f56565;
-        }
+        .status-online { background: #48bb78; }
+        .status-degraded { background: #ed8936; }
+        .status-offline { background: #f56565; }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
         .btn {
-            background: #667eea;
+            background: var(--bg-gradient-start);
             color: white;
             border: none;
             padding: 10px 20px;
@@ -159,15 +180,9 @@ DASHBOARD_HTML = """
         .btn-secondary {
             background: #718096;
         }
-        .btn-secondary:hover {
-            background: #4a5568;
-        }
-        .btn-success {
-            background: #48bb78;
-        }
-        .btn-success:hover {
-            background: #38a169;
-        }
+        .btn-secondary:hover { background: #4a5568; }
+        .btn-success { background: #48bb78; }
+        .btn-success:hover { background: #38a169; }
         .header {
             display: flex;
             justify-content: space-between;
@@ -183,7 +198,7 @@ DASHBOARD_HTML = """
             gap: 10px;
         }
         .last-update {
-            color: #888;
+            color: var(--text-muted);
             font-size: 0.9rem;
             display: flex;
             align-items: center;
@@ -192,6 +207,7 @@ DASHBOARD_HTML = """
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
         .nav-tab {
             background: rgba(255,255,255,0.2);
@@ -203,39 +219,33 @@ DASHBOARD_HTML = """
             font-size: 1rem;
             transition: background 0.3s;
         }
-        .nav-tab:hover {
-            background: rgba(255,255,255,0.3);
-        }
+        .nav-tab:hover { background: rgba(255,255,255,0.3); }
         .nav-tab.active {
             background: white;
-            color: #667eea;
+            color: var(--bg-gradient-start);
         }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 20px; }
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            color: #667eea;
+            color: var(--bg-gradient-start);
             font-weight: 600;
         }
         .form-group input, .form-group textarea {
             width: 100%;
             padding: 12px;
-            border: 2px solid #e2e8f0;
+            background: var(--input-bg);
+            color: var(--text-primary);
+            border: 2px solid var(--border-color);
             border-radius: 8px;
             font-size: 1rem;
-            transition: border-color 0.3s;
+            transition: border-color 0.3s, background 0.3s;
         }
         .form-group input:focus, .form-group textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--bg-gradient-start);
         }
         .form-group textarea {
             min-height: 100px;
@@ -246,9 +256,7 @@ DASHBOARD_HTML = """
             align-items: center;
             gap: 10px;
         }
-        .checkbox-group input[type="checkbox"] {
-            width: auto;
-        }
+        .checkbox-group input[type="checkbox"] { width: auto; }
         .alert {
             padding: 15px;
             border-radius: 8px;
@@ -271,35 +279,52 @@ DASHBOARD_HTML = """
             font-size: 0.85rem;
             font-weight: 600;
         }
-        .health-ok {
-            background: #c6f6d5;
-            color: #22543d;
+        .health-ok { background: #c6f6d5; color: #22543d; }
+        .health-degraded { background: #feebc8; color: #7c2d12; }
+        .theme-toggle {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: background 0.3s;
+            margin-left: 10px;
         }
-        .health-degraded {
-            background: #feebc8;
-            color: #7c2d12;
-        }
+        .theme-toggle:hover { background: rgba(255,255,255,0.3); }
         code {
-            background: #f7fafc;
+            background: var(--code-bg);
             padding: 2px 6px;
             border-radius: 4px;
             font-family: 'Courier New', monospace;
             color: #e53e3e;
         }
         @media (max-width: 768px) {
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
+            .stats-grid { grid-template-columns: 1fr; }
             .header {
                 flex-direction: column;
                 align-items: flex-start;
             }
+            .header-actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            .nav-tabs { justify-content: flex-start; }
+            .btn { margin: 5px 0; }
+            h1 { font-size: 1.8rem; }
+            .stat-card .value { font-size: 2rem; }
+        }
+        @media (max-width: 480px) {
+            body { padding: 10px; }
+            .section { padding: 15px; }
+            .stat-card { padding: 15px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🚀 TG WS Proxy Dashboard</h1>
+        <h1>🚀 TG WS Proxy Dashboard <button class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">🌓</button></h1>
 
         <div class="header">
             <div class="last-update">
@@ -574,7 +599,7 @@ DASHBOARD_HTML = """
             try {
                 const response = await fetch('/api/health');
                 const data = await response.json();
-                
+
                 const healthBadge = document.getElementById('healthStatus');
                 if (data.status === 'ok') {
                     healthBadge.innerHTML = '<span class="health-badge health-ok">✓ OK</span>';
@@ -583,7 +608,7 @@ DASHBOARD_HTML = """
                 } else {
                     healthBadge.innerHTML = '<span class="health-badge" style="background:#fed7d7;color:#742a2a">✗ Unhealthy</span>';
                 }
-                
+
                 alert('Health Check:\\n' +
                       'Status: ' + data.status + '\\n' +
                       'WS Errors: ' + (data.websocket?.ws_errors || 0) + '\\n' +
@@ -593,6 +618,20 @@ DASHBOARD_HTML = """
                 alert('Health check failed: ' + error);
             }
         }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
+        // Load saved theme on page load
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
 
         // Auto-refresh every 5 seconds
         setInterval(loadStats, 5000);

@@ -155,11 +155,21 @@ DEFAULT_CONFIG = {
 
 TG_BLUE = "#3390ec"
 TG_BLUE_HOVER = "#2b7cd4"
+
+# Light theme
 UI_BG = "#ffffff"
 UI_FIELD_BG = "#f0f2f5"
 UI_FIELD_BORDER = "#d6d9dc"
 UI_TEXT_PRIMARY = "#000000"
 UI_TEXT_SECONDARY = "#707579"
+
+# Dark theme
+UI_BG_DARK = "#2d3748"
+UI_FIELD_BG_DARK = "#1a202c"
+UI_FIELD_BORDER_DARK = "#4a5568"
+UI_TEXT_PRIMARY_DARK = "#f7fafc"
+UI_TEXT_SECONDARY_DARK = "#cbd5e0"
+
 UI_FONT_FAMILY = "Segoe UI"
 
 # =============================================================================
