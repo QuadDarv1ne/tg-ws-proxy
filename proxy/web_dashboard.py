@@ -401,6 +401,7 @@ DASHBOARD_HTML = """
         <div class="nav-tabs">
             <button class="nav-tab active" onclick="switchTab('stats')">📊 Статистика</button>
             <button class="nav-tab" onclick="switchTab('dc')">🌐 DC Stats</button>
+            <button class="nav-tab" onclick="switchTab('logs')">📜 Live Логи</button>
             <button class="nav-tab" onclick="switchTab('settings')">⚙️ Настройки</button>
         </div>
 
@@ -485,6 +486,32 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
+        <!-- Live Logs Tab -->
+        <div id="logs-tab" class="tab-content">
+            <div class="section">
+                <h2>📜 Live Логи подключений</h2>
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+                    <button onclick="clearLogs()" class="btn btn-secondary">🗑️ Очистить</button>
+                    <button onclick="toggleAutoRefresh()" class="btn btn-secondary" id="autoRefreshBtn">⏸️ Пауза</button>
+                    <span id="logCount" style="color: var(--text-muted); margin-left: auto;">Записей: 0</span>
+                </div>
+                <div id="liveLogs" style="
+                    background: var(--table-bg);
+                    border: 1px solid var(--border-color);
+                    border-radius: 8px;
+                    padding: 15px;
+                    max-height: 500px;
+                    overflow-y: auto;
+                    font-family: 'Courier New', monospace;
+                    font-size: 0.85rem;
+                ">
+                    <div style="color: var(--text-muted); text-align: center; padding: 20px;">
+                        Загрузка логов...
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Settings Tab -->
         <div id="settings-tab" class="tab-content">
             <div class="section">
@@ -509,6 +536,19 @@ DASHBOARD_HTML = """
                     </div>
                     <button type="submit" class="btn btn-success">💾 Сохранить</button>
                 </form>
+            </div>
+            
+            <div class="section">
+                <h2>📱 QR-код для Telegram Mobile</h2>
+                <p style="margin-bottom: 15px; color: var(--text-secondary);">
+                    Отсканируйте QR-код через Telegram Mobile для автоматической настройки прокси:
+                </p>
+                <div style="text-align: center; padding: 20px;">
+                    <img id="qrCode" src="/api/qr" alt="QR Code" style="max-width: 256px; border: 2px solid var(--border-color); border-radius: 12px; padding: 10px; background: white;">
+                    <br>
+                    <button onclick="downloadQR()" class="btn btn-primary" style="margin-top: 15px;">⬇️ Скачать QR-код</button>
+                    <button onclick="refreshQR()" class="btn btn-secondary" style="margin-top: 15px; margin-left: 10px;">🔄 Обновить</button>
+                </div>
             </div>
         </div>
 
@@ -542,14 +582,16 @@ DASHBOARD_HTML = """
         function switchTab(tabName) {
             document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
+
             event.target.classList.add('active');
             document.getElementById(tabName + '-tab').classList.add('active');
-            
+
             if (tabName === 'settings') {
                 loadConfig();
             } else if (tabName === 'dc') {
                 loadDCStats();
+            } else if (tabName === 'logs') {
+                loadLiveLogs();
             }
         }
 
@@ -679,6 +721,18 @@ DASHBOARD_HTML = """
             window.location.href = '/api/stats/export?format=' + format;
         }
 
+        function downloadQR() {
+            const link = document.createElement('a');
+            link.href = '/api/qr';
+            link.download = 'tg-ws-proxy-qr.png';
+            link.click();
+        }
+
+        function refreshQR() {
+            const qrImg = document.getElementById('qrCode');
+            qrImg.src = '/api/qr?t=' + Date.now();
+        }
+
         async function checkHealth() {
             try {
                 const response = await fetch('/api/health');
@@ -722,6 +776,94 @@ DASHBOARD_HTML = """
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             html.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
+        }
+
+        // Live Logs functionality
+        let logsAutoRefresh = true;
+        let logsInterval = null;
+        let lastLogTime = 0;
+
+        function clearLogs() {
+            document.getElementById('liveLogs').innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Логи очищены</div>';
+            updateLogCount(0);
+        }
+
+        function toggleAutoRefresh() {
+            logsAutoRefresh = !logsAutoRefresh;
+            const btn = document.getElementById('autoRefreshBtn');
+            btn.textContent = logsAutoRefresh ? '⏸️ Пауза' : '▶️ Старт';
+            if (logsAutoRefresh) {
+                startLogsRefresh();
+            } else {
+                stopLogsRefresh();
+            }
+        }
+
+        function startLogsRefresh() {
+            if (logsInterval) clearInterval(logsInterval);
+            logsInterval = setInterval(loadLiveLogs, 2000);
+        }
+
+        function stopLogsRefresh() {
+            if (logsInterval) clearInterval(logsInterval);
+            logsInterval = null;
+        }
+
+        function updateLogCount(count) {
+            document.getElementById('logCount').textContent = 'Записей: ' + count;
+        }
+
+        async function loadLiveLogs() {
+            if (!logsAutoRefresh) return;
+            
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                const logsContainer = document.getElementById('liveLogs');
+                
+                // Get connection history from stats
+                const history = data.connection_history || [];
+                const newLogs = history.filter(log => log.time > lastLogTime);
+                
+                if (newLogs.length > 0) {
+                    newLogs.sort((a, b) => a.time - b.time);
+                    
+                    for (const log of newLogs) {
+                        const time = new Date((log.time % 3600) * 1000).toISOString().substr(14, 8);
+                        const type = log.type || 'unknown';
+                        const dc = log.dc ? `DC${log.dc}` : '-';
+                        
+                        let icon = '🔌';
+                        let color = 'var(--text-primary)';
+                        
+                        if (type === 'ws') { icon = '🟢'; color = '#48bb78'; }
+                        else if (type === 'tcp_fallback') { icon = '🟡'; color = '#ed8936'; }
+                        else if (type === 'http_rejected') { icon = '🔴'; color = '#f56565'; }
+                        else if (type === 'passthrough') { icon = '🔵'; color = '#4299e1'; }
+                        
+                        const logEntry = `[${time}] ${icon} ${type.toUpperCase().padEnd(15)} ${dc.padEnd(6)}`;
+                        
+                        const div = document.createElement('div');
+                        div.textContent = logEntry;
+                        div.style.color = color;
+                        div.style.padding = '4px 0';
+                        div.style.borderBottom = '1px solid var(--border-color)';
+                        logsContainer.appendChild(div);
+                        
+                        lastLogTime = log.time;
+                    }
+                    
+                    // Auto-scroll to bottom
+                    logsContainer.scrollTop = logsContainer.scrollHeight;
+                    updateLogCount(logsContainer.children.length);
+                } else if (logsContainer.children.length === 0 || 
+                          (logsContainer.children.length === 1 && logsContainer.children[0].textContent.includes('Загрузка'))) {
+                    logsContainer.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет новых подключений</div>';
+                    updateLogCount(0);
+                }
+            } catch (error) {
+                console.error('Failed to load live logs:', error);
+            }
         }
 
         function renderTrafficChart(trafficHistory) {
@@ -901,12 +1043,12 @@ class WebDashboard:
             """Update configuration."""
             if self.update_config is None:
                 return jsonify({'error': 'Configuration updates not enabled'}), 403
-            
+
             try:
                 data = request.get_json()
                 if not data:
                     return jsonify({'error': 'Invalid JSON'}), 400
-                
+
                 success = self.update_config(data)
                 if success:
                     return jsonify({'status': 'success'})
@@ -914,6 +1056,48 @@ class WebDashboard:
                     return jsonify({'error': 'Failed to update configuration'}), 500
             except Exception as e:
                 log.error(f"Config update error: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/qr')
+        def api_generate_qr():
+            """Generate QR code for Telegram Mobile configuration."""
+            try:
+                import qrcode
+                from PIL import Image
+                
+                stats = self.get_stats()
+                host = stats.get('host', '127.0.0.1')
+                port = stats.get('port', 1080)
+                
+                # Generate tg:// proxy URL
+                proxy_url = f"tg://socks?server={host}&port={port}"
+                
+                # Generate QR code
+                qr = qrcode.QRCode(
+                    version=1,
+                    error_correction=qrcode.constants.ERROR_CORRECT_L,
+                    box_size=10,
+                    border=4,
+                )
+                qr.add_data(proxy_url)
+                qr.make(fit=True)
+                
+                img = qr.make_image(fill_color="black", back_color="white")
+                
+                # Save to bytes
+                img_bytes = io.BytesIO()
+                img.save(img_bytes, format='PNG')
+                img_bytes.seek(0)
+                
+                return Response(
+                    img_bytes.getvalue(),
+                    mimetype='image/png',
+                    headers={'Content-Disposition': f'attachment; filename=tg-ws-proxy-qr.png'}
+                )
+            except ImportError:
+                return jsonify({'error': 'qrcode library not installed'}), 500
+            except Exception as e:
+                log.error(f"QR generation error: {e}")
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/api/health')

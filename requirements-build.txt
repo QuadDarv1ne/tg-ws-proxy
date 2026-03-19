@@ -1,4 +1,4 @@
 # Build dependencies for TG WS Proxy
 # Install with: pip install -r requirements-build.txt
 
-pyinstaller>=5.0.0
+pyinstaller>=6.19.0

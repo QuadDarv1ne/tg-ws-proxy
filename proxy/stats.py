@@ -7,8 +7,11 @@ Provides Stats class for tracking proxy connections, traffic, and performance me
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Dict, List, Optional, Tuple
+
+import psutil
 
 
 def _human_bytes(n: int) -> str:
@@ -64,6 +67,14 @@ class Stats:
         self.session_start = time.monotonic()
         self.last_connection_time: Optional[float] = None
         self.peak_connections_per_minute = 0
+
+        # Performance monitoring
+        self._process = psutil.Process(os.getpid())
+        self.cpu_percent = 0.0
+        self.memory_bytes = 0
+        self._last_cpu_update = 0.0
+        self._cpu_history: List[float] = []
+        self._memory_history: List[int] = []
 
         # History tracking (last N events)
         self._history_size = history_size
@@ -134,6 +145,52 @@ class Stats:
         self._latency_history[dc].append(latency_ms)
         if len(self._latency_history[dc]) > 60:  # Keep last 60 measurements
             self._latency_history[dc].pop(0)
+
+    def update_performance_metrics(self) -> None:
+        """Update CPU and memory usage metrics."""
+        now = time.monotonic()
+        # Update CPU every 1 second to avoid excessive overhead
+        if now - self._last_cpu_update >= 1.0:
+            try:
+                self.cpu_percent = self._process.cpu_percent(interval=None)
+                self.memory_bytes = self._process.memory_info().rss
+                
+                self._cpu_history.append(self.cpu_percent)
+                self._memory_history.append(self.memory_bytes)
+                
+                # Keep last 60 measurements (1 minute)
+                if len(self._cpu_history) > 60:
+                    self._cpu_history.pop(0)
+                if len(self._memory_history) > 60:
+                    self._memory_history.pop(0)
+                    
+                self._last_cpu_update = now
+            except Exception:
+                pass
+
+    def get_average_cpu(self) -> Optional[float]:
+        """Get average CPU usage over the last minute."""
+        if not self._cpu_history:
+            return None
+        return sum(self._cpu_history) / len(self._cpu_history)
+
+    def get_average_memory(self) -> Optional[int]:
+        """Get average memory usage over the last minute."""
+        if not self._memory_history:
+            return None
+        return int(sum(self._memory_history) / len(self._memory_history))
+
+    def get_performance_stats(self) -> Dict:
+        """Get current performance statistics."""
+        self.update_performance_metrics()
+        return {
+            "cpu_percent": self.cpu_percent,
+            "memory_bytes": self.memory_bytes,
+            "memory_mb": self.memory_bytes / (1024 * 1024),
+            "avg_cpu_percent": self.get_average_cpu(),
+            "avg_memory_bytes": self.get_average_memory(),
+            "avg_memory_mb": (self.get_average_memory() or 0) / (1024 * 1024),
+        }
 
     def get_average_latency(self, dc: int) -> Optional[float]:
         """Get average latency for a DC."""
@@ -216,6 +273,7 @@ class Stats:
         """Return stats as a dictionary."""
         conn_per_min = self.get_connections_per_minute()
         traffic_per_min = self.get_traffic_per_minute()
+        perf_stats = self.get_performance_stats()
         return {
             "connections_total": self.connections_total,
             "connections_ws": self.connections_ws,
@@ -237,4 +295,5 @@ class Stats:
             "latency_ms": self.latency_ms,
             "session_duration_seconds": self.get_session_duration(),
             "best_dc": self.get_best_dc(),
+            "performance": perf_stats,
         }

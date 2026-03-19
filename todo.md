@@ -1,253 +1,191 @@
 # TODO — TG WS Proxy
 
-## ✅ Выполнено (v2.5.0)
+## ✅ Выполнено (v2.10.0)
 
-- Базовая функциональность SOCKS5-прокси
-- WebSocket relay к Telegram DC
-- TCP fallback при недоступности WS
-- Tray-приложение (Windows, Linux, macOS)
-- GUI настройки (customtkinter)
-- Нативное меню macOS на rumps
-- Статистика в трее
-- Автозапуск (Windows, macOS, Linux)
-- Проверка обновлений (GitHub API)
-- CI/CD (GitHub Actions)
-- Unit-тесты (55 тестов)
-- Интеграционные тесты (MTProto)
-- MTProto proxy для мобильных
-- Консольная панель управления (TUI)
-- Rate limiting, IP фильтрация
-- JSON конфигурация
-- IPv6 warning
-- Проверка порта перед запуском
-- Type hints для публичного API
-- RotatingFileHandler для логов (5MB, 3 backup)
+### Ядро
+- [x] Базовая функциональность SOCKS5-прокси
+- [x] WebSocket relay к Telegram DC
+- [x] TCP fallback при недоступности WS
+- [x] MTProto proxy для мобильных
+- [x] Rate limiting, IP фильтрация
+- [x] JSON конфигурация
+- [x] Type hints для публичного API
+
+### Платформы
+- [x] Tray-приложение (Windows, Linux, macOS)
+- [x] GUI настройки (customtkinter)
+- [x] Нативное меню macOS на rumps
+- [x] Автозапуск (Windows, macOS, Linux)
+
+### Мониторинг
+- [x] Статистика в трее
+- [x] Консольная панель управления (TUI)
+- [x] Веб-панель (Flask)
+- [x] Мониторинг производительности (CPU/RAM)
+- [x] Проверка обновлений (GitHub API)
+
+### Инфраструктура
+- [x] CI/CD (GitHub Actions)
+- [x] Unit-тесты (55 тестов)
+- [x] Интеграционные тесты (MTProto)
+- [x] RotatingFileHandler для логов (5MB, 3 backup)
+- [x] Проверка порта перед запуском
+- [x] IPv6 warning
 
 ---
 
 ## 🔴 Критические исправления
 
-### ✅ Исправлено (v2.5.1)
-- **Статистика**: добавлен `pool_hits` в `Stats.to_dict()` (ошибка KeyError)
-- **tray.py**: исправлен запуск через `if __name__ == "__main__"`
-- **tray.py**: иконка создаётся до показа диалога первого запуска
-- **Python 3.14**: совместимость с новой версией Python
+### ✅ Исправлено (v2.5.1 - v2.10.0)
+- [x] **Статистика**: добавлен `pool_hits` в `Stats.to_dict()` (ошибка KeyError)
+- [x] **tray.py**: исправлен запуск через `if __name__ == "__main__"`
+- [x] **tray.py**: иконка создаётся до показа диалога первого запуска
+- [x] **Python 3.14**: совместимость с новой версией
+- [x] **cryptography>=42**: ручная IGE реализация
+- [x] **RateLimiter**: исправлена проверка whitelist
+- [x] **Удаление дублирования**: `_human_bytes`, `_format_bytes`
+- [x] **Очистка констант**: объединение секций, удаление неиспользуемых
+- [x] **Рефакторинг**: разбиение крупных функций на подметоды
+- [x] **Упрощение**: wait_stop(), _handle_client()
+- [x] **Защита от None**: _close_writer_safe()
+- [x] **time.monotonic()**: замена time.time() в stats.py
+- [x] **Thread-safe**: is_ip_allowed() в RateLimiter
 
 ---
 
-## 📋 Планы по улучшению
+## 📋 Актуальные задачи
 
-### 1. Веб-панель управления (Dashboard)
-**Приоритет: Средний**
+### 🔴 Высокий приоритет
 
-- [ ] Статус прокси (включён/выключен)
-- [ ] Статистика в реальном времени
-- [ ] График трафика (вверх/вниз)
-- [ ] Управление настройками через браузер
-- [ ] Экспорт статистики (CSV/JSON)
+#### Безопасность (v2.11.0)
+- [ ] Белый список IP-адресов клиентов — `proxy/tg_ws_proxy.py`, `tray.py`
+- [ ] Поддержка логина/пароля для прокси — уже есть, проверить работу
+- [ ] Валидация конфигурации при сохранении — `tray.py`
 
-**Файлы для изменения:** `proxy/dashboard.py`, новый модуль `proxy/web_dashboard.py`
+#### Стабильность (v2.11.0)
+- [ ] Обработка ошибок WebSocket — улучшить переподключение
+- [ ] Graceful shutdown — корректное закрытие соединений
+- [ ] Recovery после сетевых сбоев — авторебез без рестарта
 
----
+### 🟡 Средний приоритет
 
-### 2. Расширенная статистика
-**Приоритет: Средний**
+#### Оптимизация (v2.12.0)
+- [ ] Кэширование DNS запросов — `proxy/tg_ws_proxy.py`
+- [ ] Connection pooling для TCP fallback — `proxy/tg_ws_proxy.py`
+- [ ] Lazy initialization пула — отложенное создание
 
-- [ ] История подключений по времени
-- [ ] Статистика по DC (какой DC используется)
-- [ ] Мониторинг задержки до DC
-- [ ] Сохранение истории в файл
+#### Тесты (v2.12.0)
+- [ ] Integration tests для веб-панели — `tests/test_web_dashboard.py`
+- [ ] Load tests — сценарии нагрузки
+- [ ] Coverage > 80% — текущее покрытие
 
-**Файлы для изменения:** `proxy/tg_ws_proxy.py` (класс `Stats`), `tray.py` (диалог статистики)
+### 🟢 Низкий приоритет
 
----
+#### Интерфейс (v2.13.0)
+- [ ] Компактный режим tray — `tray.py`
+- [ ] Индикатор статуса в трее — цвет иконки
+- [ ] Quick settings в меню — быстрый доступ
 
-### 3. Уведомления
-**Приоритет: Низкий**
-
-- [ ] Уведомление при подключении клиента
-- [ ] Уведомление об ошибках подключения
-- [ ] Уведомление о низком качестве соединения
-
-**Файлы для изменения:** `proxy/tg_ws_proxy.py`, `tray.py`
-
----
-
-### 4. Безопасность
-**Приоритет: Низкий**
-
-- [ ] Поддержка логина/пароля для прокси
-- [ ] Белый список IP-адресов клиентов
-- [ ] Шифрование лога (опционально)
-
-**Файлы для изменения:** `proxy/tg_ws_proxy.py`, `windows.py`
-
----
-
-### 5. Производительность
-**Приоритет: Низкий**
-
-- [x] Настройка размера пула WebSocket соединений (через конфиг)
-- [x] Настройка таймаутов (через конфиг)
-- [ ] Профилирование производительности
-
-**Файлы для изменения:** `proxy/constants.py`, `proxy/tg_ws_proxy.py`
-
----
-
-### 6. Интерфейс
-**Приоритет: Низкий**
-
-- [ ] Тёмная тема для GUI
-- [ ] Компактный режим
-- [ ] Горячие клавиши
-
-**Файлы для изменения:** `tray.py`, `windows.py`
+#### Уведомления (v2.13.0)
+- [ ] Уведомление об ошибках подключения — `tray.py`
+- [ ] Уведомление о низком качестве соединения — по latency
+- [ ] Daily summary — статистика за день
 
 ---
 
 ## 🧹 Технический долг
 
-### ✅ Выполнено (v2.5.2)
-- [x] Вынос статистики в отдельный модуль `proxy/stats.py`
-- [x] Рефакторинг `_show_first_run()` — разбиение на 6 подметодов
-- [x] Унификация обработки ошибок в `_handle_client()` — вынесено в `_handle_client_error()` и `_close_client_writer()`
-
-### ✅ Выполнено (v2.5.3)
-- [x] Поддержка cryptography>=42 (ручная IGE реализация)
-- [x] Исправление RateLimiter.check_connection_limit (проверка whitelist)
-- [x] Удаление дублирования `_human_bytes` (импорт из stats.py)
-- [x] Удаление неиспользуемого `ProxyConfig` TypedDict
-- [x] Рефакторинг закрытия writer в mtproto_proxy (`_close_writer`, `_wait_closed`)
-- [x] Обновление требований: >= вместо == для совместимости
-- [x] Очистка констант: объединение секций MTProto, удаление неиспользуемых
-- [x] Рефакторинг `_edit_config_dialog()` — разбиение на 5 подметодов
-- [x] Удаление дублирования `_human_bytes` в tray.py (импорт из proxy.stats)
-- [x] Очистка импортов в tray.py (socket, asyncio)
-- [x] Упрощение управления автостартом (объединение функций, индикатор в меню)
-- [x] Удаление избыточных алиасов констант в tg_ws_proxy.py
-- [x] Вынесена _pipe_passthrough() для passthrough-трафика
-- [x] Исправлено логирование TimeoutError (WARNING → DEBUG)
-
-### ✅ Выполнено (v2.6.0)
-- [x] Удаление дублирования `_format_bytes` в dashboard.py
-- [x] Удаление избыточных алиасов в tg_ws_proxy.py (_IP_TO_DC, _TG_RANGES)
-- [x] Удаление неиспользуемой константы WSAEPROTONOSUPPORT
-- [x] Упрощение wait_stop() в tg_ws_proxy.py (-7 строк)
-- [x] Упрощение finally в _handle_client (mtproto_proxy.py)
-- [x] Защита от None в _close_writer_safe()
-- [x] Замена time.time() на time.monotonic() в stats.py
-- [x] Thread-safe is_ip_allowed() в RateLimiter
-
 ### Требуется рефакторинг
-- [x] Упростить `_edit_config_dialog()` — выполнен ✅
-- [x] Унифицировать обработку ошибок в `_bridge_ws()` и `_bridge_tcp()` — выполнен ✅
+- [ ] Объединить дублирование в mtproto_proxy.py и tg_ws_proxy.py
+- [ ] Вынести общую логику в базовый класс
+- [ ] Упростить _edit_config_dialog() — ещё больше
 
-### Документация
-- [ ] Обновить README.md с инструкцией для Windows
-- [ ] Добавить скриншоты интерфейса
-- [ ] Примеры конфигурации для разных сценариев
+### Код-качество
+- [ ] Добавить type hints в profiler.py
+- [ ] Увеличить coverage тестов
+- [ ] Пройти mypy без ошибок
+
+### Документация (без запроса не менять)
+- [ ] Скриншоты интерфейса — README.md
+- [ ] Примеры для разных сценариев — уже в README
+- [ ] API docs — автогенерация
 
 ---
 
 ## 📦 Зависимости
 
-### Текущие версии (Python 3.14)
+### Основные
 ```
-cryptography>=42.0.0
-customtkinter>=5.2.2
-Pillow>=10.3.0
-psutil>=5.9.8
+cryptography>=46.0.5
+psutil>=7.2.2
 pystray>=0.19.5
-flask>=3.0.0
-flask-cors>=4.0.0
-rich>=13.7.0
-qrcode>=7.4.2
+customtkinter>=5.2.2
+Pillow>=12.1.1
+flask>=3.1.3
+flask-cors>=6.0.2
+qrcode>=8.2
+rich>=14.3.3
 ```
 
-### Для сборки
+### Разработка
 ```
+pytest>=9.0.2
+pytest-cov>=6.1.1
+pytest-asyncio>=0.26.0
+mypy>=1.19.1
+ruff>=0.15.6
+black>=26.3.1
 pyinstaller>=5.0.0
 ```
 
-### Для разработки
-```
-pytest>=7.4.0
-pytest-cov>=4.1.0
-mypy>=1.5.0
-ruff>=0.1.0
-black>=23.0.0
-```
+---
+
+## 🚀 Roadmap
+
+### v2.11.0 (Следующий)
+- Белый список IP
+- Улучшенная обработка ошибок WS
+- Graceful shutdown
+
+### v2.12.0
+- DNS кэширование
+- TCP connection pooling
+- Integration tests
+
+### v2.13.0
+- Компактный режим
+- Индикатор статуса
+- Smart notifications
 
 ---
 
-## 🚀 Следующий релиз: v2.6.0
+## 🛠 Разработка
 
-**Выполнено:**
-- [x] Вынесена _pipe_passthrough() для passthrough-трафика
-- [x] Исправлено логирование TimeoutError (WARNING → DEBUG)
-- [x] Обновление RELEASE_NOTES.md
-- [x] Улучшение веб-панели управления (добавлена страница настроек)
-- [x] Добавлен экспорт статистики в CSV/JSON
-- [x] Health checks для WebSocket endpoints
-- [x] Тёмная тема для GUI и веб-панели
-- [x] Адаптивный дизайн веб-панели (mobile-friendly)
-- [x] Удаление дублирования `_format_bytes` в dashboard.py (импорт из stats.py)
-- [x] Удаление избыточных алиасов в tg_ws_proxy.py (_IP_TO_DC, _TG_RANGES)
-- [x] Удаление неиспользуемой константы WSAEPROTONOSUPPORT
-- [x] Упрощение wait_stop() в tg_ws_proxy.py
-- [x] Упрощение finally в _handle_client (mtproto_proxy.py)
-- [x] Защита от None в _close_writer_safe()
-- [x] Замена time.time() на time.monotonic() в stats.py
-- [x] Thread-safe is_ip_allowed() в RateLimiter
-
-**План:**
-- [ ] Интеграция toast-уведомлений Windows
-- [ ] Уведомления о подключениях клиентов
-
----
-
-## 📝 Заметки
-
-### Структура проекта
-```
-tg-ws-proxy/
-├── tray.py           # Основное приложение (tray + GUI)
-├── windows.py        # Windows-специфичный код
-├── linux.py          # Linux-специфичный код
-├── macos.py          # macOS-специфичный код (rumps)
-├── proxy/
-│   ├── tg_ws_proxy.py    # Основная логика прокси
-│   ├── mtproto_proxy.py  # MTProto proxy для мобильных
-│   ├── mtproto_config.py # Конфигурация MTProto
-│   ├── stats.py          # Модуль статистики
-│   ├── constants.py      # Константы
-│   ├── dashboard.py      # Консольная панель (TUI)
-│   ├── web_dashboard.py  # Веб-панель (Flask)
-│   └── diagnostics.py    # Диагностика
-├── tests/            # Unit-тесты
-├── requirements.txt  # Зависимости
-└── pyproject.toml    # Метаданные проекта
-```
-
-### Команды для разработки
+### Workflow
 ```bash
-# Запуск в режиме разработки
-python tray.py
+# Dev branch
+git checkout dev
+git pull
 
-# Запуск тестов
+# Сделать изменения
+# ...
+
+# Проверка
+ruff check .
+mypy proxy/ tray.py
 pytest tests/ -v
 
-# Сборка Windows .exe
-pyinstaller packaging/windows.spec
+# Commit
+git add .
+git commit -m "feat: описание"
+git push origin dev
 
-# Проверка типов
-mypy proxy/ tray.py
-
-# Линтинг
-ruff check .
+# После тестов — в main
+git checkout main
+git merge dev
+git push origin main
 ```
 
-### Используемый Python
+### Python
 - **Путь:** `C:\Users\maksi\AppData\Local\Python\bin\python.exe`
 - **Версия:** Python 3.14

@@ -99,6 +99,8 @@ _config: dict = {}
 _exiting: bool = False
 _lock_file_path: Optional[Path] = None
 _dark_theme: bool = False  # Theme toggle state
+_config_save_callback: Optional[Callable] = None  # Keyboard shortcut callback
+_config_cancel_callback: Optional[Callable] = None  # Keyboard shortcut callback
 
 log = logging.getLogger("tg-ws-tray")
 
@@ -774,6 +776,11 @@ def _edit_config_dialog() -> None:
     def on_cancel():
         root.destroy()
 
+    # Store callbacks for keyboard shortcuts
+    global _config_save_callback, _config_cancel_callback
+    _config_save_callback = on_save
+    _config_cancel_callback = on_cancel
+
     _build_config_buttons(frame, on_save, on_cancel)
 
     root.mainloop()
@@ -797,10 +804,28 @@ def _create_config_window() -> "ctk.CTk":
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-    
+
     # Apply theme colors
     bg_color = UI_BG_DARK if _dark_theme else UI_BG
     root.configure(fg_color=bg_color)
+    
+    # Add keyboard shortcuts
+    def on_ctrl_r(event=None):
+        """Ctrl+R: Save and restart."""
+        if _config_save_callback:
+            _config_save_callback()
+
+    def on_ctrl_q(event=None):
+        """Ctrl+Q: Cancel and close."""
+        if _config_cancel_callback:
+            _config_cancel_callback()
+        else:
+            root.destroy()
+
+    root.bind('<Control-r>', on_ctrl_r)
+    root.bind('<Control-q>', on_ctrl_q)
+    root.bind('<Escape>', lambda e: root.destroy())
+
     return root
 
 
