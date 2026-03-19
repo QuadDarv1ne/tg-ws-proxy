@@ -9,9 +9,13 @@ import pytest
 from proxy.stats import Stats
 from proxy.tg_ws_proxy import (
     ProxyServer,
+    _check_ws_domain_available,
+    _check_ws_domains_available,
     _clear_dns_cache,
     _dns_cache,
     _get_tcp_pool,
+    _measure_all_dc_pings,
+    _measure_dc_ping,
     _resolve_domain_cached,
     _TcpPool,
     _WsPool,
@@ -288,3 +292,100 @@ class TestProxyServerAuth:
 
         # ip_whitelist is converted to set
         assert server.ip_whitelist == {"192.168.1.1", "10.0.0.1"}
+
+
+class TestCheckWsDomainAvailable:
+    """Tests for _check_ws_domain_available function."""
+
+    @pytest.mark.asyncio
+    async def test_domain_available(self):
+        """Test domain availability check with successful resolution."""
+        with patch('proxy.tg_ws_proxy._resolve_domain_cached') as mock_resolve:
+            mock_resolve.return_value = [("149.154.167.220", 443)]
+
+            is_available, error = await _check_ws_domain_available(2)
+
+            assert is_available is True
+            assert error is None
+
+    @pytest.mark.asyncio
+    async def test_domain_not_available(self):
+        """Test domain availability check with failed resolution."""
+        with patch('proxy.tg_ws_proxy._resolve_domain_cached') as mock_resolve:
+            mock_resolve.return_value = []
+
+            is_available, error = await _check_ws_domain_available(2)
+
+            assert is_available is False
+            assert error is not None
+
+
+class TestCheckWsDomainsAvailable:
+    """Tests for _check_ws_domains_available function."""
+
+    @pytest.mark.asyncio
+    async def test_multiple_dcs(self):
+        """Test domain check for multiple DCs."""
+        dc_opt = {2: "149.154.167.220", 4: "149.154.167.220"}
+
+        with patch('proxy.tg_ws_proxy._check_ws_domain_available') as mock_check:
+            mock_check.return_value = (True, None)
+
+            results = await _check_ws_domains_available(dc_opt)
+
+            assert 2 in results
+            assert 4 in results
+            assert results[2][0] is True
+            assert results[4][0] is True
+
+
+class TestMeasureDcPing:
+    """Tests for _measure_dc_ping function."""
+
+    @pytest.mark.asyncio
+    async def test_ping_success(self):
+        """Test successful ping measurement."""
+        mock_reader = MagicMock()
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        with patch('asyncio.open_connection') as mock_open:
+            mock_open.return_value = (mock_reader, mock_writer)
+
+            latency, error = await _measure_dc_ping(2)
+
+            assert latency is not None
+            assert latency > 0
+            assert error is None
+            mock_writer.close.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_ping_timeout(self):
+        """Test ping timeout."""
+        with patch('asyncio.open_connection') as mock_open:
+            mock_open.side_effect = asyncio.TimeoutError()
+
+            latency, error = await _measure_dc_ping(2, timeout=0.1)
+
+            assert latency is None
+            assert error is not None
+
+
+class TestMeasureAllDcPings:
+    """Tests for _measure_all_dc_pings function."""
+
+    @pytest.mark.asyncio
+    async def test_measure_multiple_dcs(self):
+        """Test ping measurement for multiple DCs."""
+        dc_opt = {2: "149.154.167.220", 4: "149.154.167.220"}
+
+        with patch('proxy.tg_ws_proxy._measure_dc_ping') as mock_ping:
+            mock_ping.return_value = (10.5, None)
+
+            results = await _measure_all_dc_pings(dc_opt)
+
+            assert 2 in results
+            assert 4 in results
+            assert results[2] == 10.5
+            assert results[4] == 10.5
