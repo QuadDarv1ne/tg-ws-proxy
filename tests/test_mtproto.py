@@ -223,6 +223,8 @@ class TestMTProtoProxyIntegration:
 
     async def test_proxy_start_stop(self):
         """Test proxy can start and stop."""
+        import time
+        
         secret = generate_secret()
         proxy = MTProtoProxy(
             secrets=[secret],
@@ -230,22 +232,14 @@ class TestMTProtoProxyIntegration:
             port=0,  # Let OS choose port
         )
 
-        # Start server
-        server_task = asyncio.create_task(proxy.start())
+        # Start server (synchronous now)
+        proxy.start()
 
         # Give it time to start
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.2)
 
         # Stop server
-        proxy._server.close()
-        await proxy._server.wait_closed()
-
-        # Cancel the task
-        server_task.cancel()
-        try:
-            await server_task
-        except asyncio.CancelledError:
-            pass
+        proxy.stop()
 
     async def test_multiple_secrets(self):
         """Test proxy with multiple secrets."""
