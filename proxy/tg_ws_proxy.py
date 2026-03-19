@@ -1192,14 +1192,7 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
         async def wait_stop():
             await stop_event.wait()
             server.close()
-            me = asyncio.current_task()
-            for task in list(asyncio.all_tasks()):
-                if task is not me:
-                    task.cancel()
-            try:
-                await server.wait_closed()
-            except asyncio.CancelledError:
-                pass
+            await server.wait_closed()
         asyncio.create_task(wait_stop())
 
     async with server:
