@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Dict, List, Optional, Tuple
 
 import psutil
 
@@ -56,16 +55,16 @@ class Stats:
         self.pool_misses = 0
 
         # DC statistics
-        self.dc_stats: Dict[int, Dict[str, int]] = {}  # dc_id -> {connections, errors}
-        self._current_dc: Optional[int] = None
+        self.dc_stats: dict[int, dict[str, int]] = {}  # dc_id -> {connections, errors}
+        self._current_dc: int | None = None
 
         # Latency tracking (last ping per DC)
-        self.latency_ms: Dict[int, float] = {}  # dc_id -> latency in ms
-        self._latency_history: Dict[int, List[float]] = {}  # dc_id -> [latencies]
+        self.latency_ms: dict[int, float] = {}  # dc_id -> latency in ms
+        self._latency_history: dict[int, list[float]] = {}  # dc_id -> [latencies]
 
         # Session tracking
         self.session_start = time.monotonic()
-        self.last_connection_time: Optional[float] = None
+        self.last_connection_time: float | None = None
         self.peak_connections_per_minute = 0
 
         # Performance monitoring
@@ -73,17 +72,17 @@ class Stats:
         self.cpu_percent = 0.0
         self.memory_bytes = 0
         self._last_cpu_update = 0.0
-        self._cpu_history: List[float] = []
-        self._memory_history: List[int] = []
+        self._cpu_history: list[float] = []
+        self._memory_history: list[int] = []
 
         # History tracking (last N events)
         self._history_size = history_size
-        self.connection_history: List[dict] = []
-        self.traffic_history: List[dict] = []
+        self.connection_history: list[dict] = []
+        self.traffic_history: list[dict] = []
         self._last_traffic_snapshot = (0, 0)
         self._traffic_snapshot_time = time.monotonic()
 
-    def add_connection(self, conn_type: str, dc: Optional[int] = None) -> None:
+    def add_connection(self, conn_type: str, dc: int | None = None) -> None:
         """Record a new connection in history."""
         self.connections_total += 1
         self.last_connection_time = time.monotonic()
@@ -131,7 +130,7 @@ class Stats:
                 self.traffic_history.pop(0)
             self._traffic_snapshot_time = now
 
-    def add_ws_error(self, dc: Optional[int] = None) -> None:
+    def add_ws_error(self, dc: int | None = None) -> None:
         """Record a WebSocket error."""
         self.ws_errors += 1
         if dc is not None and dc in self.dc_stats:
@@ -168,19 +167,19 @@ class Stats:
             except Exception:
                 pass
 
-    def get_average_cpu(self) -> Optional[float]:
+    def get_average_cpu(self) -> float | None:
         """Get average CPU usage over the last minute."""
         if not self._cpu_history:
             return None
         return sum(self._cpu_history) / len(self._cpu_history)
 
-    def get_average_memory(self) -> Optional[int]:
+    def get_average_memory(self) -> int | None:
         """Get average memory usage over the last minute."""
         if not self._memory_history:
             return None
         return int(sum(self._memory_history) / len(self._memory_history))
 
-    def get_performance_stats(self) -> Dict:
+    def get_performance_stats(self) -> dict:
         """Get current performance statistics."""
         self.update_performance_metrics()
         return {
@@ -192,7 +191,7 @@ class Stats:
             "avg_memory_mb": (self.get_average_memory() or 0) / (1024 * 1024),
         }
 
-    def get_average_latency(self, dc: int) -> Optional[float]:
+    def get_average_latency(self, dc: int) -> float | None:
         """Get average latency for a DC."""
         if dc not in self._latency_history or not self._latency_history[dc]:
             return None
@@ -207,7 +206,7 @@ class Stats:
         recent = [c for c in self.connection_history if c['time'] > minute_ago]
         return len(recent)
 
-    def get_traffic_per_minute(self) -> Tuple[int, int]:
+    def get_traffic_per_minute(self) -> tuple[int, int]:
         """Calculate bytes per minute (up, down) from history."""
         if not self.traffic_history:
             return (0, 0)
@@ -220,7 +219,7 @@ class Stats:
         down = sum(t['bytes_down'] for t in recent)
         return (up, down)
 
-    def get_traffic_history(self, limit: int = 60) -> List[Dict]:
+    def get_traffic_history(self, limit: int = 60) -> list[dict]:
         """Get traffic history for chart rendering."""
         if not self.traffic_history:
             return []
@@ -230,13 +229,13 @@ class Stats:
         """Get session duration in seconds."""
         return time.monotonic() - self.session_start
 
-    def get_best_dc(self) -> Optional[int]:
+    def get_best_dc(self) -> int | None:
         """Get DC with lowest average latency."""
         if not self.latency_ms:
             return None
         return min(self.latency_ms, key=self.latency_ms.get)
 
-    def get_dc_stats(self) -> Dict[int, Dict]:
+    def get_dc_stats(self) -> dict[int, dict]:
         """Get statistics per DC."""
         result = {}
         for dc, stats in self.dc_stats.items():

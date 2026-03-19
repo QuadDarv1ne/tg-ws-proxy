@@ -10,7 +10,6 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 log = logging.getLogger('tg-mtproto-config')
 
@@ -25,14 +24,14 @@ class MTProtoConfig:
     dc_id: int = 2  # Telegram DC ID (1-5)
 
     # Secrets
-    secrets: List[str] = field(default_factory=list)
+    secrets: list[str] = field(default_factory=list)
 
     # Auto-rotation
     auto_rotate: bool = False
     rotate_days: int = 7
 
     # Traffic limits
-    traffic_limit_gb: Optional[float] = None
+    traffic_limit_gb: float | None = None
 
     # Rate limiting
     rate_limit_enabled: bool = False
@@ -40,12 +39,12 @@ class MTProtoConfig:
     rate_limit_mbps: float = 10.0
 
     # IP filtering
-    ip_whitelist: Optional[List[str]] = None
-    ip_blacklist: Optional[List[str]] = None
+    ip_whitelist: list[str] | None = None
+    ip_blacklist: list[str] | None = None
 
     # QR code
     generate_qr: bool = False
-    qr_output: Optional[str] = None
+    qr_output: str | None = None
 
     # Logging
     verbose: bool = False
@@ -75,7 +74,7 @@ class MTProtoConfig:
         """Convert config to dictionary."""
         return asdict(self)
 
-    def to_cli_args(self) -> List[str]:
+    def to_cli_args(self) -> list[str]:
         """Convert config to CLI arguments list."""
         args = []
 
@@ -126,10 +125,10 @@ class MTProtoConfig:
 def load_config(config_path: str = "mtproto_config.json") -> MTProtoConfig:
     """
     Load configuration from JSON file.
-    
+
     Args:
         config_path: Path to configuration file.
-    
+
     Returns:
         MTProtoConfig object.
     """
@@ -158,11 +157,11 @@ def load_config(config_path: str = "mtproto_config.json") -> MTProtoConfig:
 def save_config(config: MTProtoConfig, config_path: str = "mtproto_config.json") -> bool:
     """
     Save configuration to JSON file.
-    
+
     Args:
         config: MTProtoConfig object.
         config_path: Path to configuration file.
-    
+
     Returns:
         True if saved successfully.
     """

@@ -13,7 +13,7 @@ import os
 import threading
 import time
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable
 
 try:
     from flask import Flask, Response, jsonify, render_template_string, request
@@ -536,7 +536,7 @@ DASHBOARD_HTML = """
                     <button type="submit" class="btn btn-success">💾 Сохранить</button>
                 </form>
             </div>
-            
+
             <div class="section">
                 <h2>📱 QR-код для Telegram Mobile</h2>
                 <p style="margin-bottom: 15px; color: var(--text-secondary);">
@@ -649,7 +649,7 @@ DASHBOARD_HTML = """
             try {
                 const response = await fetch('/api/dc-stats');
                 const data = await response.json();
-                
+
                 const dcTable = document.getElementById('dcTable');
                 if (data.dc_stats && data.dc_stats.length > 0) {
                     dcTable.innerHTML = data.dc_stats.map(dc => `
@@ -687,7 +687,7 @@ DASHBOARD_HTML = """
 
         async function saveConfig(event) {
             event.preventDefault();
-            
+
             const config = {
                 host: document.getElementById('proxyHost').value,
                 port: parseInt(document.getElementById('proxyPort').value),
@@ -701,10 +701,10 @@ DASHBOARD_HTML = """
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(config),
                 });
-                
+
                 const result = await response.json();
                 const alertDiv = document.getElementById('configAlert');
-                
+
                 if (response.ok && result.status === 'success') {
                     alertDiv.innerHTML = '<div class="alert alert-success">✅ Настройки успешно сохранены!</div>';
                     setTimeout(() => alertDiv.innerHTML = '', 5000);
@@ -752,7 +752,7 @@ DASHBOARD_HTML = """
 
                 let dcStatus = '';
                 if (data.dc_health && data.dc_health.length > 0) {
-                    dcStatus = '\\n\\nDC Status:\\n' + data.dc_health.map(dc => 
+                    dcStatus = '\\n\\nDC Status:\\n' + data.dc_health.map(dc =>
                         `  DC${dc.dc_id}: ${dc.status === 'ok' ? '✓' : dc.status === 'degraded' ? '⚠' : '✗'} (${dc.error_rate_percent}% errors)`
                     ).join('\\n');
                 }
@@ -814,48 +814,48 @@ DASHBOARD_HTML = """
 
         async function loadLiveLogs() {
             if (!logsAutoRefresh) return;
-            
+
             try {
                 const response = await fetch('/api/stats');
                 const data = await response.json();
                 const logsContainer = document.getElementById('liveLogs');
-                
+
                 // Get connection history from stats
                 const history = data.connection_history || [];
                 const newLogs = history.filter(log => log.time > lastLogTime);
-                
+
                 if (newLogs.length > 0) {
                     newLogs.sort((a, b) => a.time - b.time);
-                    
+
                     for (const log of newLogs) {
                         const time = new Date((log.time % 3600) * 1000).toISOString().substr(14, 8);
                         const type = log.type || 'unknown';
                         const dc = log.dc ? `DC${log.dc}` : '-';
-                        
+
                         let icon = '🔌';
                         let color = 'var(--text-primary)';
-                        
+
                         if (type === 'ws') { icon = '🟢'; color = '#48bb78'; }
                         else if (type === 'tcp_fallback') { icon = '🟡'; color = '#ed8936'; }
                         else if (type === 'http_rejected') { icon = '🔴'; color = '#f56565'; }
                         else if (type === 'passthrough') { icon = '🔵'; color = '#4299e1'; }
-                        
+
                         const logEntry = `[${time}] ${icon} ${type.toUpperCase().padEnd(15)} ${dc.padEnd(6)}`;
-                        
+
                         const div = document.createElement('div');
                         div.textContent = logEntry;
                         div.style.color = color;
                         div.style.padding = '4px 0';
                         div.style.borderBottom = '1px solid var(--border-color)';
                         logsContainer.appendChild(div);
-                        
+
                         lastLogTime = log.time;
                     }
-                    
+
                     // Auto-scroll to bottom
                     logsContainer.scrollTop = logsContainer.scrollHeight;
                     updateLogCount(logsContainer.children.length);
-                } else if (logsContainer.children.length === 0 || 
+                } else if (logsContainer.children.length === 0 ||
                           (logsContainer.children.length === 1 && logsContainer.children[0].textContent.includes('Загрузка'))) {
                     logsContainer.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет новых подключений</div>';
                     updateLogCount(0);
@@ -955,7 +955,7 @@ class WebDashboard:
     def __init__(
         self,
         get_stats_callback: Callable[[], dict],
-        update_config_callback: Optional[Callable[[dict], bool]] = None,
+        update_config_callback: Callable[[dict], bool] | None = None,
         host: str = "127.0.0.1",
         port: int = 5000,
         debug: bool = False,
@@ -976,7 +976,7 @@ class WebDashboard:
         CORS(self.app)
 
         self._setup_routes()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     def _setup_routes(self):
         """Setup Flask routes."""
@@ -1062,7 +1062,6 @@ class WebDashboard:
             """Generate QR code for Telegram Mobile configuration."""
             try:
                 import qrcode
-                from PIL import Image
 
                 stats = self.get_stats()
                 host = stats.get('host', '127.0.0.1')
@@ -1199,7 +1198,7 @@ class WebDashboard:
 
 def run_dashboard(
     get_stats_callback: Callable[[], dict],
-    update_config_callback: Optional[Callable[[dict], bool]] = None,
+    update_config_callback: Callable[[dict], bool] | None = None,
     host: str = "127.0.0.1",
     port: int = 5000,
     open_browser: bool = True,

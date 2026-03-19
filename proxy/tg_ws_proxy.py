@@ -10,7 +10,6 @@ import ssl
 import struct
 import sys
 import time
-from typing import Dict, List, Optional, Set, Tuple
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -44,19 +43,19 @@ _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
 
 # DNS cache: {domain: [(ip, expiry_time), ...]}
-_dns_cache: Dict[str, List[Tuple[str, float]]] = {}
+_dns_cache: dict[str, list[tuple[str, float]]] = {}
 _dns_cache_ttl = 300.0  # 5 minutes default TTL
 
 
-async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 5.0) -> List[Tuple[str, int]]:
+async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 5.0) -> list[tuple[str, int]]:
     """
     Resolve domain with caching.
-    
+
     Args:
         domain: Domain name to resolve
         port: Target port
         timeout: Resolution timeout
-        
+
     Returns:
         List of (ip, port) tuples
     """
@@ -79,7 +78,7 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
         results = await loop.getaddrinfo(domain, port, family=_socket.AF_INET, type=_socket.SOCK_STREAM)
 
         # Extract unique IPs
-        ips = list(set(r[4][0] for r in results))
+        ips = list({r[4][0] for r in results})
         expiry = now + _dns_cache_ttl
 
         # Update cache
@@ -98,7 +97,7 @@ def _clear_dns_cache() -> None:
     log.info("DNS cache cleared")
 
 
-async def _check_ws_domain_available(dc_id: int, timeout: float = 5.0) -> Tuple[bool, Optional[str]]:
+async def _check_ws_domain_available(dc_id: int, timeout: float = 5.0) -> tuple[bool, str | None]:
     """
     Check if WebSocket domain for a DC is available.
 
@@ -127,7 +126,7 @@ async def _check_ws_domain_available(dc_id: int, timeout: float = 5.0) -> Tuple[
     return True, None
 
 
-async def _check_ws_domains_available(dc_opt: Dict[int, Optional[str]], timeout: float = 5.0) -> Dict[int, Tuple[bool, Optional[str]]]:
+async def _check_ws_domains_available(dc_opt: dict[int, str | None], timeout: float = 5.0) -> dict[int, tuple[bool, str | None]]:
     """
     Check WebSocket domains for all configured DCs.
 
@@ -145,10 +144,10 @@ async def _check_ws_domains_available(dc_opt: Dict[int, Optional[str]], timeout:
     return results
 
 
-async def _measure_dc_ping(dc_id: int, timeout: float = 5.0) -> Tuple[Optional[float], Optional[str]]:
+async def _measure_dc_ping(dc_id: int, timeout: float = 5.0) -> tuple[float | None, str | None]:
     """
     Measure ping (latency) to a DC by attempting TCP connection to WebSocket domain.
-    
+
     Returns:
         Tuple of (latency_ms, error_message)
         latency_ms is None if connection failed
@@ -182,10 +181,10 @@ async def _measure_dc_ping(dc_id: int, timeout: float = 5.0) -> Tuple[Optional[f
         return None, str(e)
 
 
-async def _measure_all_dc_pings(dc_opt: Dict[int, Optional[str]], timeout: float = 5.0) -> Dict[int, float]:
+async def _measure_all_dc_pings(dc_opt: dict[int, str | None], timeout: float = 5.0) -> dict[int, float]:
     """
     Measure ping to all configured DCs and return results.
-    
+
     Returns:
         Dict mapping dc_id -> latency_ms (only successful measurements)
     """
@@ -244,7 +243,7 @@ async def _cancel_tasks(tasks) -> None:
 class ProxyServer:
     """
     Main proxy server class that encapsulates all global state.
-    
+
     This class manages:
     - DC configuration and routing
     - WebSocket connection pool
@@ -252,9 +251,9 @@ class ProxyServer:
     - Client connection handling
     """
 
-    def __init__(self, dc_opt: Dict[int, Optional[str]], host: str = '127.0.0.1', port: int = DEFAULT_PORT,
-                 auth_required: bool = False, auth_credentials: Optional[Dict[str, str]] = None,
-                 ip_whitelist: Optional[List[str]] = None):
+    def __init__(self, dc_opt: dict[int, str | None], host: str = '127.0.0.1', port: int = DEFAULT_PORT,
+                 auth_required: bool = False, auth_credentials: dict[str, str] | None = None,
+                 ip_whitelist: list[str] | None = None):
         self.dc_opt = dc_opt
         self.host = host
         self.port = port
@@ -265,13 +264,13 @@ class ProxyServer:
         # DCs where WS is known to fail (302 redirect)
         # Raw TCP fallback will be used instead
         # Keyed by (dc, is_media)
-        self.ws_blacklist: Set[Tuple[int, bool]] = set()
+        self.ws_blacklist: set[tuple[int, bool]] = set()
 
         # Rate-limit re-attempts per (dc, is_media)
-        self.dc_fail_until: Dict[Tuple[int, bool], float] = {}
+        self.dc_fail_until: dict[tuple[int, bool], float] = {}
 
         # Consecutive error count for exponential backoff
-        self.dc_error_count: Dict[Tuple[int, bool], int] = {}
+        self.dc_error_count: dict[tuple[int, bool], int] = {}
 
         # Statistics
         self.stats = Stats()
@@ -280,10 +279,10 @@ class ProxyServer:
         self.ws_pool = _WsPool(self.stats)
 
         # Server instance for graceful shutdown
-        self._server_instance: Optional[asyncio.Server] = None
-        self._server_stop_event: Optional[asyncio.Event] = None
+        self._server_instance: asyncio.Server | None = None
+        self._server_stop_event: asyncio.Event | None = None
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """Get current proxy statistics."""
         return self.stats.to_dict()
 
@@ -432,7 +431,7 @@ class RawWebSocket:
         self.writer.write(frame)
         await self.writer.drain()
 
-    async def send_batch(self, parts: List[bytes]):
+    async def send_batch(self, parts: list[bytes]):
         """Send multiple binary frames with a single drain (less overhead)."""
         if self._closed:
             raise ConnectionError("WebSocket closed")
@@ -441,7 +440,7 @@ class RawWebSocket:
             self.writer.write(frame)
         await self.writer.drain()
 
-    async def recv(self) -> Optional[bytes]:
+    async def recv(self) -> bytes | None:
         """
         Receive the next data frame.  Handles ping/pong/close
         internally.  Returns payload bytes, or None on clean close.
@@ -523,7 +522,7 @@ class RawWebSocket:
             return bytes(header) + _xor_mask(data, mask_key)
         return bytes(header) + data
 
-    async def _read_frame(self) -> Tuple[int, bytes]:
+    async def _read_frame(self) -> tuple[int, bytes]:
         hdr = await self.reader.readexactly(2)
         opcode = hdr[0] & 0x0F
         is_masked = bool(hdr[1] & 0x80)
@@ -558,7 +557,7 @@ def _is_http_transport(data: bytes) -> bool:
             data[:5] == b'HEAD ' or data[:8] == b'OPTIONS ')
 
 
-def _dc_from_init(data: bytes) -> Tuple[Optional[int], bool]:
+def _dc_from_init(data: bytes) -> tuple[int | None, bool]:
     """
     Extract DC ID from the 64-byte MTProto obfuscation init packet.
     Returns (dc_id, is_media).
@@ -633,7 +632,7 @@ class _MsgSplitter:
         self._dec = cipher.encryptor()
         self._dec.update(b'\x00' * 64)  # skip init packet
 
-    def split(self, chunk: bytes) -> List[bytes]:
+    def split(self, chunk: bytes) -> list[bytes]:
         """Decrypt to find message boundaries, return split ciphertext."""
         plain = self._dec.update(chunk)
         boundaries = []
@@ -666,14 +665,14 @@ class _MsgSplitter:
         return parts
 
 
-def _ws_domains(dc: int, is_media: Optional[bool]) -> List[str]:
+def _ws_domains(dc: int, is_media: bool | None) -> list[str]:
     if is_media is None or is_media:
         return [f'kws{dc}-1.web.telegram.org', f'kws{dc}.web.telegram.org']
     return [f'kws{dc}.web.telegram.org', f'kws{dc}-1.web.telegram.org']
 
 
 # Global instance for backward compatibility
-_server_instance: Optional[ProxyServer] = None
+_server_instance: ProxyServer | None = None
 
 # Callback for client connection notifications
 _on_client_connect_callback = None
@@ -685,7 +684,7 @@ def set_on_client_connect_callback(callback) -> None:
     _on_client_connect_callback = callback
 
 
-def get_stats() -> Dict:
+def get_stats() -> dict:
     """Get current proxy statistics (backward compatibility)."""
     global _server_instance
     if _server_instance:
@@ -701,7 +700,7 @@ def get_stats_summary() -> str:
     return Stats().summary()
 
 
-def get_dns_cache_info() -> Dict:
+def get_dns_cache_info() -> dict:
     """Get DNS cache statistics."""
     now = time.monotonic()
     stats = {
@@ -726,8 +725,8 @@ def clear_dns_cache() -> None:
 class _WsPool:
     def __init__(self, stats: Stats):
         self.stats = stats
-        self._idle: Dict[Tuple[int, bool], list] = {}
-        self._refilling: Set[Tuple[int, bool]] = set()
+        self._idle: dict[tuple[int, bool], list] = {}
+        self._refilling: set[tuple[int, bool]] = set()
 
         # Dynamic pool sizing
         self._pool_size = WS_POOL_SIZE  # Current dynamic pool size
@@ -738,8 +737,8 @@ class _WsPool:
         self._last_optimization = 0.0
 
     async def get(self, dc: int, is_media: bool,
-                  target_ip: str, domains: List[str]
-                  ) -> Optional[RawWebSocket]:
+                  target_ip: str, domains: list[str]
+                  ) -> RawWebSocket | None:
         key = (dc, is_media)
         now = time.monotonic()
 
@@ -760,7 +759,7 @@ class _WsPool:
         self._schedule_refill(key, target_ip, domains)
         return None
 
-    def _can_add_to_pool(self, key: Tuple[int, bool]) -> bool:
+    def _can_add_to_pool(self, key: tuple[int, bool]) -> bool:
         """Check if pool can accept more connections."""
         bucket = self._idle.get(key, [])
         return len(bucket) < self._pool_max_size
@@ -799,7 +798,7 @@ class _WsPool:
     def _optimize_pool_size(self) -> None:
         """
         Dynamically adjust pool size based on hit/miss ratio.
-        
+
         Strategy:
         - If miss rate > 30%: increase pool size (up to max)
         - If miss rate < 5% and pool usage < 50%: decrease pool size
@@ -812,7 +811,7 @@ class _WsPool:
         if total == 0:
             return
 
-        miss_rate = self.stats.pool_misses / total
+        self.stats.pool_misses / total
 
         # Calculate change in hits/misses since last check
         delta_hits = self.stats.pool_hits - self._last_hit_count
@@ -841,7 +840,7 @@ class _WsPool:
         self._last_optimization = now
 
     @staticmethod
-    async def _connect_one(target_ip, domains) -> Optional[RawWebSocket]:
+    async def _connect_one(target_ip, domains) -> RawWebSocket | None:
         for domain in domains:
             try:
                 ws = await RawWebSocket.connect(
@@ -862,7 +861,7 @@ class _WsPool:
         except Exception:
             pass
 
-    async def warmup(self, dc_opt: Dict[int, Optional[str]]):
+    async def warmup(self, dc_opt: dict[int, str | None]):
         """Pre-fill pool for all configured DCs on startup."""
         for dc, target_ip in dc_opt.items():
             if target_ip is None:
@@ -884,9 +883,9 @@ class _TcpPool:
         self.stats = stats
         self.max_size = max_size
         self.max_age = max_age
-        self._idle: Dict[str, list] = {}  # key: "host:port" -> [(reader, writer, created)]
+        self._idle: dict[str, list] = {}  # key: "host:port" -> [(reader, writer, created)]
 
-    async def get(self, host: str, port: int) -> Optional[Tuple]:
+    async def get(self, host: str, port: int) -> tuple | None:
         """Get a cached TCP connection or None."""
         key = f"{host}:{port}"
         now = time.monotonic()
@@ -936,7 +935,7 @@ class _TcpPool:
 
     def clear(self) -> None:
         """Clear all pooled connections (called on shutdown)."""
-        for key, bucket in self._idle.items():
+        for _key, bucket in self._idle.items():
             for _, writer, _ in bucket:
                 asyncio.create_task(self._close_one(writer))
         self._idle.clear()
@@ -944,7 +943,7 @@ class _TcpPool:
 
 
 # Global TCP pool instance
-_tcp_pool: Optional[_TcpPool] = None
+_tcp_pool: _TcpPool | None = None
 
 
 async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
@@ -1104,7 +1103,7 @@ def _socks5_reply(status):
 
 
 async def _tcp_fallback(reader, writer, dst, port, init, label,
-                        dc=None, is_media=False):
+                        dc=None, is_media=False, stats=None):
     """
     Fall back to direct TCP to the original DC IP.
     Uses connection pooling to reduce latency.
@@ -1131,11 +1130,13 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
                         label, dst, port, exc)
             return False
 
-    stats.add_connection('tcp_fallback', dc=dc)
+    if stats:
+        stats.add_connection('tcp_fallback', dc=dc)
     rw.write(init)
     await rw.drain()
-    await _bridge_tcp(reader, writer, rr, rw, label, stats,
-                      dc=dc, dst=dst, port=port, is_media=is_media)
+    if stats:
+        await _bridge_tcp(reader, writer, rr, rw, label, stats,
+                          dc=dc, dst=dst, port=port, is_media=is_media)
 
     # Return connection to pool if still valid
     if _tcp_pool and rw and not rw.is_closing():
@@ -1150,12 +1151,13 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
     return True
 
 
-async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optional[str]],
-                         ws_pool: _WsPool, ws_blacklist: Set[Tuple[int, bool]],
-                         dc_fail_until: Dict[Tuple[int, bool], float],
+async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | None],
+                         ws_pool: _WsPool, ws_blacklist: set[tuple[int, bool]],
+                         dc_fail_until: dict[tuple[int, bool], float],
                          auth_required: bool = False,
-                         auth_credentials: Optional[Dict[str, str]] = None,
-                         ip_whitelist: Optional[Set[str]] = None):
+                         auth_credentials: dict[str, str] | None = None,
+                         ip_whitelist: set[str] | None = None,
+                         dc_error_count: dict | None = None):
     peer = writer.get_extra_info('peername')
     client_ip = peer[0] if peer else "unknown"
     client_port = peer[1] if peer else 0
@@ -1405,16 +1407,22 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
                     label, dc, media_tag)
             elif ws_failed_redirect:
                 # Exponential backoff: base cooldown * 2^(error_count-1)
-                error_count = server_instance.dc_error_count.get(dc_key, 0) + 1
-                server_instance.dc_error_count[dc_key] = error_count
+                if dc_error_count is not None:
+                    error_count = dc_error_count.get(dc_key, 0) + 1
+                    dc_error_count[dc_key] = error_count
+                else:
+                    error_count = 1
                 backoff_multiplier = 2 ** (error_count - 1)
                 dc_fail_until[dc_key] = now + (DC_FAIL_COOLDOWN * backoff_multiplier)
                 log.info("%s DC%d%s WS cooldown for %ds (attempt #%d)",
                          label, dc, media_tag, int(DC_FAIL_COOLDOWN * backoff_multiplier), error_count)
             else:
                 # Increment error count for non-redirect failures too
-                error_count = server_instance.dc_error_count.get(dc_key, 0) + 1
-                server_instance.dc_error_count[dc_key] = error_count
+                if dc_error_count is not None:
+                    error_count = dc_error_count.get(dc_key, 0) + 1
+                    dc_error_count[dc_key] = error_count
+                else:
+                    error_count = 1
                 backoff_multiplier = min(2 ** (error_count - 1), 8)  # Cap at 8x
                 dc_fail_until[dc_key] = now + (DC_FAIL_COOLDOWN * backoff_multiplier)
                 log.info("%s DC%d%s WS cooldown for %ds (attempt #%d)",
@@ -1431,7 +1439,8 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
 
         # -- WS success --
         # Reset error count on successful connection
-        server_instance.dc_error_count.pop(dc_key, None)
+        if dc_error_count is not None:
+            dc_error_count.pop(dc_key, None)
         dc_fail_until.pop(dc_key, None)
         stats.add_connection('ws', dc=dc)
 
@@ -1489,12 +1498,12 @@ def _close_client_writer(writer) -> None:
         pass
 
 
-async def _run(port: int, dc_opt: Dict[int, Optional[str]],
-               stop_event: Optional[asyncio.Event] = None,
+async def _run(port: int, dc_opt: dict[int, str | None],
+               stop_event: asyncio.Event | None = None,
                host: str = '127.0.0.1',
                auth_required: bool = False,
-               auth_credentials: Optional[Dict[str, str]] = None,
-               ip_whitelist: Optional[List[str]] = None):
+               auth_credentials: dict[str, str] | None = None,
+               ip_whitelist: list[str] | None = None):
     global _server_instance
 
     # Create proxy server instance with encapsulated state
@@ -1512,7 +1521,8 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
             dc_fail_until=server_instance.dc_fail_until,
             auth_required=server_instance.auth_required,
             auth_credentials=server_instance.auth_credentials,
-            ip_whitelist=server_instance.ip_whitelist
+            ip_whitelist=server_instance.ip_whitelist,
+            dc_error_count=server_instance.dc_error_count
         )
 
     server = await asyncio.start_server(
@@ -1664,20 +1674,20 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
     _server_instance = None
 
 
-def parse_dc_ip_list(dc_ip_list: List[str]) -> Dict[int, str]:
+def parse_dc_ip_list(dc_ip_list: list[str]) -> dict[int, str]:
     """
     Parse list of 'DC:IP' strings into {dc: ip} dict.
-    
+
     Args:
         dc_ip_list: List of strings in format 'DC:IP' (e.g., ['2:149.154.167.220'])
-    
+
     Returns:
         Dictionary mapping DC IDs to IP addresses
-    
+
     Raises:
         ValueError: If any entry has invalid format
     """
-    dc_opt: Dict[int, str] = {}
+    dc_opt: dict[int, str] = {}
     for entry in dc_ip_list:
         if ':' not in entry:
             raise ValueError(f"Invalid --dc-ip format {entry!r}, expected DC:IP")
@@ -1685,19 +1695,19 @@ def parse_dc_ip_list(dc_ip_list: List[str]) -> Dict[int, str]:
         try:
             dc_n = int(dc_s)
             _socket.inet_aton(ip_s)
-        except (ValueError, OSError):
-            raise ValueError(f"Invalid --dc-ip {entry!r}")
+        except (ValueError, OSError) as exc:
+            raise ValueError(f"Invalid --dc-ip {entry!r}") from exc
         dc_opt[dc_n] = ip_s
     return dc_opt
 
 
 def run_proxy(
     port: int,
-    dc_opt: Dict[int, str],
-    stop_event: Optional[asyncio.Event] = None,
+    dc_opt: dict[int, str],
+    stop_event: asyncio.Event | None = None,
     host: str = '127.0.0.1',
     auth_required: bool = False,
-    auth_credentials: Optional[Dict[str, str]] = None
+    auth_credentials: dict[str, str] | None = None
 ) -> None:
     """
     Run the proxy server (blocking).

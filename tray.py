@@ -18,9 +18,36 @@ import time
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable
 
 import psutil
+
+# Import proxy modules early
+import proxy.tg_ws_proxy as tg_ws_proxy
+from proxy.constants import (
+    APP_DIR_NAME,
+    APP_NAME,
+    CONFIG_FILE_NAME,
+    DEFAULT_CONFIG,
+    FIRST_RUN_MARKER_NAME,
+    IPV6_WARN_MARKER_NAME,
+    LOG_FILE_NAME,
+    TG_BLUE,
+    TG_BLUE_HOVER,
+    UI_BG,
+    UI_BG_DARK,
+    UI_FIELD_BG,
+    UI_FIELD_BG_DARK,
+    UI_FIELD_BORDER,
+    UI_FIELD_BORDER_DARK,
+    UI_FONT_FAMILY,
+    UI_TEXT_PRIMARY,
+    UI_TEXT_PRIMARY_DARK,
+    UI_TEXT_SECONDARY,
+    UI_TEXT_SECONDARY_DARK,
+    WSAEADDRINUSE,
+)
+from proxy.stats import _human_bytes
 
 # Conditional imports for platform-specific functionality
 IS_WINDOWS = sys.platform == "win32"
@@ -51,32 +78,6 @@ else:
     # Linux/macOS clipboard via pystray
     HAS_CLIPBOARD = HAS_TRAY
 
-import proxy.tg_ws_proxy as tg_ws_proxy
-from proxy.constants import (
-    APP_DIR_NAME,
-    APP_NAME,
-    CONFIG_FILE_NAME,
-    DEFAULT_CONFIG,
-    FIRST_RUN_MARKER_NAME,
-    IPV6_WARN_MARKER_NAME,
-    LOG_FILE_NAME,
-    TG_BLUE,
-    TG_BLUE_HOVER,
-    UI_BG,
-    UI_BG_DARK,
-    UI_FIELD_BG,
-    UI_FIELD_BG_DARK,
-    UI_FIELD_BORDER,
-    UI_FIELD_BORDER_DARK,
-    UI_FONT_FAMILY,
-    UI_TEXT_PRIMARY,
-    UI_TEXT_PRIMARY_DARK,
-    UI_TEXT_SECONDARY,
-    UI_TEXT_SECONDARY_DARK,
-    WSAEADDRINUSE,
-)
-from proxy.stats import _human_bytes
-
 APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()) + "/.config")) / APP_DIR_NAME
 CONFIG_FILE = APP_DIR / CONFIG_FILE_NAME
 LOG_FILE = APP_DIR / LOG_FILE_NAME
@@ -91,15 +92,15 @@ GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 CURRENT_VERSION = "2.5.0"  # Updated with each release
 
 
-_proxy_thread: Optional[threading.Thread] = None
-_async_stop: Optional[tuple] = None
-_tray_icon: Optional[object] = None
+_proxy_thread: threading.Thread | None = None
+_async_stop: tuple | None = None
+_tray_icon: object | None = None
 _config: dict = {}
 _exiting: bool = False
-_lock_file_path: Optional[Path] = None
+_lock_file_path: Path | None = None
 _dark_theme: bool = False  # Theme toggle state
-_config_save_callback: Optional[Callable] = None  # Keyboard shortcut callback
-_config_cancel_callback: Optional[Callable] = None  # Keyboard shortcut callback
+_config_save_callback: Callable | None = None  # Keyboard shortcut callback
+_config_cancel_callback: Callable | None = None  # Keyboard shortcut callback
 
 log = logging.getLogger("tg-ws-tray")
 
@@ -310,7 +311,7 @@ def _make_icon_image(size: int = 64) -> Image.Image:
     return img
 
 
-def _load_icon() -> Optional[Image.Image]:
+def _load_icon() -> Image.Image | None:
     """Load or create tray icon."""
     if not HAS_TRAY:
         return None
@@ -402,7 +403,7 @@ def _show_dialog(text: str, title: str, dialog_type: str = "info") -> None:
     root.destroy()
 
 
-def _run_proxy_thread(port: int, dc_opt: Dict[int, str], verbose: bool,
+def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
                       host: str = '127.0.0.1') -> None:
     """Run proxy in a background thread."""
     global _async_stop
@@ -602,7 +603,7 @@ def _get_app_executable() -> str:
 def _is_autostart_enabled() -> bool:
     """Check if autostart is enabled."""
     startup_path = _get_startup_path()
-    app_exe = _get_app_executable()
+    _get_app_executable()
 
     if IS_WINDOWS:
         link_file = startup_path / "TG WS Proxy.lnk"
@@ -839,7 +840,7 @@ def _build_config_frame(root: ctk.CTk) -> ctk.CTkFrame:
 def _build_config_fields(
     frame: ctk.CTkFrame,
     cfg: dict
-) -> Tuple[ctk.StringVar, ctk.StringVar, ctk.CTkTextbox, ctk.BooleanVar]:
+) -> tuple[ctk.StringVar, ctk.StringVar, ctk.CTkTextbox, ctk.BooleanVar]:
     """Build configuration input fields."""
     # Theme-aware colors
     field_bg = UI_FIELD_BG_DARK if _dark_theme else UI_FIELD_BG
@@ -973,8 +974,8 @@ def _save_config_and_restart(
         _show_error(f"Порт {host_val}:{port_val} уже используется.\n\nВыберите другой порт.")
         return
 
-    lines = [l.strip() for l in dc_textbox.get("1.0", "end").strip().splitlines()
-             if l.strip()]
+    lines = [line.strip() for line in dc_textbox.get("1.0", "end").strip().splitlines()
+             if line.strip()]
     try:
         tg_ws_proxy.parse_dc_ip_list(lines)
     except ValueError as e:
@@ -982,8 +983,8 @@ def _save_config_and_restart(
         return
 
     # Parse IP whitelist
-    whitelist_lines = [l.strip() for l in whitelist_textbox.get("1.0", "end").strip().splitlines()
-                       if l.strip()]
+    whitelist_lines = [line.strip() for line in whitelist_textbox.get("1.0", "end").strip().splitlines()
+                       if line.strip()]
     # Validate IP addresses in whitelist
     for ip in whitelist_lines:
         try:
@@ -1133,7 +1134,7 @@ def _show_stats_dialog() -> None:
     # Export button
     def on_export():
         try:
-            json_data = tg_ws_proxy.get_stats().get('dc_stats', {})
+            tg_ws_proxy.get_stats().get('dc_stats', {})
             from tkinter import filedialog
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".json",
@@ -1178,7 +1179,7 @@ def _show_first_run() -> None:
     _show_first_run_dialog()
 
 
-def _get_first_run_sections(host: str, port: int, tg_url: str) -> List[Tuple[str, bool]]:
+def _get_first_run_sections(host: str, port: int, tg_url: str) -> list[tuple[str, bool]]:
     """Get instruction sections for first-run dialog."""
     return [
         ("Как подключить Telegram Desktop:", True),
@@ -1409,7 +1410,7 @@ def _show_ipv6_dialog() -> None:
         "TG WS Proxy")
 
 
-def _build_menu() -> Optional[pystray.Menu]:
+def _build_menu() -> pystray.Menu | None:
     """Build tray icon menu."""
     if not HAS_TRAY or pystray is None:
         return None

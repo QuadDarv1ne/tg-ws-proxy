@@ -25,7 +25,6 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
-from typing import Optional
 
 import psutil
 
@@ -63,12 +62,12 @@ DEFAULT_CONFIG = {
     "verbose": False,
 }
 
-_proxy_thread: Optional[threading.Thread] = None
-_async_stop: Optional[object] = None
-_app: Optional[object] = None
+_proxy_thread: threading.Thread | None = None
+_async_stop: object | None = None
+_app: object | None = None
 _config: dict = {}
 _exiting: bool = False
-_lock_file_path: Optional[Path] = None
+_lock_file_path: Path | None = None
 
 log = logging.getLogger("tg-ws-tray")
 
@@ -208,7 +207,7 @@ def _has_ipv6_enabled() -> bool:
         return False
 
 
-def _create_menubar_icon() -> Optional[str]:
+def _create_menubar_icon() -> str | None:
     """Create a simple PNG icon for menu bar."""
     if Image is None:
         return None
@@ -284,7 +283,7 @@ class TGWSProxyApp(rumps.App):
         port = cfg.get("port", DEFAULT_CONFIG["port"])
         host = cfg.get("host", DEFAULT_CONFIG["host"])
         dc_ip_list = cfg.get("dc_ip", DEFAULT_CONFIG["dc_ip"])
-        verbose = cfg.get("verbose", False)
+        cfg.get("verbose", False)
 
         try:
             dc_opt = tg_ws_proxy.parse_dc_ip_list(dc_ip_list)

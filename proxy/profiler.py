@@ -11,7 +11,7 @@ import io
 import logging
 import pstats
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable
 
 log = logging.getLogger("tg-ws-proxy-profiler")
 
@@ -19,22 +19,22 @@ log = logging.getLogger("tg-ws-proxy-profiler")
 class PerformanceProfiler:
     """
     Performance profiler for measuring function execution time.
-    
+
     Usage:
         profiler = PerformanceProfiler()
-        
+
         # Profile a function
         result = profiler.profile(my_function, *args, **kwargs)
-        
+
         # Get statistics
         stats = profiler.get_stats()
         profiler.print_stats()
     """
 
     def __init__(self) -> None:
-        self._profiler: Optional[cProfile.Profile] = None
-        self._stats: Optional[pstats.Stats] = None
-        self._profile_data: Optional[bytes] = None
+        self._profiler: cProfile.Profile | None = None
+        self._stats: pstats.Stats | None = None
+        self._profile_data: bytes | None = None
         self._is_profiling = False
 
     def start(self) -> None:
@@ -66,12 +66,12 @@ class PerformanceProfiler:
     def profile(self, func: Callable, *args, **kwargs) -> Any:
         """
         Profile a function execution.
-        
+
         Args:
             func: Function to profile
             *args: Positional arguments for the function
             **kwargs: Keyword arguments for the function
-            
+
         Returns:
             Function result
         """
@@ -85,12 +85,12 @@ class PerformanceProfiler:
     async def profile_async(self, func: Callable, *args, **kwargs) -> Any:
         """
         Profile an async function execution.
-        
+
         Args:
             func: Async function to profile
             *args: Positional arguments for the function
             **kwargs: Keyword arguments for the function
-            
+
         Returns:
             Function result
         """
@@ -101,10 +101,10 @@ class PerformanceProfiler:
         finally:
             self.stop()
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """
         Get profiling statistics.
-        
+
         Returns:
             Dictionary with profiling statistics
         """
@@ -140,7 +140,7 @@ class PerformanceProfiler:
     def print_stats(self, top_n: int = 20) -> None:
         """
         Print profiling statistics to log.
-        
+
         Args:
             top_n: Number of top functions to display
         """
@@ -157,10 +157,10 @@ class PerformanceProfiler:
     def get_profile_string(self, top_n: int = 20) -> str:
         """
         Get profiling statistics as a formatted string.
-        
+
         Args:
             top_n: Number of top functions to display
-            
+
         Returns:
             Formatted profiling statistics string
         """
@@ -178,37 +178,37 @@ class PerformanceProfiler:
 class AsyncPerformanceProfiler:
     """
     Async-aware performance profiler for measuring async function execution time.
-    
+
     Usage:
         profiler = AsyncPerformanceProfiler()
-        
+
         # Profile an async function
         result = await profiler.profile_async(my_async_function, *args, **kwargs)
-        
+
         # Get statistics
         stats = profiler.get_stats()
     """
 
     def __init__(self) -> None:
-        self._timings: Dict[str, List[float]] = {}
-        self._call_counts: Dict[str, int] = {}
+        self._timings: dict[str, list[float]] = {}
+        self._call_counts: dict[str, int] = {}
 
     async def profile_async(
         self,
         func: Callable,
-        name: Optional[str] = None,
+        name: str | None = None,
         *args,
         **kwargs
     ) -> Any:
         """
         Profile an async function execution.
-        
+
         Args:
             func: Async function to profile
             name: Optional name for the function (defaults to func.__name__)
             *args: Positional arguments for the function
             **kwargs: Keyword arguments for the function
-            
+
         Returns:
             Function result
         """
@@ -235,10 +235,10 @@ class AsyncPerformanceProfiler:
         if len(self._timings[name]) > 1000:
             self._timings[name].pop(0)
 
-    def get_stats(self) -> Dict[str, Dict]:
+    def get_stats(self) -> dict[str, dict]:
         """
         Get timing statistics for all profiled functions.
-        
+
         Returns:
             Dictionary mapping function names to statistics
         """
@@ -295,8 +295,8 @@ class AsyncPerformanceProfiler:
 
 
 # Global profiler instance
-_profiler: Optional[PerformanceProfiler] = None
-_async_profiler: Optional[AsyncPerformanceProfiler] = None
+_profiler: PerformanceProfiler | None = None
+_async_profiler: AsyncPerformanceProfiler | None = None
 
 
 def get_profiler() -> PerformanceProfiler:
