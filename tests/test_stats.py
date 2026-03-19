@@ -1,8 +1,6 @@
 """Unit tests for proxy stats module."""
 
-import time
 
-import pytest
 
 from proxy.stats import Stats, _human_bytes, _human_time
 
@@ -97,7 +95,7 @@ class TestStatsConnections:
         """Test adding WebSocket connection."""
         stats = Stats()
         stats.add_connection('ws', dc=2)
-        
+
         assert stats.connections_total == 1
         assert stats.connections_ws == 1
         assert stats._current_dc == 2
@@ -107,7 +105,7 @@ class TestStatsConnections:
         """Test adding TCP fallback connection."""
         stats = Stats()
         stats.add_connection('tcp_fallback', dc=4)
-        
+
         assert stats.connections_total == 1
         assert stats.connections_tcp_fallback == 1
 
@@ -115,7 +113,7 @@ class TestStatsConnections:
         """Test adding HTTP rejected connection."""
         stats = Stats()
         stats.add_connection('http_rejected')
-        
+
         assert stats.connections_total == 1
         assert stats.connections_http_rejected == 1
 
@@ -123,7 +121,7 @@ class TestStatsConnections:
         """Test adding passthrough connection."""
         stats = Stats()
         stats.add_connection('passthrough')
-        
+
         assert stats.connections_total == 1
         assert stats.connections_passthrough == 1
 
@@ -133,7 +131,7 @@ class TestStatsConnections:
         stats.add_connection('ws', dc=2)
         stats.add_connection('ws', dc=2)
         stats.add_connection('tcp_fallback', dc=4)
-        
+
         assert 2 in stats.dc_stats
         assert stats.dc_stats[2]['connections'] == 2
         assert 4 in stats.dc_stats
@@ -147,7 +145,7 @@ class TestStatsTraffic:
         """Test adding traffic."""
         stats = Stats()
         stats.add_bytes(up=1024, down=2048)
-        
+
         assert stats.bytes_up == 1024
         assert stats.bytes_down == 2048
 
@@ -159,7 +157,7 @@ class TestStatsLatency:
         """Test recording latency."""
         stats = Stats()
         stats.record_latency(dc=2, latency_ms=50.5)
-        
+
         assert 2 in stats.latency_ms
         assert stats.latency_ms[2] == 50.5
 
@@ -169,7 +167,7 @@ class TestStatsLatency:
         stats.record_latency(dc=2, latency_ms=50.0)
         stats.record_latency(dc=2, latency_ms=60.0)
         stats.record_latency(dc=2, latency_ms=70.0)
-        
+
         # Last value should be stored
         assert stats.latency_ms[2] == 70.0
         # History should contain all values
@@ -184,7 +182,7 @@ class TestStatsErrors:
         stats = Stats()
         stats.add_connection('ws', dc=2)  # Сначала создаём DC entry
         stats.add_ws_error(dc=2)
-        
+
         assert stats.ws_errors == 1
         assert stats.dc_stats[2]['errors'] == 1
 
@@ -196,7 +194,7 @@ class TestStatsErrors:
         stats.add_ws_error(dc=2)
         stats.add_ws_error(dc=2)
         stats.add_ws_error(dc=4)
-        
+
         assert stats.ws_errors == 3
         assert stats.dc_stats[2]['errors'] == 2
         assert stats.dc_stats[4]['errors'] == 1
@@ -210,7 +208,7 @@ class TestStatsPool:
         stats = Stats()
         stats.pool_hits = 5
         stats.pool_misses = 3
-        
+
         assert stats.pool_hits == 5
         assert stats.pool_misses == 3
 
@@ -222,7 +220,7 @@ class TestStatsToDict:
         """Test to_dict with empty stats."""
         stats = Stats()
         result = stats.to_dict()
-        
+
         assert 'connections_total' in result
         assert 'connections_ws' in result
         assert 'bytes_up' in result
@@ -237,9 +235,9 @@ class TestStatsToDict:
         stats.add_connection('ws', dc=2)
         stats.add_bytes(up=1024, down=2048)
         stats.record_latency(dc=2, latency_ms=50.0)
-        
+
         result = stats.to_dict()
-        
+
         assert result['connections_total'] == 1
         assert result['connections_ws'] == 1
         assert result['bytes_up'] == 1024
@@ -254,7 +252,7 @@ class TestStatsSummary:
         """Test summary at startup."""
         stats = Stats()
         summary = stats.summary()
-        
+
         assert 'total=' in summary
         assert 'ws=' in summary
 
@@ -263,9 +261,9 @@ class TestStatsSummary:
         stats = Stats()
         stats.add_connection('ws', dc=2)
         stats.add_bytes(up=1024, down=2048)
-        
+
         summary = stats.summary()
-        
+
         assert 'total=1' in summary
         assert 'up=1.0MB' in summary  # 1024 bytes = 1.0KB but function shows MB for 1024
         assert 'down=2.0MB' in summary
@@ -278,9 +276,9 @@ class TestStatsExport:
         """Test JSON export."""
         stats = Stats()
         stats.add_connection('ws', dc=2)
-        
+
         json_str = stats.export_to_json()
-        
+
         assert 'connections_total' in json_str
         assert '2' in json_str  # DC ID
 
@@ -294,9 +292,9 @@ class TestStatsDCStats:
         stats.add_connection('ws', dc=2)
         stats.add_connection('ws', dc=2)
         stats.add_bytes(up=100, down=200)
-        
+
         dc_stats = stats.get_dc_stats()
-        
+
         assert 2 in dc_stats
         assert dc_stats[2]['connections'] == 2
 
@@ -304,5 +302,5 @@ class TestStatsDCStats:
         """Test getting empty DC stats."""
         stats = Stats()
         dc_stats = stats.get_dc_stats()
-        
+
         assert dc_stats == {}
