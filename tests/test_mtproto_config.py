@@ -279,3 +279,27 @@ class TestSaveConfig:
 
             assert result is True
             assert temp_path.exists()
+
+
+class TestGenerateSampleConfig:
+    """Tests for generate_sample_config function."""
+
+    def test_generate_sample_config(self):
+        """Test generate_sample_config creates valid config."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / 'sample_config.json'
+
+            # Import here to avoid circular imports
+            from proxy.mtproto_config import generate_sample_config
+            generate_sample_config(str(output_path))
+
+            assert output_path.exists()
+
+            # Verify it's valid JSON
+            with open(output_path) as f:
+                data = json.load(f)
+
+            assert 'host' in data
+            assert 'port' in data
+            assert 'secrets' in data
+            assert len(data['secrets']) > 0
