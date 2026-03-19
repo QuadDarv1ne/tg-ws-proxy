@@ -14,7 +14,6 @@ import sys
 import time
 from typing import Optional, Dict, Callable
 
-# Try to import rich for better UI
 try:
     from rich.console import Console
     from rich.live import Live
@@ -26,6 +25,8 @@ try:
     HAS_RICH = True
 except ImportError:
     HAS_RICH = False
+
+from .stats import _human_bytes
 
 log = logging.getLogger("tg-ws-proxy-dashboard")
 
@@ -67,14 +68,6 @@ class ConsoleDashboard:
         """Clear terminal screen."""
         os.system('cls' if os.name == 'nt' else 'clear')
 
-    def _format_bytes(self, n: int) -> str:
-        """Format bytes as human-readable string."""
-        for unit in ('B', 'KB', 'MB', 'GB'):
-            if abs(n) < 1024:
-                return f"{n:.1f} {unit}"
-            n /= 1024
-        return f"{n:.1f} TB"
-
     def _render_simple(self, stats: dict) -> str:
         """Render dashboard as plain text (no rich)."""
         lines = []
@@ -95,8 +88,8 @@ class ConsoleDashboard:
         
         # Traffic
         lines.append("📈 TRAFFIC:")
-        lines.append(f"  Upload:                {self._format_bytes(stats.get('bytes_up', 0))}")
-        lines.append(f"  Download:              {self._format_bytes(stats.get('bytes_down', 0))}")
+        lines.append(f"  Upload:                {_human_bytes(stats.get('bytes_up', 0))}")
+        lines.append(f"  Download:              {_human_bytes(stats.get('bytes_down', 0))}")
         lines.append("")
         
         # Pool
@@ -139,9 +132,9 @@ class ConsoleDashboard:
         traffic_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
         traffic_table.add_column("Label", style="green")
         traffic_table.add_column("Value", style="bold white")
-        
-        traffic_table.add_row("Upload", self._format_bytes(stats.get('bytes_up', 0)))
-        traffic_table.add_row("Download", self._format_bytes(stats.get('bytes_down', 0)))
+
+        traffic_table.add_row("Upload", _human_bytes(stats.get('bytes_up', 0)))
+        traffic_table.add_row("Download", _human_bytes(stats.get('bytes_down', 0)))
         
         # Pool table
         pool_hits = stats.get('pool_hits', 0)
