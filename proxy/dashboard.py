@@ -33,7 +33,7 @@ log = logging.getLogger("tg-ws-proxy-dashboard")
 class ConsoleDashboard:
     """
     Real-time console dashboard for proxy monitoring.
-    
+
     Displays:
     - Connection statistics
     - Traffic rates
@@ -243,7 +243,7 @@ class ConsoleDashboard:
 async def run_dashboard(get_stats_fn: Callable[[], dict], refresh_interval: float = 1.0):
     """
     Run console dashboard for proxy monitoring.
-    
+
     Args:
         get_stats_fn: Function that returns proxy statistics dict
         refresh_interval: Update interval in seconds

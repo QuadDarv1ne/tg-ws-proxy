@@ -12,7 +12,6 @@ import socket
 import ssl
 import time
 from dataclasses import dataclass
-from typing import List, Optional
 
 log = logging.getLogger('tg-mtproto-diagnostics')
 
@@ -22,9 +21,9 @@ class DiagnosticResult:
     """Result of a single diagnostic test."""
     name: str
     success: bool
-    latency_ms: Optional[float] = None
-    error: Optional[str] = None
-    details: Optional[str] = None
+    latency_ms: float | None = None
+    error: str | None = None
+    details: str | None = None
 
 
 async def test_tcp_connect(host: str, port: int, timeout: float = 5.0) -> DiagnosticResult:
@@ -139,7 +138,7 @@ async def test_dns_resolve(hostname: str) -> DiagnosticResult:
             hostname, None, socket.AF_INET, socket.SOCK_STREAM
         )
         latency = (time.perf_counter() - start) * 1000
-        ips = list(set([addr[4][0] for addr in addrs]))
+        ips = list({addr[4][0] for addr in addrs})
         return DiagnosticResult(
             name=f"DNS {hostname}",
             success=True,
@@ -173,7 +172,7 @@ DC_IPS = {
 }
 
 
-async def run_full_diagnostics() -> List[DiagnosticResult]:
+async def run_full_diagnostics() -> list[DiagnosticResult]:
     """Run full diagnostic suite."""
     results = []
 
@@ -187,7 +186,7 @@ async def run_full_diagnostics() -> List[DiagnosticResult]:
             log.info("  %s: %s", result.name, "✓" if result.success else f"✗ {result.error}")
 
     # Test TCP connectivity to DC IPs
-    for dc, ips in DC_IPS.items():
+    for _dc, ips in DC_IPS.items():
         for ip in ips:
             result = await test_tcp_connect(ip, 443)
             results.append(result)
@@ -209,7 +208,7 @@ async def run_full_diagnostics() -> List[DiagnosticResult]:
     return results
 
 
-def print_diagnostics_report(results: List[DiagnosticResult]):
+def print_diagnostics_report(results: list[DiagnosticResult]):
     """Print formatted diagnostics report."""
     print("\n" + "=" * 60)
     print("  MTProto Proxy Diagnostics Report")

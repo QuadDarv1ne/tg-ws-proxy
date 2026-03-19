@@ -10,7 +10,6 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
-from typing import Dict, Optional
 
 import customtkinter as ctk
 import psutil
@@ -45,12 +44,12 @@ FIRST_RUN_MARKER = APP_DIR / FIRST_RUN_MARKER_NAME
 IPV6_WARN_MARKER = APP_DIR / IPV6_WARN_MARKER_NAME
 
 
-_proxy_thread: Optional[threading.Thread] = None
-_async_stop: Optional[object] = None
-_tray_icon: Optional[object] = None
+_proxy_thread: threading.Thread | None = None
+_async_stop: object | None = None
+_tray_icon: object | None = None
 _config: dict = {}
 _exiting: bool = False
-_lock_file_path: Optional[Path] = None
+_lock_file_path: Path | None = None
 
 log = logging.getLogger("tg-ws-tray")
 
@@ -230,7 +229,7 @@ def _check_port_available(port: int, host: str) -> bool:
         raise
 
 
-def _run_proxy_thread(port: int, dc_opt: Dict[int, str], verbose: bool,
+def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
                       host: str = '127.0.0.1'):
     global _async_stop
 
@@ -441,8 +440,8 @@ def _edit_config_dialog():
             _show_error("Порт должен быть числом 1-65535")
             return
 
-        lines = [l.strip() for l in dc_textbox.get("1.0", "end").strip().splitlines()
-                 if l.strip()]
+        lines = [line.strip() for line in dc_textbox.get("1.0", "end").strip().splitlines()
+                 if line.strip()]
         try:
             tg_ws_proxy.parse_dc_ip_list(lines)
         except ValueError as e:

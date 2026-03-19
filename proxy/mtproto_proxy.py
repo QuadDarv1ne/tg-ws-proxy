@@ -19,7 +19,7 @@ import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -61,7 +61,7 @@ def validate_secret(secret: str) -> bool:
         return False
 
 
-def secret_to_key_iv(secret: str) -> Tuple[bytes, bytes]:
+def secret_to_key_iv(secret: str) -> tuple[bytes, bytes]:
     """
     Convert secret hex string to AES key and IV.
 
@@ -75,7 +75,7 @@ def secret_to_key_iv(secret: str) -> Tuple[bytes, bytes]:
     return key, iv
 
 
-def generate_qr_code(server: str, port: int, secret: str, output_path: Optional[str] = None) -> str:
+def generate_qr_code(server: str, port: int, secret: str, output_path: str | None = None) -> str:
     """
     Generate QR code for MTProto proxy connection.
 
@@ -119,7 +119,7 @@ def generate_qr_code(server: str, port: int, secret: str, output_path: Optional[
 class RateLimiter:
     """
     Rate limiter for MTProto connections.
-    
+
     Limits connections and traffic per IP address.
     """
 
@@ -128,8 +128,8 @@ class RateLimiter:
         max_connections_per_ip: int = 10,
         max_bytes_per_second: int = 10 * 1024 * 1024,  # 10 MB/s default
         window_seconds: int = 60,
-        ip_whitelist: Optional[List[str]] = None,
-        ip_blacklist: Optional[List[str]] = None,
+        ip_whitelist: list[str] | None = None,
+        ip_blacklist: list[str] | None = None,
     ):
         self.max_connections_per_ip = max_connections_per_ip
         self.max_bytes_per_second = max_bytes_per_second
@@ -140,10 +140,10 @@ class RateLimiter:
         self.ip_blacklist = set(ip_blacklist) if ip_blacklist else set()
 
         # Track connections per IP
-        self.connections_per_ip: DefaultDict[str, int] = defaultdict(int)
+        self.connections_per_ip: dict[str, int] = defaultdict(int)
 
         # Track bytes per IP with timestamps
-        self.bytes_per_ip: DefaultDict[str, List[Tuple[float, int]]] = defaultdict(list)
+        self.bytes_per_ip: dict[str, list[tuple[float, int]]] = defaultdict(list)
 
         # Lock for thread safety
         self._lock = threading.Lock()
@@ -333,7 +333,7 @@ class MTProtoTransport:
 class MTProtoPacket:
     """
     MTProto Intermediate packet format.
-    
+
     Format:
     - Length (4 bytes, little-endian)
     - Sequence number (4 bytes, little-endian)
@@ -351,7 +351,7 @@ class MTProtoPacket:
         return header + self.data
 
     @classmethod
-    def deserialize(cls, data: bytes) -> Optional[MTProtoPacket]:
+    def deserialize(cls, data: bytes) -> MTProtoPacket | None:
         """Deserialize packet from bytes."""
         if len(data) < 8:
             return None
@@ -377,20 +377,20 @@ class MTProtoProxy:
 
     def __init__(
         self,
-        secrets: List[str],
+        secrets: list[str],
         host: str = MTPROTO_DEFAULT_HOST,
         port: int = MTPROTO_DEFAULT_PORT,
-        dc_ip: Optional[Dict[int, str]] = None,
+        dc_ip: dict[int, str] | None = None,
         dc_id: int = DEFAULT_DC_ID,
         auto_rotate: bool = False,
         rotate_interval_days: int = 7,
-        on_secret_rotate: Optional[Callable[[List[str]], None]] = None,
-        traffic_limit_gb: Optional[float] = None,  # Per-secret traffic limit in GB
+        on_secret_rotate: Callable[[list[str]], None] | None = None,
+        traffic_limit_gb: float | None = None,  # Per-secret traffic limit in GB
         rate_limit_enabled: bool = False,
         rate_limit_connections: int = 10,
         rate_limit_bytes_per_sec: int = 10 * 1024 * 1024,
-        ip_whitelist: Optional[List[str]] = None,
-        ip_blacklist: Optional[List[str]] = None,
+        ip_whitelist: list[str] | None = None,
+        ip_blacklist: list[str] | None = None,
     ):
         # Validate dc_id
         if not isinstance(dc_id, int) or dc_id < 1 or dc_id > 5:
@@ -406,7 +406,7 @@ class MTProtoProxy:
         self.auto_rotate = auto_rotate
         self.rotate_interval_days = rotate_interval_days
         self.on_secret_rotate = on_secret_rotate
-        self._rotate_thread: Optional[threading.Thread] = None
+        self._rotate_thread: threading.Thread | None = None
         self._stop_rotate = threading.Event()
 
         # Traffic limit settings
@@ -425,7 +425,7 @@ class MTProtoProxy:
         # Create transport for each secret
         self.transports = {secret: MTProtoTransport(secret) for secret in secrets}
 
-        self._server: Optional[asyncio.Server] = None
+        self._server: asyncio.Server | None = None
 
         # Statistics per secret
         self.stats_per_secret = {
@@ -446,7 +446,7 @@ class MTProtoProxy:
         self.bytes_sent = 0
 
         # Rotation history
-        self.rotation_history: List[dict] = []
+        self.rotation_history: list[dict] = []
 
     async def start(self):
         """Start the MTProto proxy server."""
@@ -496,10 +496,10 @@ class MTProtoProxy:
         self._rotate_thread = threading.Thread(target=rotate_loop, daemon=True)
         self._rotate_thread.start()
 
-    def rotate_secrets(self, new_secrets: Optional[List[str]] = None):
+    def rotate_secrets(self, new_secrets: list[str] | None = None):
         """
         Rotate secrets (manual or automatic).
-        
+
         Args:
             new_secrets: New secrets to use. If None, generates new ones.
         """
@@ -773,22 +773,22 @@ class MTProtoProxy:
 
 
 def run_mtproto_proxy(
-    secrets: Optional[List[str]] = None,
-    secret: Optional[str] = None,  # Deprecated, for backward compatibility
+    secrets: list[str] | None = None,
+    secret: str | None = None,  # Deprecated, for backward compatibility
     host: str = MTPROTO_DEFAULT_HOST,
     port: int = MTPROTO_DEFAULT_PORT,
     dc_id: int = DEFAULT_DC_ID,
     verbose: bool = False,
-    qr_output: Optional[str] = None,
-    server_ip: Optional[str] = None,
+    qr_output: str | None = None,
+    server_ip: str | None = None,
     auto_rotate: bool = False,
     rotate_interval_days: int = 7,
-    traffic_limit_gb: Optional[float] = None,
+    traffic_limit_gb: float | None = None,
     rate_limit_enabled: bool = False,
     rate_limit_connections: int = 10,
     rate_limit_bytes_per_sec: int = 10 * 1024 * 1024,
-    ip_whitelist: Optional[List[str]] = None,
-    ip_blacklist: Optional[List[str]] = None,
+    ip_whitelist: list[str] | None = None,
+    ip_blacklist: list[str] | None = None,
 ):
     """
     Run MTProto proxy server (blocking).
