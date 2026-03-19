@@ -682,14 +682,11 @@ class MTProtoProxy:
             log.error("[%s] Unexpected error: %s", label, exc)
         finally:
             self.connections_active -= 1
-            # Decrement per-secret stats if handshake was successful
-            if 'used_secret' in locals() and used_secret in self.stats_per_secret:
+            if used_secret in self.stats_per_secret:
                 self.stats_per_secret[used_secret]["connections_active"] -= 1
-            # Decrement connection count for rate limiting
             if self.rate_limiter:
                 self.rate_limiter.decrement_connections(ip)
             _close_writer_safe(writer)
-            
             log.info("[%s] MTProto client disconnected", label)
 
     async def _forward_data(self, client_reader: asyncio.StreamReader,
