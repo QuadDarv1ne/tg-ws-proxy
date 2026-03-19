@@ -731,6 +731,31 @@ async def _pipe(r, w):
         await _close_writer_safe(w)
 
 
+async def _pipe_passthrough(r1, w1, r2, w2):
+    """Bidirectional TCP relay for passthrough traffic."""
+    async def forward(src, dst_w):
+        try:
+            while True:
+                data = await src.read(65536)
+                if not data:
+                    break
+                dst_w.write(data)
+                await dst_w.drain()
+        except Exception:
+            pass
+        finally:
+            await _close_writer_safe(dst_w)
+
+    tasks = [
+        asyncio.create_task(forward(r1, w2)),
+        asyncio.create_task(forward(r2, w1)),
+    ]
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        await _cancel_tasks(tasks)
+
+
 def _socks5_reply(status):
     return bytes([0x05, status, 0x00, 0x01]) + b'\x00' * 6
 
@@ -832,17 +857,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
             writer.write(_socks5_reply(0x00))
             await writer.drain()
 
-            tasks = [asyncio.create_task(_pipe(reader, rw)),
-                     asyncio.create_task(_pipe(rr, writer))]
-            await asyncio.wait(tasks,
-                               return_when=asyncio.FIRST_COMPLETED)
-            for t in tasks:
-                t.cancel()
-            for t in tasks:
-                try:
-                    await t
-                except BaseException:
-                    pass
+            await _pipe_passthrough(reader, writer, rr, rw)
             return
 
         # -- Telegram DC: accept SOCKS, read init --
