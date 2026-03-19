@@ -217,6 +217,9 @@ class ProxyServer:
 
         # Rate-limit re-attempts per (dc, is_media)
         self.dc_fail_until: Dict[Tuple[int, bool], float] = {}
+        
+        # Consecutive error count for exponential backoff
+        self.dc_error_count: Dict[Tuple[int, bool], int] = {}
 
         # Statistics
         self.stats = Stats()
@@ -1229,11 +1232,21 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
                     "%s DC%d%s blacklisted for WS (all 302)",
                     label, dc, media_tag)
             elif ws_failed_redirect:
-                dc_fail_until[dc_key] = now + DC_FAIL_COOLDOWN
+                # Exponential backoff: base cooldown * 2^(error_count-1)
+                error_count = server_instance.dc_error_count.get(dc_key, 0) + 1
+                server_instance.dc_error_count[dc_key] = error_count
+                backoff_multiplier = 2 ** (error_count - 1)
+                dc_fail_until[dc_key] = now + (DC_FAIL_COOLDOWN * backoff_multiplier)
+                log.info("%s DC%d%s WS cooldown for %ds (attempt #%d)",
+                         label, dc, media_tag, int(DC_FAIL_COOLDOWN * backoff_multiplier), error_count)
             else:
-                dc_fail_until[dc_key] = now + DC_FAIL_COOLDOWN
-                log.info("%s DC%d%s WS cooldown for %ds",
-                         label, dc, media_tag, int(DC_FAIL_COOLDOWN))
+                # Increment error count for non-redirect failures too
+                error_count = server_instance.dc_error_count.get(dc_key, 0) + 1
+                server_instance.dc_error_count[dc_key] = error_count
+                backoff_multiplier = min(2 ** (error_count - 1), 8)  # Cap at 8x
+                dc_fail_until[dc_key] = now + (DC_FAIL_COOLDOWN * backoff_multiplier)
+                log.info("%s DC%d%s WS cooldown for %ds (attempt #%d)",
+                         label, dc, media_tag, int(DC_FAIL_COOLDOWN * backoff_multiplier), error_count)
 
             log.info("%s DC%d%s -> TCP fallback to %s:%d",
                      label, dc, media_tag, dst, port)
@@ -1245,6 +1258,8 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
             return
 
         # -- WS success --
+        # Reset error count on successful connection
+        server_instance.dc_error_count.pop(dc_key, None)
         dc_fail_until.pop(dc_key, None)
         stats.add_connection('ws', dc=dc)
 
