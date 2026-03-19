@@ -13,7 +13,7 @@ import time
 from typing import Dict, List, Optional, Set, Tuple, TypedDict
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from .stats import Stats
+from .stats import Stats, _human_bytes
 
 class ProxyConfig(TypedDict, total=False):
     """Configuration for the proxy server."""
@@ -359,14 +359,6 @@ class RawWebSocket:
 
         payload = await self.reader.readexactly(length)
         return opcode, payload
-
-
-def _human_bytes(n: int) -> str:
-    for unit in ('B', 'KB', 'MB', 'GB'):
-        if abs(n) < 1024:
-            return f"{n:.1f}{unit}"
-        n /= 1024
-    return f"{n:.1f}TB"
 
 
 def _is_telegram_ip(ip: str) -> bool:
