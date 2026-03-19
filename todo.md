@@ -76,7 +76,7 @@
 #### Оптимизация (v2.12.0) ✅
 - [x] Кэширование DNS запросов — `proxy/tg_ws_proxy.py` ✅
 - [x] Connection pooling для TCP fallback — `proxy/tg_ws_proxy.py` ✅
-- [ ] Lazy initialization пула — отложенное создание
+- [x] Lazy initialization пула — отложенное создание (`proxy/tg_ws_proxy.py`) ✅
 
 #### Тесты (v2.12.0) ✅
 - [x] Integration tests для веб-панели — `tests/test_web_dashboard.py` ✅ (9 тестов)
