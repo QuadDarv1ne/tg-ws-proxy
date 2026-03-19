@@ -83,26 +83,29 @@ class ProxyServer:
     - Statistics tracking
     - Client connection handling
     """
-    
-    def __init__(self, dc_opt: Dict[int, Optional[str]], host: str = '127.0.0.1', port: int = DEFAULT_PORT):
+
+    def __init__(self, dc_opt: Dict[int, Optional[str]], host: str = '127.0.0.1', port: int = DEFAULT_PORT,
+                 auth_required: bool = False, auth_credentials: Optional[Dict[str, str]] = None):
         self.dc_opt = dc_opt
         self.host = host
         self.port = port
-        
+        self.auth_required = auth_required
+        self.auth_credentials = auth_credentials
+
         # DCs where WS is known to fail (302 redirect)
         # Raw TCP fallback will be used instead
         # Keyed by (dc, is_media)
         self.ws_blacklist: Set[Tuple[int, bool]] = set()
-        
+
         # Rate-limit re-attempts per (dc, is_media)
         self.dc_fail_until: Dict[Tuple[int, bool], float] = {}
-        
+
         # Statistics
         self.stats = Stats()
-        
+
         # WebSocket connection pool
         self.ws_pool = _WsPool(self.stats)
-        
+
         # Server instance for graceful shutdown
         self._server_instance: Optional[asyncio.Server] = None
         self._server_stop_event: Optional[asyncio.Event] = None
@@ -793,7 +796,9 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
 
 async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optional[str]],
                          ws_pool: _WsPool, ws_blacklist: Set[Tuple[int, bool]],
-                         dc_fail_until: Dict[Tuple[int, bool], float]):
+                         dc_fail_until: Dict[Tuple[int, bool], float],
+                         auth_required: bool = False,
+                         auth_credentials: Optional[Dict[str, str]] = None):
     peer = writer.get_extra_info('peername')
     label = f"{peer[0]}:{peer[1]}" if peer else "?"
 
@@ -807,10 +812,52 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
             stats.add_connection('passthrough', dc=None)
             writer.close()
             return
+        
         nmethods = hdr[1]
-        await reader.readexactly(nmethods)
-        writer.write(b'\x05\x00')  # no-auth
-        await writer.drain()
+        methods = await asyncio.wait_for(reader.readexactly(nmethods), timeout=10)
+        
+        # Check if client supports auth method (0x02) when auth is required
+        if auth_required and auth_credentials:
+            if 0x02 not in methods:
+                log.warning("[%s] client doesn't support auth method", label)
+                writer.write(b'\x05\xff')  # No acceptable methods
+                await writer.drain()
+                writer.close()
+                return
+            writer.write(b'\x05\x02')  # Use username/password auth
+            await writer.drain()
+            
+            # Read auth credentials from client
+            auth_ver = await asyncio.wait_for(reader.readexactly(1), timeout=10)
+            if auth_ver[0] != 1:
+                log.warning("[%s] unknown auth version %d", label, auth_ver[0])
+                writer.write(b'\x01\x01')  # Authentication failed
+                await writer.drain()
+                writer.close()
+                return
+            
+            ulen = (await asyncio.wait_for(reader.readexactly(1), timeout=10))[0]
+            username = await asyncio.wait_for(reader.readexactly(ulen), timeout=10)
+            plen = (await asyncio.wait_for(reader.readexactly(1), timeout=10))[0]
+            password = await asyncio.wait_for(reader.readexactly(plen), timeout=10)
+            
+            # Validate credentials
+            if (username.decode() != auth_credentials.get('username') or
+                password.decode() != auth_credentials.get('password')):
+                log.warning("[%s] auth failed for user %s", label, username.decode())
+                writer.write(b'\x01\x01')  # Authentication failed
+                await writer.drain()
+                writer.close()
+                stats.add_connection('http_rejected', dc=None)
+                return
+            
+            writer.write(b'\x01\x00')  # Authentication successful
+            await writer.drain()
+            log.info("[%s] auth successful for user %s", label, username.decode())
+        else:
+            # No auth required
+            writer.write(b'\x05\x00')  # no-auth
+            await writer.drain()
 
         # -- SOCKS5 CONNECT request --
         req = await asyncio.wait_for(reader.readexactly(4), timeout=10)
@@ -1063,11 +1110,13 @@ def _close_client_writer(writer) -> None:
 
 async def _run(port: int, dc_opt: Dict[int, Optional[str]],
                stop_event: Optional[asyncio.Event] = None,
-               host: str = '127.0.0.1'):
+               host: str = '127.0.0.1',
+               auth_required: bool = False,
+               auth_credentials: Optional[Dict[str, str]] = None):
     global _server_instance
-    
+
     # Create proxy server instance with encapsulated state
-    server_instance = ProxyServer(dc_opt, host, port)
+    server_instance = ProxyServer(dc_opt, host, port, auth_required, auth_credentials)
     _server_instance = server_instance
 
     # Create a wrapper for _handle_client that passes server state
@@ -1078,7 +1127,9 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
             dc_opt=server_instance.dc_opt,
             ws_pool=server_instance.ws_pool,
             ws_blacklist=server_instance.ws_blacklist,
-            dc_fail_until=server_instance.dc_fail_until
+            dc_fail_until=server_instance.dc_fail_until,
+            auth_required=server_instance.auth_required,
+            auth_credentials=server_instance.auth_credentials
         )
 
     server = await asyncio.start_server(
@@ -1100,7 +1151,10 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
         log.info("    DC%d: %s", dc, ip)
     log.info("=" * 60)
     log.info("  Configure Telegram Desktop:")
-    log.info("    SOCKS5 proxy -> %s:%d  (no user/pass)", host, port)
+    if auth_required and auth_credentials:
+        log.info("    SOCKS5 proxy -> %s:%d  (user/pass required)", host, port)
+    else:
+        log.info("    SOCKS5 proxy -> %s:%d  (no user/pass)", host, port)
     log.info("=" * 60)
 
     async def log_stats():
@@ -1168,20 +1222,24 @@ def run_proxy(
     port: int,
     dc_opt: Dict[int, str],
     stop_event: Optional[asyncio.Event] = None,
-    host: str = '127.0.0.1'
+    host: str = '127.0.0.1',
+    auth_required: bool = False,
+    auth_credentials: Optional[Dict[str, str]] = None
 ) -> None:
     """
     Run the proxy server (blocking).
-    
+
     Can be called from threads. Use stop_event to gracefully shutdown.
-    
+
     Args:
         port: Port to listen on
         dc_opt: Dictionary mapping DC IDs to target IPs
         stop_event: Optional event to signal shutdown
         host: Host to bind to (default: 127.0.0.1)
+        auth_required: Require username/password authentication
+        auth_credentials: Dict with 'username' and 'password' keys
     """
-    asyncio.run(_run(port, dc_opt, stop_event, host))
+    asyncio.run(_run(port, dc_opt, stop_event, host, auth_required, auth_credentials))
 
 
 def main() -> None:
@@ -1195,6 +1253,12 @@ def main() -> None:
                     default=['2:149.154.167.220', '4:149.154.167.220'],
                     help='Target IP for a DC, e.g. --dc-ip 1:149.154.175.205'
                          ' --dc-ip 2:149.154.167.220')
+    ap.add_argument('--auth', action='store_true',
+                    help='Require username/password authentication')
+    ap.add_argument('--auth-username', type=str, default='user',
+                    help='Auth username (default: user)')
+    ap.add_argument('--auth-password', type=str, default='pass',
+                    help='Auth password (default: pass)')
     ap.add_argument('-v', '--verbose', action='store_true',
                     help='Debug logging')
     args = ap.parse_args()
@@ -1211,8 +1275,17 @@ def main() -> None:
         datefmt='%H:%M:%S',
     )
 
+    auth_credentials = None
+    if args.auth:
+        auth_credentials = {
+            'username': args.auth_username,
+            'password': args.auth_password
+        }
+
     try:
-        asyncio.run(_run(args.port, dc_opt, host=args.host))
+        asyncio.run(_run(args.port, dc_opt, host=args.host,
+                        auth_required=args.auth,
+                        auth_credentials=auth_credentials))
     except KeyboardInterrupt:
         log.info("Shutting down. Final stats: %s", get_stats_summary())
 
