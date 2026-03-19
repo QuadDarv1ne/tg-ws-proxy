@@ -19,7 +19,7 @@ import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Callable, DefaultDict
+from typing import Dict, List, Optional, Tuple, Callable
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 try:
@@ -308,7 +308,9 @@ class MTProtoTransport:
         """Decrypt data using AES-256 IGE."""
         self._init_ciphers()
 
-        # Manual IGE implementation (works with all cryptography versions)
+        if not data or len(data) % MTPROTO_BLOCK_SIZE != 0:
+            raise ValueError("Invalid data length")
+
         block_size = MTPROTO_BLOCK_SIZE
         iv_prev = self.iv[:16]
         iv_curr = self.iv[16:]
@@ -320,11 +322,12 @@ class MTProtoTransport:
             iv_prev = decrypted_block
             iv_curr = block
 
-        # Remove padding
-        if decrypted:
-            padding_len = decrypted[-1]
-            if 1 <= padding_len <= MTPROTO_BLOCK_SIZE:
-                decrypted = decrypted[:-padding_len]
+        if not decrypted:
+            raise ValueError("Empty decrypted data")
+
+        padding_len = decrypted[-1]
+        if 1 <= padding_len <= MTPROTO_BLOCK_SIZE:
+            decrypted = decrypted[:-padding_len]
 
         return decrypted
 
@@ -693,7 +696,6 @@ class MTProtoProxy:
                            client_writer: asyncio.StreamWriter, label: str,
                            used_secret: str, ip: str):
         """Forward data between client and Telegram server."""
-        # Get Telegram server IP from DC_ID
         tg_host = self.dc_ip.get(self.dc_id) or DC_IP_MAP.get(self.dc_id, "149.154.167.220")
         tg_port = 443
 
@@ -706,14 +708,12 @@ class MTProtoProxy:
         except asyncio.TimeoutError:
             log.error("[%s] Timeout connecting to Telegram DC%d", label, self.dc_id)
             _close_writer_safe(client_writer)
-            
             return
         except (ConnectionRefusedError, OSError) as exc:
             log.error("[%s] Cannot connect to Telegram DC%d: %s", label, self.dc_id, exc)
             _close_writer_safe(client_writer)
-            
             return
-        
+
         async def client_to_server():
             try:
                 while True:
@@ -721,7 +721,6 @@ class MTProtoProxy:
                     if not data:
                         break
 
-                    # Check rate limit
                     if self.rate_limiter:
                         if not self.rate_limiter.check_rate_limit(ip, len(data)):
                             log.warning("[%s] Rate limit exceeded (bytes)", label)
@@ -731,14 +730,13 @@ class MTProtoProxy:
                     self.bytes_received += len(data)
                     self.stats_per_secret[used_secret]["bytes_received"] += len(data)
                     log.debug("[%s] Client -> Server: %d bytes", label, len(data))
-                    
-                    # Forward to Telegram server
+
                     tg_writer.write(data)
                     await tg_writer.drain()
-            except (asyncio.CancelledError, ConnectionError, OSError) as exc:
-                log.debug("[%s] client_to_server ended: %s", label, exc)
+            except (asyncio.CancelledError, ConnectionError, OSError):
+                pass
             finally:
-                _close_writer_safe(tg_writer)
+                await _close_writer_safe(tg_writer)
 
         async def server_to_client():
             try:
@@ -751,13 +749,12 @@ class MTProtoProxy:
                     self.stats_per_secret[used_secret]["bytes_sent"] += len(data)
                     log.debug("[%s] Server -> Client: %d bytes", label, len(data))
 
-                    # Forward to client (already encrypted by Telegram)
                     client_writer.write(data)
                     await client_writer.drain()
-            except (asyncio.CancelledError, ConnectionError, OSError) as exc:
-                log.debug("[%s] server_to_client ended: %s", label, exc)
+            except (asyncio.CancelledError, ConnectionError, OSError):
+                pass
             finally:
-                _close_writer_safe(client_writer)
+                await _close_writer_safe(client_writer)
 
         tasks = [
             asyncio.create_task(client_to_server()),
@@ -767,19 +764,7 @@ class MTProtoProxy:
         try:
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         finally:
-            for t in tasks:
-                t.cancel()
-            for t in tasks:
-                try:
-                    await t
-                except Exception:
-                    pass
-            # Cleanup
-            _close_writer_safe(tg_writer)
-
-            _close_writer_safe(client_writer)
-            
-            # Note: stats decrement is handled by _handle_client
+            await _cancel_tasks(tasks)
 
     def get_stats(self) -> dict:
         """Get proxy statistics."""
