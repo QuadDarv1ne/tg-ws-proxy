@@ -68,6 +68,7 @@ from proxy.constants import (
     UI_FONT_FAMILY,
     WSAEADDRINUSE,
 )
+from proxy.stats import _human_bytes
 
 
 APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()) + "/.config")) / APP_DIR_NAME
@@ -685,7 +686,24 @@ def _edit_config_dialog() -> None:
         return
 
     cfg = dict(_config)
+    root = _create_config_window()
+    frame = _build_config_frame(root)
 
+    host_var, port_var, dc_textbox, verbose_var = _build_config_fields(frame, cfg)
+
+    def on_save():
+        _save_config_and_restart(host_var, port_var, dc_textbox, verbose_var, root)
+
+    def on_cancel():
+        root.destroy()
+
+    _build_config_buttons(frame, on_save, on_cancel)
+
+    root.mainloop()
+
+
+def _create_config_window() -> "ctk.CTk":
+    """Create and configure config dialog window."""
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
 
@@ -694,7 +712,6 @@ def _edit_config_dialog() -> None:
     root.resizable(False, False)
     root.attributes("-topmost", True)
 
-    # Try to load icon
     icon_path = Path(__file__).parent / "icon.ico"
     if icon_path.exists():
         root.iconbitmap(str(icon_path))
@@ -704,10 +721,21 @@ def _edit_config_dialog() -> None:
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
     root.configure(fg_color=UI_BG)
+    return root
 
+
+def _build_config_frame(root: "ctk.CTk") -> "ctk.CTkFrame":
+    """Build main frame for config dialog."""
     frame = ctk.CTkFrame(root, fg_color=UI_BG, corner_radius=0)
     frame.pack(fill="both", expand=True, padx=24, pady=20)
+    return frame
 
+
+def _build_config_fields(
+    frame: "ctk.CTkFrame",
+    cfg: dict
+) -> Tuple["ctk.StringVar", "ctk.StringVar", "ctk.CTkTextbox", "ctk.BooleanVar"]:
+    """Build configuration input fields."""
     # Host
     ctk.CTkLabel(frame, text="IP-адрес прокси",
                  font=(UI_FONT_FAMILY, 13), text_color=UI_TEXT_PRIMARY,
@@ -755,53 +783,68 @@ def _edit_config_dialog() -> None:
                  font=(UI_FONT_FAMILY, 11), text_color=UI_TEXT_SECONDARY,
                  anchor="w").pack(anchor="w", pady=(0, 16))
 
-    def on_save():
-        import socket as _sock
-        host_val = host_var.get().strip()
-        try:
-            _sock.inet_aton(host_val)
-        except OSError:
-            _show_error("Некорректный IP-адрес.")
-            return
+    return host_var, port_var, dc_textbox, verbose_var
 
-        try:
-            port_val = int(port_var.get().strip())
-            if not (1 <= port_val <= 65535):
-                raise ValueError
-        except ValueError:
-            _show_error("Порт должен быть числом 1-65535")
-            return
 
-        lines = [l.strip() for l in dc_textbox.get("1.0", "end").strip().splitlines()
-                 if l.strip()]
-        try:
-            tg_ws_proxy.parse_dc_ip_list(lines)
-        except ValueError as e:
-            _show_error(str(e))
-            return
+def _save_config_and_restart(
+    host_var: "ctk.StringVar",
+    port_var: "ctk.StringVar",
+    dc_textbox: "ctk.CTkTextbox",
+    verbose_var: "ctk.BooleanVar",
+    root: "ctk.CTk"
+) -> None:
+    """Validate and save configuration, then offer restart."""
+    import socket as _sock
 
-        new_cfg = {
-            "host": host_val,
-            "port": port_val,
-            "dc_ip": lines,
-            "verbose": verbose_var.get(),
-        }
-        save_config(new_cfg)
-        _config.update(new_cfg)
-        log.info("Config saved: %s", new_cfg)
+    host_val = host_var.get().strip()
+    try:
+        _sock.inet_aton(host_val)
+    except OSError:
+        _show_error("Некорректный IP-адрес.")
+        return
 
-        from tkinter import messagebox
-        if messagebox.askyesno("Перезапустить?",
-                               "Настройки сохранены.\n\nПерезапустить прокси сейчас?",
-                               parent=root):
-            root.destroy()
-            restart_proxy()
-        else:
-            root.destroy()
+    try:
+        port_val = int(port_var.get().strip())
+        if not (1 <= port_val <= 65535):
+            raise ValueError
+    except ValueError:
+        _show_error("Порт должен быть числом 1-65535")
+        return
 
-    def on_cancel():
+    lines = [l.strip() for l in dc_textbox.get("1.0", "end").strip().splitlines()
+             if l.strip()]
+    try:
+        tg_ws_proxy.parse_dc_ip_list(lines)
+    except ValueError as e:
+        _show_error(str(e))
+        return
+
+    new_cfg = {
+        "host": host_val,
+        "port": port_val,
+        "dc_ip": lines,
+        "verbose": verbose_var.get(),
+    }
+    save_config(new_cfg)
+    _config.update(new_cfg)
+    log.info("Config saved: %s", new_cfg)
+
+    from tkinter import messagebox
+    if messagebox.askyesno("Перезапустить?",
+                           "Настройки сохранены.\n\nПерезапустить прокси сейчас?",
+                           parent=root):
+        root.destroy()
+        restart_proxy()
+    else:
         root.destroy()
 
+
+def _build_config_buttons(
+    frame: "ctk.CTkFrame",
+    on_save: Callable[[], None],
+    on_cancel: Callable[[], None]
+) -> None:
+    """Build Save/Cancel buttons for config dialog."""
     btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
     btn_frame.pack(fill="x")
     ctk.CTkButton(btn_frame, text="Сохранить", width=140, height=38,
@@ -815,8 +858,6 @@ def _edit_config_dialog() -> None:
                   text_color=UI_TEXT_PRIMARY, border_width=1,
                   border_color=UI_FIELD_BORDER,
                   command=on_cancel).pack(side="left")
-
-    root.mainloop()
 
 
 def _show_stats_dialog() -> None:
@@ -846,13 +887,6 @@ def _show_stats_dialog() -> None:
     ctk.CTkLabel(frame, text="Статистика прокси",
                  font=(UI_FONT_FAMILY, 16, "bold"),
                  text_color=UI_TEXT_PRIMARY).pack(anchor="w", pady=(0, 16))
-
-    def _human_bytes(n: int) -> str:
-        for unit in ('B', 'KB', 'MB', 'GB'):
-            if abs(n) < 1024:
-                return f"{n:.1f} {unit}"
-            n /= 1024
-        return f"{n:.1f} TB"
 
     stats_text = (
         f"Всего подключений: {stats['connections_total']}\n"
