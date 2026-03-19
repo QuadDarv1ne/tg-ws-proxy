@@ -753,10 +753,45 @@ def _build_config_fields(
                               border_width=1, text_color=UI_TEXT_PRIMARY)
     port_entry.pack(anchor="w", pady=(0, 12))
 
+    # Quick DC presets
+    dc_preset_frame = ctk.CTkFrame(frame, fg_color="transparent")
+    dc_preset_frame.pack(anchor="w", pady=(0, 8))
+    
+    ctk.CTkLabel(dc_preset_frame, text="Быстрые настройки DC:",
+                 font=(UI_FONT_FAMILY, 11), text_color=UI_TEXT_SECONDARY,
+                 anchor="w").pack(side="left", padx=(0, 8))
+    
+    def on_preset_dc2():
+        dc_textbox.delete("1.0", "end")
+        dc_textbox.insert("1.0", "2:149.154.167.220\n4:149.154.167.220")
+    
+    def on_preset_all():
+        dc_textbox.delete("1.0", "end")
+        dc_textbox.insert("1.0", 
+            "1:149.154.175.53\n"
+            "2:149.154.167.220\n"
+            "3:149.154.175.100\n"
+            "4:149.154.167.91\n"
+            "5:91.108.56.100")
+    
+    ctk.CTkButton(dc_preset_frame, text="DC 2+4", width=60, height=24,
+                  font=(UI_FONT_FAMILY, 11), corner_radius=6,
+                  fg_color=UI_FIELD_BG, hover_color=UI_FIELD_BORDER,
+                  text_color=UI_TEXT_PRIMARY, border_width=1,
+                  border_color=UI_FIELD_BORDER,
+                  command=on_preset_dc2).pack(side="left", padx=(0, 4))
+    
+    ctk.CTkButton(dc_preset_frame, text="Все DC", width=60, height=24,
+                  font=(UI_FONT_FAMILY, 11), corner_radius=6,
+                  fg_color=UI_FIELD_BG, hover_color=UI_FIELD_BORDER,
+                  text_color=UI_TEXT_PRIMARY, border_width=1,
+                  border_color=UI_FIELD_BORDER,
+                  command=on_preset_all).pack(side="left")
+
     # DC-IP mappings
     ctk.CTkLabel(frame, text="DC → IP маппинги (формат DC:IP)",
                  font=(UI_FONT_FAMILY, 13), text_color=UI_TEXT_PRIMARY,
-                 anchor="w").pack(anchor="w", pady=(0, 4))
+                 anchor="w").pack(anchor="w", pady=(8, 4))
     dc_textbox = ctk.CTkTextbox(frame, width=370, height=120,
                                 font=("Consolas", 12), corner_radius=10,
                                 fg_color=UI_FIELD_BG, border_color=UI_FIELD_BORDER,
@@ -802,6 +837,11 @@ def _save_config_and_restart(
             raise ValueError
     except ValueError:
         _show_error("Порт должен быть числом 1-65535")
+        return
+
+    # Check port availability
+    if not _check_port_available(port_val, host_val):
+        _show_error(f"Порт {host_val}:{port_val} уже используется.\n\nВыберите другой порт.")
         return
 
     lines = [l.strip() for l in dc_textbox.get("1.0", "end").strip().splitlines()
