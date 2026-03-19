@@ -22,6 +22,7 @@ from .constants import (
     SEND_BUF_SIZE,
     WS_POOL_SIZE,
     WS_POOL_MAX_AGE,
+    WS_POOL_MAX_SIZE,
     DC_FAIL_COOLDOWN,
     INIT_PACKET_SIZE,
     INIT_KEY_OFFSET,
@@ -559,6 +560,11 @@ class _WsPool:
         self._schedule_refill(key, target_ip, domains)
         return None
 
+    def _can_add_to_pool(self, key: Tuple[int, bool]) -> bool:
+        """Check if pool can accept more connections."""
+        bucket = self._idle.get(key, [])
+        return len(bucket) < WS_POOL_MAX_SIZE
+
     def _schedule_refill(self, key, target_ip, domains):
         if key in self._refilling:
             return
@@ -579,8 +585,10 @@ class _WsPool:
             for t in tasks:
                 try:
                     ws = await t
-                    if ws:
+                    if ws and self._can_add_to_pool(key):
                         bucket.append((ws, time.monotonic()))
+                    elif ws:
+                        await self._quiet_close(ws)
                 except Exception:
                     pass
             log.debug("WS pool refilled DC%d%s: %d ready",
