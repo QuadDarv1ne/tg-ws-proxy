@@ -61,21 +61,21 @@ class Stats:
         self._latency_history: Dict[int, List[float]] = {}  # dc_id -> [latencies]
 
         # Session tracking
-        self.session_start = time.time()
+        self.session_start = time.monotonic()
         self.last_connection_time: Optional[float] = None
         self.peak_connections_per_minute = 0
 
         # History tracking (last N events)
         self._history_size = history_size
-        self.connection_history: List[dict] = []  # [{time, type, dc, duration}, ...]
-        self.traffic_history: List[dict] = []  # [{time, bytes_up, bytes_down}, ...]
+        self.connection_history: List[dict] = []
+        self.traffic_history: List[dict] = []
         self._last_traffic_snapshot = (0, 0)
-        self._traffic_snapshot_time = time.time()
+        self._traffic_snapshot_time = time.monotonic()
 
     def add_connection(self, conn_type: str, dc: Optional[int] = None) -> None:
         """Record a new connection in history."""
         self.connections_total += 1
-        self.last_connection_time = time.time()
+        self.last_connection_time = time.monotonic()
         self._current_dc = dc
 
         if conn_type == 'ws':
@@ -87,21 +87,19 @@ class Stats:
         elif conn_type == 'passthrough':
             self.connections_passthrough += 1
 
-        # Update DC stats
         if dc is not None:
             if dc not in self.dc_stats:
                 self.dc_stats[dc] = {'connections': 0, 'errors': 0}
             self.dc_stats[dc]['connections'] += 1
 
         self.connection_history.append({
-            'time': time.time(),
+            'time': time.monotonic(),
             'type': conn_type,
             'dc': dc
         })
         if len(self.connection_history) > self._history_size:
             self.connection_history.pop(0)
 
-        # Update peak connections per minute
         cpm = self.get_connections_per_minute()
         if cpm > self.peak_connections_per_minute:
             self.peak_connections_per_minute = cpm
@@ -111,8 +109,7 @@ class Stats:
         self.bytes_up += up
         self.bytes_down += down
 
-        # Record traffic snapshot every second
-        now = time.time()
+        now = time.monotonic()
         if now - self._traffic_snapshot_time >= 1.0:
             self.traffic_history.append({
                 'time': now,
@@ -148,7 +145,7 @@ class Stats:
         """Calculate connections per minute from history."""
         if not self.connection_history:
             return 0.0
-        now = time.time()
+        now = time.monotonic()
         minute_ago = now - 60
         recent = [c for c in self.connection_history if c['time'] > minute_ago]
         return len(recent)
@@ -157,7 +154,7 @@ class Stats:
         """Calculate bytes per minute (up, down) from history."""
         if not self.traffic_history:
             return (0, 0)
-        now = time.time()
+        now = time.monotonic()
         minute_ago = now - 60
         recent = [t for t in self.traffic_history if t['time'] > minute_ago]
         if not recent:
@@ -174,7 +171,7 @@ class Stats:
 
     def get_session_duration(self) -> float:
         """Get session duration in seconds."""
-        return time.time() - self.session_start
+        return time.monotonic() - self.session_start
 
     def get_best_dc(self) -> Optional[int]:
         """Get DC with lowest average latency."""
