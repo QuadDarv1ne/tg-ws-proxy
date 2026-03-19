@@ -80,8 +80,9 @@
 
 #### Тесты (v2.12.0) ✅
 - [x] Integration tests для веб-панели — `tests/test_web_dashboard.py` ✅ (9 тестов)
+- [x] Unit-тесты для MTProtoProxy — `tests/test_mtproto_proxy.py` ✅ (32 теста: add_secret, remove_secret, get_secrets, get_stats, get_stats_summary, start/stop, context manager)
 - [ ] Load tests — сценарии нагрузки
-- [ ] Coverage > 80% — текущее покрытие ~20%
+- [ ] Coverage > 80% — текущее покрытие ~39%
 
 ### 🟢 Низкий приоритет
 

@@ -448,8 +448,55 @@ class MTProtoProxy:
         # Rotation history
         self.rotation_history: list[dict] = []
 
-    async def start(self):
-        """Start the MTProto proxy server."""
+    def start(self) -> None:
+        """Start the MTProto proxy server (synchronous)."""
+        import threading
+
+        # Validate all secrets
+        for secret in self.secrets:
+            if not validate_secret(secret):
+                raise ValueError(f"Invalid secret key: {secret[:8]}... (must be {MTPROTO_SECRET_LENGTH} hex characters)")
+
+        # Create and start server in background thread
+        def run_server():
+            async def _create_server():
+                self._server = await asyncio.start_server(
+                    self._handle_client,
+                    self.host,
+                    self.port,
+                )
+
+                # Start auto-rotation if enabled
+                if self.auto_rotate:
+                    self._start_auto_rotation()
+
+                log.info("=" * 60)
+                log.info("  MTProto Proxy Server")
+                log.info("  Listening on: %s:%d", self.host, self.port)
+                log.info("  Secrets: %d configured", len(self.secrets))
+                for i, secret in enumerate(self.secrets, 1):
+                    log.info("    [%d] %s...%s", i, secret[:8], secret[-4:])
+                if self.auto_rotate:
+                    log.info("  Auto-rotation: Enabled (every %d days)", self.rotate_interval_days)
+                log.info("=" * 60)
+                log.info("  Telegram Mobile Connection:")
+                log.info("    Scan QR code or use tg://proxy?server=YOUR_SERVER&port=%d&secret=YOUR_SECRET", self.port)
+                log.info("=" * 60)
+
+                async with self._server:
+                    await self._server.serve_forever()
+
+            asyncio.run(_create_server())
+
+        self._server_thread = threading.Thread(target=run_server, daemon=True)
+        self._server_thread.start()
+
+        # Wait a bit for server to start
+        import time
+        time.sleep(0.1)
+
+    async def start_async(self):
+        """Start the MTProto proxy server (async version)."""
         # Validate all secrets
         for secret in self.secrets:
             if not validate_secret(secret):
@@ -768,8 +815,59 @@ class MTProtoProxy:
             "connections_active": self.connections_active,
             "bytes_received": self.bytes_received,
             "bytes_sent": self.bytes_sent,
+            "bytes_total": self.bytes_received + self.bytes_sent,
+            "secrets_count": len(self.secrets),
             "per_secret": dict(self.stats_per_secret),
         }
+
+    def get_stats_summary(self) -> str:
+        """Get proxy statistics summary as string."""
+        stats = self.get_stats()
+        return (
+            f"MTProto Proxy Stats: "
+            f"connections={stats['connections_total']} total, {stats['connections_active']} active, "
+            f"bytes={stats['bytes_total']}, secrets={stats['secrets_count']}"
+        )
+
+    def add_secret(self, secret: str) -> None:
+        """Add a new secret."""
+        if secret not in self.secrets:
+            self.secrets.append(secret)
+            self.transports[secret] = MTProtoTransport(secret)
+            self.stats_per_secret[secret] = {
+                "connections_total": 0,
+                "connections_active": 0,
+                "bytes_received": 0,
+                "bytes_sent": 0,
+                "limit_exceeded": False,
+            }
+
+    def remove_secret(self, secret: str) -> None:
+        """Remove a secret."""
+        if secret in self.secrets:
+            self.secrets.remove(secret)
+            self.transports.pop(secret, None)
+            self.stats_per_secret.pop(secret, None)
+
+    def get_secrets(self) -> list[str]:
+        """Get list of secrets."""
+        return list(self.secrets)
+
+    def stop(self) -> None:
+        """Stop the proxy server."""
+        self.stop_auto_rotation()
+        if self._server is not None:
+            self._server.close()
+            self._server = None
+
+    def __enter__(self) -> "MTProtoProxy":
+        """Context manager entry."""
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit."""
+        self.stop()
 
 
 def run_mtproto_proxy(
