@@ -129,6 +129,16 @@
 - [x] Вынесена _pipe_passthrough() для passthrough-трафика
 - [x] Исправлено логирование TimeoutError (WARNING → DEBUG)
 
+### ✅ Выполнено (v2.6.0)
+- [x] Удаление дублирования `_format_bytes` в dashboard.py
+- [x] Удаление избыточных алиасов в tg_ws_proxy.py (_IP_TO_DC, _TG_RANGES)
+- [x] Удаление неиспользуемой константы WSAEPROTONOSUPPORT
+- [x] Упрощение wait_stop() в tg_ws_proxy.py (-7 строк)
+- [x] Упрощение finally в _handle_client (mtproto_proxy.py)
+- [x] Защита от None в _close_writer_safe()
+- [x] Замена time.time() на time.monotonic() в stats.py
+- [x] Thread-safe is_ip_allowed() в RateLimiter
+
 ### Требуется рефакторинг
 - [x] Упростить `_edit_config_dialog()` — выполнен ✅
 - [x] Унифицировать обработку ошибок в `_bridge_ws()` и `_bridge_tcp()` — выполнен ✅
@@ -171,7 +181,7 @@ black>=23.0.0
 
 ---
 
-## 🚀 Следующий релиз: v2.5.5
+## 🚀 Следующий релиз: v2.6.0
 
 **Выполнено:**
 - [x] Вынесена _pipe_passthrough() для passthrough-трафика
@@ -182,6 +192,14 @@ black>=23.0.0
 - [x] Health checks для WebSocket endpoints
 - [x] Тёмная тема для GUI и веб-панели
 - [x] Адаптивный дизайн веб-панели (mobile-friendly)
+- [x] Удаление дублирования `_format_bytes` в dashboard.py (импорт из stats.py)
+- [x] Удаление избыточных алиасов в tg_ws_proxy.py (_IP_TO_DC, _TG_RANGES)
+- [x] Удаление неиспользуемой константы WSAEPROTONOSUPPORT
+- [x] Упрощение wait_stop() в tg_ws_proxy.py
+- [x] Упрощение finally в _handle_client (mtproto_proxy.py)
+- [x] Защита от None в _close_writer_safe()
+- [x] Замена time.time() на time.monotonic() в stats.py
+- [x] Thread-safe is_ip_allowed() в RateLimiter
 
 **План:**
 - [ ] Интеграция toast-уведомлений Windows
