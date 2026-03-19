@@ -10,17 +10,10 @@ import ssl
 import struct
 import sys
 import time
-from typing import Dict, List, Optional, Set, Tuple, TypedDict
+from typing import Dict, List, Optional, Set, Tuple
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .stats import Stats, _human_bytes
-
-class ProxyConfig(TypedDict, total=False):
-    """Configuration for the proxy server."""
-    port: int
-    host: str
-    dc_ip: List[str]
-    verbose: bool
 
 from .constants import (
     DEFAULT_PORT,
