@@ -540,6 +540,9 @@ def _on_toggle_theme(icon=None, item=None) -> None:
     _dark_theme = not _dark_theme
     theme_state = "включена" if _dark_theme else "выключена"
     _show_info(f"Тёмная тема {theme_state}", "TG WS Proxy")
+    # Update menu to reflect new theme state
+    if _tray_icon and hasattr(_tray_icon, 'update_menu'):
+        _tray_icon.update_menu()
 
 
 def _on_toggle_autostart(icon=None, item=None) -> None:
@@ -1429,7 +1432,7 @@ def run_tray() -> None:
         APP_NAME,
         icon_image,
         "TG WS Proxy",
-        menu=_build_menu())
+        menu=pystray.Menu(lambda _: _build_menu()))
 
     log.info("Tray icon running")
 
