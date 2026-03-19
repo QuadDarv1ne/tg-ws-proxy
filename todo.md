@@ -82,8 +82,9 @@
 - [x] Integration tests для веб-панели — `tests/test_web_dashboard.py` ✅ (9 тестов)
 - [x] Unit-тесты для MTProtoProxy — `tests/test_mtproto_proxy.py` ✅ (32 теста: add_secret, remove_secret, get_secrets, get_stats, get_stats_summary, start/stop, context manager)
 - [x] Unit-тесты для tg_ws_proxy — `tests/test_proxy.py` ✅ (19 тестов: DNS cache, TcpPool, WsPool, ProxyServer, lazy initialization)
+- [x] Unit-тесты для profiler.py — `tests/test_profiler.py` ✅ (19 тестов: PerformanceProfiler, AsyncPerformanceProfiler)
 - [ ] Load tests — сценарии нагрузки
-- [ ] Coverage > 80% — текущее покрытие ~41%
+- [ ] Coverage > 80% — текущее покрытие ~42%
 
 ### 🟢 Низкий приоритет
 
