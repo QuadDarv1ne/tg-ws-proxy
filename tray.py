@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Callable, Tuple
 
 import psutil
+import socket as _sock
+import asyncio
 
 # Conditional imports for platform-specific functionality
 IS_WINDOWS = sys.platform == "win32"
@@ -238,7 +240,6 @@ def setup_logging(verbose: bool = False) -> None:
 
 def _check_port_available(port: int, host: str) -> bool:
     """Check if port is available for binding."""
-    import socket as _sock
     try:
         with _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM) as s:
             s.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
@@ -252,7 +253,6 @@ def _check_port_available(port: int, host: str) -> bool:
 
 def _has_ipv6_enabled() -> bool:
     """Check if IPv6 is enabled on the system."""
-    import socket as _sock
     try:
         addrs = _sock.getaddrinfo(_sock.gethostname(), None, _sock.AF_INET6)
         for addr in addrs:
@@ -380,9 +380,9 @@ def _run_proxy_thread(port: int, dc_opt: Dict[int, str], verbose: bool,
         log.warning("IPv6 is enabled. If you experience connection issues, "
                     "try disabling IPv6 in Telegram settings.")
 
-    loop = _asyncio.new_event_loop()
-    _asyncio.set_event_loop(loop)
-    stop_ev = _asyncio.Event()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    stop_ev = asyncio.Event()
     _async_stop = (loop, stop_ev)
 
     try:
@@ -794,8 +794,6 @@ def _save_config_and_restart(
     root: "ctk.CTk"
 ) -> None:
     """Validate and save configuration, then offer restart."""
-    import socket as _sock
-
     host_val = host_var.get().strip()
     try:
         _sock.inet_aton(host_val)
@@ -1255,7 +1253,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-# Import asyncio at module level
-import asyncio as _asyncio
