@@ -15,18 +15,19 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio as _asyncio
 import json
 import logging
 import os
-import psutil
 import subprocess
 import sys
 import threading
 import time
 import webbrowser
-import asyncio as _asyncio
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
+
+import psutil
 
 try:
     import rumps
@@ -151,7 +152,7 @@ def load_config() -> dict:
     _ensure_dirs()
     if CONFIG_FILE.exists():
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
                 data = json.load(f)
             for k, v in DEFAULT_CONFIG.items():
                 data.setdefault(k, v)
@@ -211,44 +212,44 @@ def _create_menubar_icon() -> Optional[str]:
     """Create a simple PNG icon for menu bar."""
     if Image is None:
         return None
-    
+
     _ensure_dirs()
     size = 22
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    
+
     # Blue circle
     margin = 2
     draw.ellipse([margin, margin, size - margin, size - margin],
                  fill=(51, 144, 236, 255))
-    
+
     # White "T"
     try:
         font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", size=14)
     except Exception:
         font = ImageFont.load_default()
-    
+
     bbox = draw.textbbox((0, 0), "T", font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
     tx = (size - tw) // 2 - bbox[0]
     ty = (size - th) // 2 - bbox[1]
     draw.text((tx, ty), "T", fill=(255, 255, 255, 255), font=font)
-    
+
     img.save(str(MENUBAR_ICON_PATH), "PNG")
     return str(MENUBAR_ICON_PATH)
 
 
 class TGWSProxyApp(rumps.App):
     """Native macOS menu bar application for TG WS Proxy."""
-    
+
     def __init__(self):
         icon_path = _create_menubar_icon()
-        super(TGWSProxyApp, self).__init__(APP_NAME, icon=icon_path)
-        
+        super().__init__(APP_NAME, icon=icon_path)
+
         self._config = load_config()
         self._proxy_thread = None
         self._async_stop = None
-        
+
         # Menu items
         self.status_item = rumps.MenuItem("Status: Stopped")
         self.open_tg_item = rumps.MenuItem("Open in Telegram", self._on_open_in_telegram)
@@ -257,7 +258,7 @@ class TGWSProxyApp(rumps.App):
         self.settings_item = rumps.MenuItem("Settings...", self._on_edit_config)
         self.logs_item = rumps.MenuItem("Open Logs", self._on_open_logs)
         self.quit_item = rumps.MenuItem("Quit", self._on_quit)
-        
+
         self.menu = [
             self.status_item,
             None,
@@ -270,36 +271,36 @@ class TGWSProxyApp(rumps.App):
             None,
             self.quit_item,
         ]
-        
+
         # Start proxy on launch
         self._start_proxy()
-    
+
     def _start_proxy(self):
         """Start the proxy server in background thread."""
         if self._proxy_thread and self._proxy_thread.is_alive():
             return
-        
+
         cfg = self._config
         port = cfg.get("port", DEFAULT_CONFIG["port"])
         host = cfg.get("host", DEFAULT_CONFIG["host"])
         dc_ip_list = cfg.get("dc_ip", DEFAULT_CONFIG["dc_ip"])
         verbose = cfg.get("verbose", False)
-        
+
         try:
             dc_opt = tg_ws_proxy.parse_dc_ip_list(dc_ip_list)
         except ValueError as e:
             log.error("Bad config dc_ip: %s", e)
             rumps.notification("Error", "Configuration Error", str(e))
             return
-        
+
         log.info("Starting proxy on %s:%d ...", host, port)
-        
+
         def run_proxy():
             loop = _asyncio.new_event_loop()
             _asyncio.set_event_loop(loop)
             stop_ev = _asyncio.Event()
             self._async_stop = (loop, stop_ev)
-            
+
             try:
                 loop.run_until_complete(
                     tg_ws_proxy._run(port, dc_opt, stop_event=stop_ev, host=host))
@@ -309,11 +310,11 @@ class TGWSProxyApp(rumps.App):
             finally:
                 loop.close()
                 self._async_stop = None
-        
+
         self._proxy_thread = threading.Thread(target=run_proxy, daemon=True, name="proxy")
         self._proxy_thread.start()
         self.status_item.title = "Status: Running"
-    
+
     def _stop_proxy(self):
         """Stop the proxy server."""
         if self._async_stop:
@@ -324,12 +325,12 @@ class TGWSProxyApp(rumps.App):
         self._proxy_thread = None
         self.status_item.title = "Status: Stopped"
         log.info("Proxy stopped")
-    
+
     def _on_open_in_telegram(self, sender):
         port = self._config.get("port", DEFAULT_CONFIG["port"])
         url = f"tg://socks?server=127.0.0.1&port={port}"
         webbrowser.open(url)
-    
+
     def _on_show_stats(self, sender):
         stats = tg_ws_proxy.get_stats()
         summary = (
@@ -340,12 +341,12 @@ class TGWSProxyApp(rumps.App):
             f"Traffic Down: {self._human_bytes(stats['bytes_down'])}"
         )
         rumps.notification("Proxy Statistics", "", summary)
-    
+
     def _on_restart(self, sender):
         self._stop_proxy()
         time.sleep(0.3)
         self._start_proxy()
-    
+
     def _on_edit_config(self, sender):
         # Open config file in default editor
         if CONFIG_FILE.exists():
@@ -353,17 +354,17 @@ class TGWSProxyApp(rumps.App):
         else:
             save_config(self._config)
             subprocess.run(["open", "-a", "TextEdit", str(CONFIG_FILE)])
-    
+
     def _on_open_logs(self, sender):
         if LOG_FILE.exists():
             subprocess.run(["open", str(LOG_FILE)])
         else:
             rumps.notification("Logs", "No log file found", "")
-    
+
     def _on_quit(self, sender):
         self._stop_proxy()
         self.quit()
-    
+
     @staticmethod
     def _human_bytes(n: int) -> str:
         for unit in ('B', 'KB', 'MB', 'GB'):
@@ -376,22 +377,22 @@ class TGWSProxyApp(rumps.App):
 def main():
     """Main entry point."""
     global _app
-    
+
     if not _acquire_lock():
         print("Another instance is already running")
         sys.exit(1)
-    
+
     _ensure_dirs()
-    
+
     if LOG_FILE.exists():
         try:
             LOG_FILE.unlink()
         except Exception:
             pass
-    
+
     setup_logging()
     log.info("TG WS Proxy macOS app starting")
-    
+
     try:
         _app = TGWSProxyApp()
         _app.run()
@@ -399,7 +400,7 @@ def main():
         log.error("Fatal error: %s", e)
         _release_lock()
         sys.exit(1)
-    
+
     _release_lock()
 
 

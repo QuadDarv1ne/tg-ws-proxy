@@ -154,16 +154,16 @@ class Stats:
             try:
                 self.cpu_percent = self._process.cpu_percent(interval=None)
                 self.memory_bytes = self._process.memory_info().rss
-                
+
                 self._cpu_history.append(self.cpu_percent)
                 self._memory_history.append(self.memory_bytes)
-                
+
                 # Keep last 60 measurements (1 minute)
                 if len(self._cpu_history) > 60:
                     self._cpu_history.pop(0)
                 if len(self._memory_history) > 60:
                     self._memory_history.pop(0)
-                    
+
                 self._last_cpu_update = now
             except Exception:
                 pass

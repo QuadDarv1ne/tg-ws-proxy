@@ -4,21 +4,20 @@ Integration tests for MTProto Proxy.
 Tests MTProto protocol handling, rate limiting, and connection management.
 """
 
-import pytest
 import asyncio
-import struct
-from typing import List, Tuple
 
+import pytest
+
+from proxy.constants import MTPROTO_SECRET_LENGTH
 from proxy.mtproto_proxy import (
+    MTProtoPacket,
     MTProtoProxy,
     MTProtoTransport,
-    MTProtoPacket,
     RateLimiter,
     generate_secret,
-    validate_secret,
     secret_to_key_iv,
+    validate_secret,
 )
-from proxy.constants import MTPROTO_SECRET_LENGTH
 
 
 class TestMTProtoTransport:

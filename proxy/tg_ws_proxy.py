@@ -11,35 +11,31 @@ import struct
 import sys
 import time
 from typing import Dict, List, Optional, Set, Tuple
+
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from .stats import Stats, _human_bytes
-
 from .constants import (
-    DEFAULT_PORT,
-    TCP_NODELAY,
-    RECV_BUF_SIZE,
-    SEND_BUF_SIZE,
-    WS_POOL_SIZE,
-    WS_POOL_MAX_AGE,
-    WS_POOL_MAX_SIZE,
+    _IP_TO_DC,
     DC_FAIL_COOLDOWN,
-    INIT_PACKET_SIZE,
-    INIT_KEY_OFFSET,
-    INIT_KEY_SIZE,
+    DEFAULT_PORT,
+    INIT_DC_OFFSET,
     INIT_IV_OFFSET,
     INIT_IV_SIZE,
-    INIT_DC_OFFSET,
-    INIT_DC_SIZE,
-    PROTO_OBFUSCATED,
+    INIT_KEY_OFFSET,
+    INIT_KEY_SIZE,
+    INIT_PACKET_SIZE,
     PROTO_ABRIDGED,
+    PROTO_OBFUSCATED,
     PROTO_PADDED_ABRIDGED,
-    ABRIDGED_SHORT_PREFIX,
+    RECV_BUF_SIZE,
+    SEND_BUF_SIZE,
+    TCP_NODELAY,
     TG_RANGES,
-    _IP_TO_DC,
-    WSAEADDRINUSE,
+    WS_POOL_MAX_AGE,
+    WS_POOL_MAX_SIZE,
+    WS_POOL_SIZE,
 )
-
+from .stats import Stats, _human_bytes
 
 log = logging.getLogger('tg-ws-proxy')
 
@@ -65,7 +61,7 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
         List of (ip, port) tuples
     """
     now = time.monotonic()
-    
+
     # Check cache
     if domain in _dns_cache:
         # Filter expired entries
@@ -76,20 +72,20 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
         else:
             log.debug("DNS cache expired for %s", domain)
             del _dns_cache[domain]
-    
+
     # Resolve from scratch
     try:
         loop = asyncio.get_event_loop()
         results = await loop.getaddrinfo(domain, port, family=_socket.AF_INET, type=_socket.SOCK_STREAM)
-        
+
         # Extract unique IPs
         ips = list(set(r[4][0] for r in results))
         expiry = now + _dns_cache_ttl
-        
+
         # Update cache
         _dns_cache[domain] = [(ip, expiry) for ip in ips]
         log.debug("DNS resolved %s -> %s (cached for %ds)", domain, ips, int(_dns_cache_ttl))
-        
+
         return [(ip, port) for ip in ips]
     except Exception as e:
         log.debug("DNS resolution failed for %s: %s", domain, e)
@@ -109,7 +105,7 @@ async def _check_ws_domain_available(dc_id: int, timeout: float = 5.0) -> Tuple[
     Returns:
         Tuple of (is_available, error_message)
     """
-    from .constants import WS_DOMAIN_TEMPLATE, WS_DOMAIN_MEDIA_TEMPLATE
+    from .constants import WS_DOMAIN_MEDIA_TEMPLATE, WS_DOMAIN_TEMPLATE
 
     domains_to_check = [
         WS_DOMAIN_TEMPLATE.format(dc=dc_id),
@@ -158,26 +154,26 @@ async def _measure_dc_ping(dc_id: int, timeout: float = 5.0) -> Tuple[Optional[f
         latency_ms is None if connection failed
     """
     from .constants import WS_DOMAIN_TEMPLATE
-    
+
     domain = WS_DOMAIN_TEMPLATE.format(dc=dc_id)
-    
+
     try:
         start_time = time.monotonic()
-        
+
         # Try to establish TCP connection to measure latency
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(domain, 443),
             timeout=timeout
         )
-        
+
         # Close immediately after connection
         writer.close()
         await writer.wait_closed()
-        
+
         latency_ms = (time.monotonic() - start_time) * 1000
         log.debug("DC%d (%s): ping=%.1fms", dc_id, domain, latency_ms)
         return latency_ms, None
-        
+
     except asyncio.TimeoutError:
         log.debug("DC%d (%s): ping timeout", dc_id, domain)
         return None, "Connection timeout"
@@ -194,14 +190,14 @@ async def _measure_all_dc_pings(dc_opt: Dict[int, Optional[str]], timeout: float
         Dict mapping dc_id -> latency_ms (only successful measurements)
     """
     results = {}
-    
+
     log.info("Measuring ping to Telegram DCs...")
-    
+
     # Measure all DCs concurrently
     tasks = {}
     for dc_id in dc_opt.keys():
         tasks[dc_id] = asyncio.create_task(_measure_dc_ping(dc_id, timeout))
-    
+
     # Collect results
     for dc_id, task in tasks.items():
         try:
@@ -213,13 +209,13 @@ async def _measure_all_dc_pings(dc_opt: Dict[int, Optional[str]], timeout: float
                 log.warning("DC%d: failed - %s", dc_id, error)
         except Exception as e:
             log.warning("DC%d: measurement failed - %s", dc_id, e)
-    
+
     if results:
         best_dc = min(results, key=results.get)
         log.info("Best DC: DC%d (%.1fms)", best_dc, results[best_dc])
     else:
         log.warning("All DC ping measurements failed")
-    
+
     return results
 
 
@@ -273,7 +269,7 @@ class ProxyServer:
 
         # Rate-limit re-attempts per (dc, is_media)
         self.dc_fail_until: Dict[Tuple[int, bool], float] = {}
-        
+
         # Consecutive error count for exponential backoff
         self.dc_error_count: Dict[Tuple[int, bool], int] = {}
 
@@ -286,7 +282,7 @@ class ProxyServer:
         # Server instance for graceful shutdown
         self._server_instance: Optional[asyncio.Server] = None
         self._server_stop_event: Optional[asyncio.Event] = None
-    
+
     def get_stats(self) -> Dict:
         """Get current proxy statistics."""
         return self.stats.to_dict()
@@ -358,7 +354,7 @@ class RawWebSocket:
 
     @staticmethod
     async def connect(ip: str, domain: str, path: str = '/apiws',
-                      timeout: float = 10.0) -> 'RawWebSocket':
+                      timeout: float = 10.0) -> RawWebSocket:
         """
         Connect via TLS to the given IP,
         perform WebSocket upgrade, return a RawWebSocket.
@@ -569,7 +565,7 @@ def _dc_from_init(data: bytes) -> Tuple[Optional[int], bool]:
     """
     if len(data) < INIT_PACKET_SIZE:
         return None, False
-    
+
     try:
         key = bytes(data[INIT_KEY_OFFSET:INIT_KEY_OFFSET + INIT_KEY_SIZE])
         iv = bytes(data[INIT_IV_OFFSET:INIT_IV_OFFSET + INIT_IV_SIZE])
@@ -732,7 +728,7 @@ class _WsPool:
         self.stats = stats
         self._idle: Dict[Tuple[int, bool], list] = {}
         self._refilling: Set[Tuple[int, bool]] = set()
-        
+
         # Dynamic pool sizing
         self._pool_size = WS_POOL_SIZE  # Current dynamic pool size
         self._pool_max_size = WS_POOL_MAX_SIZE
@@ -811,21 +807,21 @@ class _WsPool:
         now = time.monotonic()
         if now - self._last_optimization < self._optimization_interval:
             return
-        
+
         total = self.stats.pool_hits + self.stats.pool_misses
         if total == 0:
             return
-        
+
         miss_rate = self.stats.pool_misses / total
-        
+
         # Calculate change in hits/misses since last check
         delta_hits = self.stats.pool_hits - self._last_hit_count
         delta_misses = self.stats.pool_misses - self._last_miss_count
         delta_total = delta_hits + delta_misses
-        
+
         if delta_total > 0:
             current_miss_rate = delta_misses / delta_total
-            
+
             if current_miss_rate > 0.3 and self._pool_size < self._pool_max_size:
                 # High miss rate - increase pool
                 old_size = self._pool_size
@@ -838,7 +834,7 @@ class _WsPool:
                 self._pool_size = max(self._pool_size - 1, 2)
                 log.info("Pool optimization: miss rate %.1f%% < 5%%, decreased size %d→%d",
                         current_miss_rate * 100, old_size, self._pool_size)
-        
+
         # Update counters
         self._last_hit_count = self.stats.pool_hits
         self._last_miss_count = self.stats.pool_misses
@@ -883,53 +879,53 @@ class _TcpPool:
     Connection pool for TCP fallback connections.
     Reuses existing TCP connections to reduce latency and connection overhead.
     """
-    
+
     def __init__(self, stats: Stats, max_size: int = 4, max_age: float = 60.0):
         self.stats = stats
         self.max_size = max_size
         self.max_age = max_age
         self._idle: Dict[str, list] = {}  # key: "host:port" -> [(reader, writer, created)]
-        
+
     async def get(self, host: str, port: int) -> Optional[Tuple]:
         """Get a cached TCP connection or None."""
         key = f"{host}:{port}"
         now = time.monotonic()
-        
+
         bucket = self._idle.get(key, [])
         while bucket:
             reader, writer, created = bucket.pop(0)
             age = now - created
-            
+
             # Check if connection is still valid
             if age > self.max_age:
                 log.debug("TCP pool: connection expired (age=%.1fs)", age)
                 await self._close_one(writer)
                 continue
-                
+
             # Check if writer is still open
             if writer.is_closing() or writer.transport.is_closing():
                 log.debug("TCP pool: connection closed")
                 continue
-                
+
             log.debug("TCP pool hit for %s (age=%.1fs)", key, age)
             return reader, writer
-            
+
         return None
-        
+
     def put(self, host: str, port: int, reader, writer) -> None:
         """Return a connection to the pool."""
         key = f"{host}:{port}"
         bucket = self._idle.setdefault(key, [])
-        
+
         # Limit pool size
         if len(bucket) >= self.max_size:
             log.debug("TCP pool full for %s, closing connection", key)
             asyncio.create_task(self._close_one(writer))
             return
-            
+
         bucket.append((reader, writer, time.monotonic()))
         log.debug("TCP pool: connection returned to %s (size=%d)", key, len(bucket))
-        
+
     async def _close_one(self, writer) -> None:
         """Close a single connection."""
         try:
@@ -937,7 +933,7 @@ class _TcpPool:
             await writer.wait_closed()
         except Exception:
             pass
-            
+
     def clear(self) -> None:
         """Clear all pooled connections (called on shutdown)."""
         for key, bucket in self._idle.items():
@@ -1115,7 +1111,7 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
     Throttled by ISP, but functional. Returns True on success.
     """
     global _tcp_pool
-    
+
     # Try to get cached connection
     rr, rw = None, None
     if _tcp_pool:
@@ -1123,7 +1119,7 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
         if cached:
             rr, rw = cached
             log.debug("[%s] TCP pool hit for %s:%d", label, dst, port)
-    
+
     # Create new connection if cache miss
     if rr is None or rw is None:
         try:
@@ -1140,7 +1136,7 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
     await rw.drain()
     await _bridge_tcp(reader, writer, rr, rw, label, stats,
                       dc=dc, dst=dst, port=port, is_media=is_media)
-    
+
     # Return connection to pool if still valid
     if _tcp_pool and rw and not rw.is_closing():
         _tcp_pool.put(dst, port, rr, rw)
@@ -1150,7 +1146,7 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
             rw.close()
         except Exception:
             pass
-            
+
     return True
 
 
@@ -1542,11 +1538,11 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
     # Measure DC ping and select optimal DC
     log.info("Measuring DC latency for optimal selection...")
     dc_pings = await _measure_all_dc_pings(dc_opt)
-    
+
     # Store ping results in stats
     for dc_id, latency_ms in dc_pings.items():
         server_instance.stats.record_latency(dc_id, latency_ms)
-    
+
     # Log optimal DC selection
     if dc_pings:
         best_dc = min(dc_pings, key=dc_pings.get)
@@ -1583,7 +1579,7 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
             log.info("stats: %s | ws_bl: %s", server_instance.stats.summary(), bl)
 
     asyncio.create_task(log_stats())
-    
+
     # Background task for periodic DC ping monitoring
     async def monitor_dc_latency():
         """Periodically re-measure DC latency to adapt to network changes."""
@@ -1598,7 +1594,7 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
                 log.info("DC latency updated - best: DC%d (%.1fms)", best_dc, dc_pings[best_dc])
 
     asyncio.create_task(monitor_dc_latency())
-    
+
     # Background task for dynamic pool optimization
     async def optimize_pool():
         """Periodically optimize WebSocket pool size."""
@@ -1610,7 +1606,7 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
                 log.debug("Pool optimization error: %s", e)
 
     asyncio.create_task(optimize_pool())
-    
+
     # Background task for DNS cache cleanup
     async def cleanup_dns_cache():
         """Periodically clean expired DNS cache entries."""
@@ -1618,17 +1614,17 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
             await asyncio.sleep(300)  # Check every 5 minutes
             now = time.monotonic()
             expired_domains = []
-            
+
             for domain, entries in _dns_cache.items():
                 valid = [(ip, exp) for ip, exp in entries if exp > now]
                 if valid:
                     _dns_cache[domain] = valid
                 else:
                     expired_domains.append(domain)
-            
+
             for domain in expired_domains:
                 del _dns_cache[domain]
-            
+
             if expired_domains:
                 log.debug("DNS cache cleaned: %d expired domains", len(expired_domains))
 
@@ -1640,12 +1636,12 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
         async def wait_stop():
             await stop_event.wait()
             log.info("Graceful shutdown initiated...")
-            
+
             # Close server socket first (stop accepting new connections)
             server.close()
             await server.wait_closed()
             log.info("Server socket closed")
-            
+
             # Close all idle WebSocket connections in pool
             for key, bucket in server_instance.ws_pool._idle.items():
                 dc, is_media = key
@@ -1655,9 +1651,9 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
                     except Exception:
                         pass
             log.info("WebSocket pool closed")
-            
+
             log.info("Graceful shutdown completed")
-            
+
         asyncio.create_task(wait_stop())
 
     async with server:
