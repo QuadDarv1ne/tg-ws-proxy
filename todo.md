@@ -28,7 +28,7 @@
 
 ### Инфраструктура
 - [x] CI/CD (GitHub Actions)
-- [x] Unit-тесты (216 тестов)
+- [x] Unit-тесты (222 теста)
 - [x] Интеграционные тесты (MTProto)
 - [x] Integration tests для веб-панели
 - [x] RotatingFileHandler для логов (5MB, 3 backup)
@@ -81,12 +81,12 @@
 #### Тесты (v2.12.0) ✅
 - [x] Integration tests для веб-панели — `tests/test_web_dashboard.py` ✅ (9 тестов)
 - [x] Unit-тесты для MTProtoProxy — `tests/test_mtproto_proxy.py` ✅ (32 теста)
-- [x] Unit-тесты для tg_ws_proxy — `tests/test_proxy.py` ✅ (19 тестов)
+- [x] Unit-тесты для tg_ws_proxy — `tests/test_proxy.py` ✅ (25 тестов)
 - [x] Unit-тесты для profiler.py — `tests/test_profiler.py` ✅ (19 тестов)
 - [x] Unit-тесты для stats.py — `tests/test_stats.py` ✅ (30 тестов)
 - [x] Unit-тесты для dashboard.py — `tests/test_dashboard.py` ✅ (19 тестов)
 - [ ] Load tests — сценарии нагрузки
-- [ ] Coverage > 80% — текущее покрытие ~42%
+- [ ] Coverage > 80% — текущее покрытие ~44%
 
 ### 🟢 Низкий приоритет
 
@@ -162,8 +162,8 @@ pyinstaller>=5.0.0
 - ✅ Валидация конфигурации
 - ✅ Recovery после сетевых сбоев
 - ✅ Lazy initialization пула
-- ✅ Unit-тесты: 64 → 216 тестов
-- ✅ Покрытие: 20% → 42%
+- ✅ Unit-тесты: 64 → 222 теста
+- ✅ Покрытие: 20% → 44%
 - [ ] Load tests
 - [ ] Coverage > 80%
 
