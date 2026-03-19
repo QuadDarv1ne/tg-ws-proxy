@@ -68,6 +68,11 @@ _IP_TO_DC: Dict[str, Tuple[int, bool]] = {
     '91.105.192.100': (203, False),
 }
 
+# This case might work but not actually sure
+_DC_OVERRIDES: Dict[int, int] = {
+    203: 2
+}
+
 _dc_opt: Dict[int, Optional[str]] = {}
 
 # DCs where WS is known to fail (302 redirect)
@@ -464,6 +469,7 @@ class _MsgSplitter:
 
 
 def _ws_domains(dc: int, is_media) -> List[str]:
+    dc = _DC_OVERRIDES.get(dc, dc)
     if is_media is None or is_media:
         return [f'kws{dc}-1.web.telegram.org', f'kws{dc}.web.telegram.org']
     return [f'kws{dc}.web.telegram.org', f'kws{dc}-1.web.telegram.org']
