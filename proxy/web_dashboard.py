@@ -326,6 +326,7 @@ DASHBOARD_HTML = """
             padding: 20px;
             margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: background 0.3s ease;
         }
         .chart-container h3 {
             color: var(--bg-gradient-start);
@@ -340,8 +341,10 @@ DASHBOARD_HTML = """
         }
         .chart-line {
             fill: none;
-            stroke-width: 2;
+            stroke-width: 2.5;
             stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: d 0.5s ease;
         }
         .chart-line-up {
             stroke: #48bb78;
@@ -350,13 +353,7 @@ DASHBOARD_HTML = """
             stroke: #3182ce;
         }
         .chart-area {
-            opacity: 0.2;
-        }
-        .chart-area-up {
-            fill: #48bb78;
-        }
-        .chart-area-down {
-            fill: #3182ce;
+            transition: d 0.5s ease;
         }
         .chart-labels {
             display: flex;
@@ -723,7 +720,8 @@ DASHBOARD_HTML = """
 
             const width = 600;
             const height = 200;
-            const padding = 10;
+            const padding = 20;
+            const chartHeight = height - padding * 2;
 
             // Find max value for scaling
             let maxValue = 0;
@@ -734,28 +732,51 @@ DASHBOARD_HTML = """
 
             if (maxValue === 0) maxValue = 1;
 
-            // Generate path for line chart
-            const generatePath = (key) => {
-                return trafficHistory.map((point, i) => {
+            // Generate smooth path using bezier curves
+            const generateSmoothPath = (key) => {
+                if (trafficHistory.length < 2) return '';
+                const points = trafficHistory.map((point, i) => {
                     const x = (i / (trafficHistory.length - 1)) * (width - padding * 2) + padding;
-                    const y = height - padding - (point[key] / maxValue) * (height - padding * 2);
-                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-                }).join(' ');
+                    const y = height - padding - (point[key] / maxValue) * chartHeight;
+                    return {x, y};
+                });
+
+                let path = `M ${points[0].x} ${points[0].y}`;
+                for (let i = 1; i < points.length; i++) {
+                    const prev = points[i - 1];
+                    const curr = points[i];
+                    const cpx = (prev.x + curr.x) / 2;
+                    path += ` C ${cpx} ${prev.y}, ${cpx} ${curr.y}, ${curr.x} ${curr.y}`;
+                }
+                return path;
             };
 
             const generateArea = (key) => {
-                const path = generatePath(key);
+                const path = generateSmoothPath(key);
                 const lastX = width - padding;
                 const firstX = padding;
                 const baseY = height - padding;
                 return `${path} L ${lastX} ${baseY} L ${firstX} ${baseY} Z`;
             };
 
+            const pathUp = generateSmoothPath('bytes_up');
+            const pathDown = generateSmoothPath('bytes_down');
+
             svg.innerHTML = `
-                <path class="chart-area chart-area-up" d="${generateArea('bytes_up')}" />
-                <path class="chart-area chart-area-down" d="${generateArea('bytes_down')}" />
-                <path class="chart-line chart-line-up" d="${generatePath('bytes_up')}" />
-                <path class="chart-line chart-line-down" d="${generatePath('bytes_down')}" />
+                <defs>
+                    <linearGradient id=\"gradUp\" x1=\"0%\" y1=\"0%\" x2=\"0%\" y2=\"100%\">
+                        <stop offset=\"0%\" style=\"stop-color:#48bb78;stop-opacity:0.4\" />
+                        <stop offset=\"100%\" style=\"stop-color:#48bb78;stop-opacity:0.05\" />
+                    </linearGradient>
+                    <linearGradient id=\"gradDown\" x1=\"0%\" y1=\"0%\" x2=\"0%\" y2=\"100%\">
+                        <stop offset=\"0%\" style=\"stop-color:#3182ce;stop-opacity:0.4\" />
+                        <stop offset=\"100%\" style=\"stop-color:#3182ce;stop-opacity:0.05\" />
+                    </linearGradient>
+                </defs>
+                <path class=\"chart-area\" fill=\"url(#gradUp)\" d=\"${generateArea('bytes_up')}\" />
+                <path class=\"chart-area\" fill=\"url(#gradDown)\" d=\"${generateArea('bytes_down')}\" />
+                <path class=\"chart-line chart-line-up\" d=\"${pathUp}\" />
+                <path class=\"chart-line chart-line-down\" d=\"${pathDown}\" />
             `;
         }
 
