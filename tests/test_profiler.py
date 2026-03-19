@@ -1,6 +1,7 @@
 """Unit tests for proxy profiler module."""
 
 
+
 from proxy.profiler import AsyncPerformanceProfiler, PerformanceProfiler
 
 
@@ -33,6 +34,64 @@ class TestPerformanceProfiler:
         profiler = PerformanceProfiler()
         stats = profiler.get_stats()
         assert stats == {}
+
+    def test_profile_sync_function(self):
+        """Test profiling a synchronous function."""
+        profiler = PerformanceProfiler()
+
+        def test_func():
+            return 42
+
+        result = profiler.profile(test_func)
+
+        assert result == 42
+        assert profiler._stats is not None
+
+    def test_profile_async_function(self):
+        """Test profiling an async function."""
+        import asyncio
+
+        profiler = PerformanceProfiler()
+
+        async def test_func():
+            return 42
+
+        result = asyncio.run(profiler.profile_async(test_func))
+
+        assert result == 42
+        assert profiler._stats is not None
+
+    def test_print_stats(self, caplog):
+        """Test print_stats method."""
+        profiler = PerformanceProfiler()
+
+        def test_func():
+            return 42
+
+        profiler.profile(test_func)
+
+        # Should not raise
+        profiler.print_stats()
+
+    def test_get_stats_with_data(self):
+        """Test get_stats after profiling."""
+        profiler = PerformanceProfiler()
+
+        def test_func():
+            return 42
+
+        profiler.profile(test_func)
+        stats = profiler.get_stats()
+
+        assert isinstance(stats, dict)
+
+    def test_start_while_already_profiling(self, caplog):
+        """Test starting while already profiling."""
+        profiler = PerformanceProfiler()
+        profiler.start()
+        profiler.start()  # Should log warning
+
+        assert "Profiling already in progress" in caplog.text
 
 
 class TestAsyncPerformanceProfiler:
@@ -105,3 +164,45 @@ class TestAsyncPerformanceProfiler:
 
         assert profiler._timings == {}
         assert profiler._call_counts == {}
+
+    def test_profile_async_method(self):
+        """Test profile_async method."""
+        import asyncio
+
+        profiler = AsyncPerformanceProfiler()
+
+        async def test_func():
+            return 42
+
+        result = asyncio.run(profiler.profile_async(test_func))
+
+        assert result == 42
+        assert "test_func" in profiler._timings
+
+    def test_profile_async_with_args(self):
+        """Test profile_async with arguments."""
+        import asyncio
+
+        profiler = AsyncPerformanceProfiler()
+
+        async def test_func(x, y):
+            return x + y
+
+        result = asyncio.run(profiler.profile_async(test_func, "test_func", 2, 3))
+
+        assert result == 5
+        assert "test_func" in profiler._timings
+
+    def test_profile_async_with_kwargs(self):
+        """Test profile_async with keyword arguments."""
+        import asyncio
+
+        profiler = AsyncPerformanceProfiler()
+
+        async def test_func(x, y=10):
+            return x + y
+
+        result = asyncio.run(profiler.profile_async(test_func, "test_func", 2, y=5))
+
+        assert result == 7
+        assert "test_func" in profiler._timings
