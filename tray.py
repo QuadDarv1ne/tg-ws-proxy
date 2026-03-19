@@ -768,10 +768,10 @@ def _edit_config_dialog() -> None:
     root = _create_config_window()
     frame = _build_config_frame(root)
 
-    host_var, port_var, dc_textbox, verbose_var = _build_config_fields(frame, cfg)
+    host_var, port_var, dc_textbox, verbose_var, whitelist_textbox = _build_config_fields(frame, cfg)
 
     def on_save():
-        _save_config_and_restart(host_var, port_var, dc_textbox, verbose_var, root)
+        _save_config_and_restart(host_var, port_var, dc_textbox, verbose_var, whitelist_textbox, root)
 
     def on_cancel():
         root.destroy()
@@ -924,14 +924,25 @@ def _build_config_fields(
                     text_color=text_primary,
                     fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                     corner_radius=6, border_width=2,
-                    border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 8))
+                    border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 12))
+
+    # IP Whitelist
+    ctk.CTkLabel(frame, text="Белый список IP (каждый с новой строки, пустой = все разрешены)",
+                 font=(UI_FONT_FAMILY, 13), text_color=text_primary,
+                 anchor="w").pack(anchor="w", pady=(0, 4))
+    whitelist_textbox = ctk.CTkTextbox(frame, width=370, height=80,
+                                font=("Consolas", 12), corner_radius=10,
+                                fg_color=field_bg, border_color=field_border,
+                                border_width=1, text_color=text_primary)
+    whitelist_textbox.pack(anchor="w", pady=(0, 12))
+    whitelist_textbox.insert("1.0", "\n".join(cfg.get("ip_whitelist", [])))
 
     # Info label
     ctk.CTkLabel(frame, text="Изменения вступят в силу после перезапуска прокси.",
                  font=(UI_FONT_FAMILY, 11), text_color=UI_TEXT_SECONDARY,
                  anchor="w").pack(anchor="w", pady=(0, 16))
 
-    return host_var, port_var, dc_textbox, verbose_var
+    return host_var, port_var, dc_textbox, verbose_var, whitelist_textbox
 
 
 def _save_config_and_restart(
@@ -939,6 +950,7 @@ def _save_config_and_restart(
     port_var: "ctk.StringVar",
     dc_textbox: "ctk.CTkTextbox",
     verbose_var: "ctk.BooleanVar",
+    whitelist_textbox: "ctk.CTkTextbox",
     root: "ctk.CTk"
 ) -> None:
     """Validate and save configuration, then offer restart."""
@@ -970,11 +982,23 @@ def _save_config_and_restart(
         _show_error(str(e))
         return
 
+    # Parse IP whitelist
+    whitelist_lines = [l.strip() for l in whitelist_textbox.get("1.0", "end").strip().splitlines()
+                       if l.strip()]
+    # Validate IP addresses in whitelist
+    for ip in whitelist_lines:
+        try:
+            _sock.inet_aton(ip)
+        except OSError:
+            _show_error(f"Некорректный IP в белом списке: {ip}")
+            return
+
     new_cfg = {
         "host": host_val,
         "port": port_val,
         "dc_ip": lines,
         "verbose": verbose_var.get(),
+        "ip_whitelist": whitelist_lines,
     }
     save_config(new_cfg)
     _config.update(new_cfg)
