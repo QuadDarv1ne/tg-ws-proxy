@@ -65,7 +65,7 @@ class TestTestTcpConnect:
     async def test_success(self, mock_time, mock_open):
         """Test successful TCP connection."""
         mock_time.side_effect = [0.0, 0.05]  # start, end (50ms)
-        
+
         mock_reader = AsyncMock()
         mock_writer = AsyncMock()
         mock_writer.is_closing.return_value = False
@@ -112,7 +112,7 @@ class TestTestDnsResolve:
     async def test_success(self, mock_time, mock_loop):
         """Test successful DNS resolution."""
         mock_time.side_effect = [0.0, 0.03]  # start, end (30ms)
-        
+
         mock_resolver = AsyncMock()
         mock_resolver.return_value = [
             (socket.AF_INET, socket.SOCK_STREAM, 0, '', ('142.250.185.78', 0)),
@@ -149,7 +149,7 @@ class TestTestWebsocketConnect:
     async def test_success(self, mock_time, mock_open):
         """Test successful WebSocket connection."""
         mock_time.side_effect = [0.0, 0.1]  # start, end (100ms)
-        
+
         mock_reader = AsyncMock()
         mock_reader.read = AsyncMock(return_value=b'HTTP/1.1 101 Switching Protocols\r\n\r\n')
         mock_writer = AsyncMock()
