@@ -37,6 +37,7 @@ DC_FAIL_COOLDOWN = 60.0  # seconds
 
 # MTProto protocol magic bytes
 MTPROTO_OBFUSCATION_MAGIC = b'\x00' * 8
+MTPROTO_MAGIC_INTERMEDIATE = b'\xee\xee\xee\xee'
 
 # Valid protocol identifiers
 PROTO_OBFUSCATED = 0xEFEFEFEF
@@ -54,6 +55,18 @@ INIT_DC_SIZE = 2
 
 # Abridged protocol prefix
 ABRIDGED_SHORT_PREFIX = 0x7F
+
+# Encryption settings
+MTPROTO_AES_KEY_SIZE = 32  # 256 bits
+MTPROTO_AES_IV_SIZE = 32   # 256 bits for IGE mode
+MTPROTO_BLOCK_SIZE = 16    # AES block size
+
+# Secret key length (32 hex chars = 16 bytes)
+MTPROTO_SECRET_LENGTH = 32
+
+# Default MTProto port (443 for HTTPS masquerading)
+MTPROTO_DEFAULT_PORT = 443
+MTPROTO_DEFAULT_HOST = "0.0.0.0"
 
 # =============================================================================
 # Telegram IP ranges
@@ -147,32 +160,6 @@ UI_FIELD_BORDER = "#d6d9dc"
 UI_TEXT_PRIMARY = "#000000"
 UI_TEXT_SECONDARY = "#707579"
 UI_FONT_FAMILY = "Segoe UI"
-
-# =============================================================================
-# MTProto constants
-# =============================================================================
-
-# MTProto protocol magic bytes
-MTPROTO_MAGIC = b'\xef\xef\xef\xef'  # 0xEEEEEEEE
-MTPROTO_MAGIC_ABRIDGED = b'\xef\xef\xef\xef'
-MTPROTO_MAGIC_INTERMEDIATE = b'\xee\xee\xee\xee'
-
-# MTProto transport types
-MTPROTO_TRANSPORT_ABRIDGED = 'abridged'
-MTPROTO_TRANSPORT_INTERMEDIATE = 'intermediate'
-MTPROTO_TRANSPORT_PADDED_INTERMEDIATE = 'padded_intermediate'
-
-# Encryption settings
-MTPROTO_AES_KEY_SIZE = 32  # 256 bits
-MTPROTO_AES_IV_SIZE = 32   # 256 bits for IGE mode
-MTPROTO_BLOCK_SIZE = 16    # AES block size
-
-# Secret key length (32 hex chars = 16 bytes)
-MTPROTO_SECRET_LENGTH = 32
-
-# Default MTProto port (443 for HTTPS masquerading)
-MTPROTO_DEFAULT_PORT = 443
-MTPROTO_DEFAULT_HOST = "0.0.0.0"
 
 # =============================================================================
 # Telegram DC IP mappings (for MTProto proxy)
