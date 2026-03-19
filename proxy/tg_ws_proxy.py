@@ -499,6 +499,15 @@ def _ws_domains(dc: int, is_media: Optional[bool]) -> List[str]:
 # Global instance for backward compatibility
 _server_instance: Optional[ProxyServer] = None
 
+# Callback for client connection notifications
+_on_client_connect_callback = None
+
+
+def set_on_client_connect_callback(callback) -> None:
+    """Set callback for client connection notifications."""
+    global _on_client_connect_callback
+    _on_client_connect_callback = callback
+
 
 def get_stats() -> Dict:
     """Get current proxy statistics (backward compatibility)."""
@@ -997,6 +1006,13 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
         # -- WS success --
         dc_fail_until.pop(dc_key, None)
         stats.add_connection('ws', dc=dc)
+
+        # Notify about client connection
+        if _on_client_connect_callback:
+            try:
+                _on_client_connect_callback(dc, dst, port)
+            except Exception:
+                pass
 
         splitter = None
         if init_patched:

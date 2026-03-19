@@ -79,6 +79,7 @@ LOG_FILE = APP_DIR / LOG_FILE_NAME
 FIRST_RUN_MARKER = APP_DIR / FIRST_RUN_MARKER_NAME
 IPV6_WARN_MARKER = APP_DIR / IPV6_WARN_MARKER_NAME
 UPDATE_CHECK_MARKER = APP_DIR / ".update_checked"
+NOTIFICATIONS_MARKER = APP_DIR / ".notifications_enabled"
 
 # GitHub repository for update checks
 GITHUB_REPO = "Flowseal/tg-ws-proxy"
@@ -344,6 +345,36 @@ def _show_info(text: str, title: str = "TG WS Proxy") -> None:
         log.info("%s: %s", title, text)
 
 
+def _show_notification(text: str, title: str = "TG WS Proxy") -> None:
+    """Show toast notification (if enabled)."""
+    if not NOTIFICATIONS_MARKER.exists():
+        return
+    
+    if IS_WINDOWS:
+        try:
+            from win10toast import ToastNotifier
+            toaster = ToastNotifier()
+            toaster.show_toast(title, text, duration=5, icon_path=None)
+        except ImportError:
+            # Fallback to simple messagebox
+            ctypes.windll.user32.MessageBoxW(0, text, title, 0x40)
+    elif HAS_GUI:
+        # For Linux/macOS - use system notifications if available
+        try:
+            import subprocess
+            if sys.platform == "darwin":  # macOS
+                subprocess.run([
+                    "osascript", "-e",
+                    f'display notification "{text}" with title "{title}"'
+                ], check=False)
+            elif sys.platform == "linux":
+                subprocess.run([
+                    "notify-send", title, text
+                ], check=False)
+        except Exception:
+            pass
+
+
 def _show_dialog(text: str, title: str, dialog_type: str = "info") -> None:
     """Show a dialog using tkinter."""
     if not HAS_GUI:
@@ -485,6 +516,16 @@ def _on_edit_config(icon=None, item=None) -> None:
 def _on_show_stats(icon=None, item=None) -> None:
     """Show statistics dialog."""
     threading.Thread(target=_show_stats_dialog, daemon=True).start()
+
+
+def _on_toggle_notifications(icon=None, item=None) -> None:
+    """Toggle notifications on/off."""
+    if NOTIFICATIONS_MARKER.exists():
+        NOTIFICATIONS_MARKER.unlink()
+        _show_info("Уведомления отключены", "TG WS Proxy")
+    else:
+        NOTIFICATIONS_MARKER.touch()
+        _show_info("Уведомления включены\n\nТеперь вы будете получать уведомления о подключениях клиентов.", "TG WS Proxy")
 
 
 def _on_toggle_autostart(icon=None, item=None) -> None:
@@ -1257,6 +1298,7 @@ def _build_menu() -> Optional["pystray.Menu"]:
     host = _config.get("host", DEFAULT_CONFIG["host"])
     port = _config.get("port", DEFAULT_CONFIG["port"])
     is_autostart = _is_autostart_enabled()
+    is_notifications = NOTIFICATIONS_MARKER.exists()
 
     return pystray.Menu(
         pystray.MenuItem(
@@ -1268,6 +1310,9 @@ def _build_menu() -> Optional["pystray.Menu"]:
         pystray.MenuItem("Перезапустить прокси", _on_restart),
         pystray.MenuItem("Настройки...", _on_edit_config),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem(
+            f"Уведомления: {'Вкл' if is_notifications else 'Выкл'}",
+            _on_toggle_notifications),
         pystray.MenuItem(
             f"Автозапуск: {'Вкл' if is_autostart else 'Выкл'}",
             _on_toggle_autostart),
@@ -1304,6 +1349,18 @@ def run_tray() -> None:
     log.info("Config: %s", _config)
     log.info("Log file: %s", LOG_FILE)
     log.info("Platform: %s", sys.platform)
+
+    # Set up client connection notification callback
+    def on_client_connect(dc, dst, port):
+        if NOTIFICATIONS_MARKER.exists():
+            log.info("Client connected to DC%d %s:%d", dc, dst, port)
+            # Show notification every 10 connections to avoid spam
+            if tg_ws_proxy.get_stats().get('connections_total', 0) % 10 == 1:
+                _show_notification(
+                    f"Клиент подключился\nDC{dc} {dst}:{port}",
+                    "TG WS Proxy — Подключение")
+
+    tg_ws_proxy.set_on_client_connect_callback(on_client_connect)
 
     if not HAS_TRAY or not HAS_GUI:
         log.error("pystray, Pillow, or customtkinter not installed; "
