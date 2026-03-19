@@ -50,6 +50,8 @@ _ssl_ctx.verify_mode = ssl.CERT_NONE
 
 async def _close_writer_safe(writer) -> None:
     """Safely close and wait for writer to close."""
+    if writer is None:
+        return
     try:
         writer.close()
         await writer.wait_closed()
