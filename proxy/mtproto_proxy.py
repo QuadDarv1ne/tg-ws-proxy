@@ -22,6 +22,9 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Callable, DefaultDict
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+# Check if cryptography has IGE mode (removed in >= 42.0.0)
+_HAS_IGE_MODE = hasattr(modes, 'IGE')
+
 try:
     import qrcode
     HAS_QRCODE = True
@@ -181,8 +184,12 @@ class RateLimiter:
         """
         Check if IP has exceeded connection limit.
         Returns True if connection is allowed.
+        Whitelisted IPs bypass the limit.
         """
         with self._lock:
+            # Whitelisted IPs bypass limits
+            if ip in self.ip_whitelist:
+                return True
             return self.connections_per_ip[ip] < self.max_connections_per_ip
     
     def increment_connections(self, ip: str):
@@ -242,63 +249,84 @@ class RateLimiter:
 class MTProtoTransport:
     """
     MTProto Intermediate Transport implementation.
-    
+
     Handles encryption/decryption of packets using AES-256 IGE mode.
     """
-    
+
     def __init__(self, secret: str):
         self.secret = secret
         self.key, self.iv = secret_to_key_iv(secret)
-        self._decrypt_cipher: Optional[Cipher] = None
-        self._encrypt_cipher: Optional[Cipher] = None
-        self._decrypt_ige = None
-        self._encrypt_ige = None
         self._initialized = False
-    
+
     def _init_ciphers(self):
         """Initialize AES-256 IGE ciphers."""
         if self._initialized:
             return
-        
-        # AES-256 IGE mode encryption
-        self._encrypt_cipher = Cipher(
-            algorithms.AES(self.key),
-            modes.IGE(self.iv),
-        )
-        self._encrypt_ige = self._encrypt_cipher.encryptor()
-        
-        self._decrypt_cipher = Cipher(
-            algorithms.AES(self.key),
-            modes.IGE(self.iv),
-        )
-        self._decrypt_ige = self._decrypt_cipher.decryptor()
-        
         self._initialized = True
-    
+
+    def _ige_encrypt_block(self, block: bytes, iv_prev: bytes, iv_curr: bytes) -> bytes:
+        """Encrypt single block using IGE mode."""
+        # IGE: XOR with previous ciphertext, encrypt, XOR with previous plaintext
+        xor_input = bytes(a ^ b for a, b in zip(block, iv_prev))
+        cipher = Cipher(algorithms.AES(self.key), modes.ECB())
+        encryptor = cipher.encryptor()
+        encrypted = encryptor.update(xor_input) + encryptor.finalize()
+        return bytes(a ^ b for a, b in zip(encrypted, iv_curr))
+
+    def _ige_decrypt_block(self, block: bytes, iv_prev: bytes, iv_curr: bytes) -> bytes:
+        """Decrypt single block using IGE mode."""
+        # IGE: XOR with previous plaintext, decrypt, XOR with previous ciphertext
+        xor_input = bytes(a ^ b for a, b in zip(block, iv_curr))
+        cipher = Cipher(algorithms.AES(self.key), modes.ECB())
+        decryptor = cipher.decryptor()
+        decrypted = decryptor.update(xor_input) + decryptor.finalize()
+        return bytes(a ^ b for a, b in zip(decrypted, iv_prev))
+
     def encrypt(self, data: bytes) -> bytes:
         """Encrypt data using AES-256 IGE."""
         self._init_ciphers()
-        
+
         # Pad to block size (16 bytes)
         padding_len = MTPROTO_BLOCK_SIZE - (len(data) % MTPROTO_BLOCK_SIZE)
         if padding_len == 0:
             padding_len = MTPROTO_BLOCK_SIZE
         padded_data = data + bytes([padding_len] * padding_len)
-        
-        return self._encrypt_ige.update(padded_data) + self._encrypt_ige.finalize()
-    
+
+        # Manual IGE implementation (works with all cryptography versions)
+        block_size = MTPROTO_BLOCK_SIZE
+        iv_prev = self.iv[:16]
+        iv_curr = self.iv[16:]
+        result = b''
+        for i in range(0, len(padded_data), block_size):
+            block = padded_data[i:i + block_size]
+            encrypted_block = self._ige_encrypt_block(block, iv_prev, iv_curr)
+            result += encrypted_block
+            iv_prev = block
+            iv_curr = encrypted_block
+        return result
+
     def decrypt(self, data: bytes) -> bytes:
         """Decrypt data using AES-256 IGE."""
         self._init_ciphers()
-        
-        decrypted = self._decrypt_ige.update(data) + self._decrypt_ige.finalize()
-        
+
+        # Manual IGE implementation (works with all cryptography versions)
+        block_size = MTPROTO_BLOCK_SIZE
+        iv_prev = self.iv[:16]
+        iv_curr = self.iv[16:]
+        decrypted = b''
+        for i in range(0, len(data), block_size):
+            block = data[i:i + block_size]
+            decrypted_block = self._ige_decrypt_block(block, iv_prev, iv_curr)
+            decrypted += decrypted_block
+            iv_prev = decrypted_block
+            iv_curr = block
+
         # Remove padding
         if decrypted:
             padding_len = decrypted[-1]
             if 1 <= padding_len <= MTPROTO_BLOCK_SIZE:
                 decrypted = decrypted[:-padding_len]
-        
+
         return decrypted
 
 
