@@ -755,7 +755,7 @@ async def _pipe(r, w):
 
 async def _pipe_passthrough(r1, w1, r2, w2):
     """Bidirectional TCP relay for passthrough traffic."""
-    async def forward(src, dst_w):
+    async def forward(src, dst_w, direction):
         try:
             while True:
                 data = await src.read(65536)
@@ -763,14 +763,18 @@ async def _pipe_passthrough(r1, w1, r2, w2):
                     break
                 dst_w.write(data)
                 await dst_w.drain()
-        except Exception:
+        except asyncio.CancelledError:
             pass
+        except (ConnectionResetError, BrokenPipeError):
+            log.debug("[%s] %s connection reset", "passthrough", direction)
+        except Exception as exc:
+            log.debug("[%s] %s error: %s", "passthrough", direction, exc)
         finally:
             await _close_writer_safe(dst_w)
 
     tasks = [
-        asyncio.create_task(forward(r1, w2)),
-        asyncio.create_task(forward(r2, w1)),
+        asyncio.create_task(forward(r1, w2, 'client->remote')),
+        asyncio.create_task(forward(r2, w1, 'remote->client')),
     ]
     try:
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)

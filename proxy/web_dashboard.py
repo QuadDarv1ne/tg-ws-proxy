@@ -693,11 +693,24 @@ DASHBOARD_HTML = """
                     healthBadge.innerHTML = '<span class="health-badge" style="background:#fed7d7;color:#742a2a">✗ Unhealthy</span>';
                 }
 
+                let wsStatus = 'OK';
+                if (data.websocket?.status === 'degraded') wsStatus = '⚠ Degraded';
+                else if (data.websocket?.status === 'unhealthy') wsStatus = '✗ Unhealthy';
+
+                let dcStatus = '';
+                if (data.dc_health && data.dc_health.length > 0) {
+                    dcStatus = '\\n\\nDC Status:\\n' + data.dc_health.map(dc => 
+                        `  DC${dc.dc_id}: ${dc.status === 'ok' ? '✓' : dc.status === 'degraded' ? '⚠' : '✗'} (${dc.error_rate_percent}% errors)`
+                    ).join('\\n');
+                }
+
                 alert('Health Check:\\n' +
-                      'Status: ' + data.status + '\\n' +
+                      'Status: ' + data.status.toUpperCase() + '\\n' +
+                      'WebSocket: ' + wsStatus + '\\n' +
+                      'Pool Efficiency: ' + (data.websocket?.pool_efficiency_percent || 0) + '%\\n' +
                       'WS Errors: ' + (data.websocket?.ws_errors || 0) + '\\n' +
-                      'Pool Hits: ' + (data.websocket?.pool_hits || 0) + '\\n' +
-                      'Pool Misses: ' + (data.websocket?.pool_misses || 0));
+                      'Pool Hits/Misses: ' + (data.websocket?.pool_hits || 0) + '/' + (data.websocket?.pool_misses || 0) +
+                      dcStatus);
             } catch (error) {
                 alert('Health check failed: ' + error);
             }
@@ -905,24 +918,54 @@ class WebDashboard:
 
         @self.app.route('/api/health')
         def api_health():
-            """Health check endpoint."""
+            """Health check endpoint with detailed diagnostics."""
             stats = self.get_stats()
-            is_healthy = stats.get('connections_active', 0) >= 0  # Always healthy if running
             
-            # Check WebSocket endpoints
+            # Determine overall health status
+            ws_errors = stats.get('ws_errors', 0)
+            pool_misses = stats.get('pool_misses', 0)
+            pool_hits = stats.get('pool_hits', 0)
+            
+            # Calculate pool efficiency
+            pool_total = pool_hits + pool_misses
+            pool_efficiency = (pool_hits / pool_total * 100) if pool_total > 0 else 100
+            
+            # Determine status
+            if ws_errors < 5 and pool_efficiency >= 80:
+                status = 'ok'
+            elif ws_errors < 15 and pool_efficiency >= 50:
+                status = 'degraded'
+            else:
+                status = 'unhealthy'
+            
             ws_health = {
-                'status': 'ok' if stats.get('ws_errors', 0) < 10 else 'degraded',
-                'ws_errors': stats.get('ws_errors', 0),
-                'pool_hits': stats.get('pool_hits', 0),
-                'pool_misses': stats.get('pool_misses', 0),
+                'status': 'ok' if ws_errors < 10 else 'degraded',
+                'ws_errors': ws_errors,
+                'pool_hits': pool_hits,
+                'pool_misses': pool_misses,
+                'pool_efficiency_percent': round(pool_efficiency, 1),
             }
             
+            # DC health summary
+            dc_stats = stats.get('dc_stats', {})
+            dc_health = []
+            for dc_id, dc_data in dc_stats.items():
+                dc_errors = dc_data.get('errors', 0)
+                dc_conns = dc_data.get('connections', 0)
+                dc_error_rate = (dc_errors / dc_conns * 100) if dc_conns > 0 else 0
+                dc_health.append({
+                    'dc_id': dc_id,
+                    'status': 'ok' if dc_error_rate < 10 else 'degraded' if dc_error_rate < 30 else 'unhealthy',
+                    'error_rate_percent': round(dc_error_rate, 1),
+                })
+
             return jsonify({
-                'status': 'ok' if is_healthy else 'unhealthy',
+                'status': status,
                 'timestamp': datetime.now().isoformat(),
                 'version': '2.5.5',
                 'uptime_seconds': (datetime.now() - self.start_time).total_seconds(),
                 'websocket': ws_health,
+                'dc_health': dc_health,
             })
 
         @self.app.route('/api/dc-stats')

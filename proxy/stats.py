@@ -13,11 +13,16 @@ from typing import Dict, List, Optional, Tuple
 
 def _human_bytes(n: int) -> str:
     """Convert bytes to human-readable format."""
-    for unit in ('B', 'KB', 'MB', 'GB'):
-        if abs(n) < 1024:
-            return f"{n:.1f}{unit}"
+    if n < 0:
+        return f"-{_human_bytes(-n)}"
+    if n < 1024:
+        return f"{n}B"
+    units = ('KB', 'MB', 'GB', 'TB')
+    unit_idx = 0
+    while n >= 1024 and unit_idx < len(units) - 1:
         n /= 1024
-    return f"{n:.1f}TB"
+        unit_idx += 1
+    return f"{n:.1f}{units[unit_idx]}"
 
 
 def _human_time(seconds: float) -> str:

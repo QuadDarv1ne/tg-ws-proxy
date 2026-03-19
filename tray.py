@@ -631,32 +631,38 @@ def _set_autostart(enable: bool) -> None:
 def _set_autostart_windows(startup_path: Path, app_exe: str, enable: bool) -> None:
     """Set autostart on Windows using registry."""
     import winreg
-    
+
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
     value_name = "TG WS Proxy"
-    
+
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
                            winreg.KEY_SET_VALUE) as key:
             if enable:
                 winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ,
                                   f'"{app_exe}"')
+                log.info("Autostart enabled (registry)")
             else:
                 try:
                     winreg.DeleteValue(key, value_name)
+                    log.info("Autostart disabled (registry)")
                 except FileNotFoundError:
                     pass
+    except PermissionError:
+        log.error("Permission denied: cannot modify registry")
+        _show_error("Нет прав для изменения автозапуска.\nЗапустите от имени администратора.")
     except Exception as exc:
         log.error("Failed to set autostart: %s", exc)
+        _show_error(f"Ошибка автозапуска:\n{exc}")
 
 
 def _set_autostart_macos(startup_path: Path, app_exe: str, enable: bool) -> None:
     """Set autostart on macOS using LaunchAgent."""
     plist_file = startup_path / "com.tgwsproxy.launcher.plist"
-    
+
     if enable:
         plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" 
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -672,16 +678,25 @@ def _set_autostart_macos(startup_path: Path, app_exe: str, enable: bool) -> None
     <string>{LOG_FILE}</string>
 </dict>
 </plist>"""
-        plist_file.write_text(plist_content)
+        try:
+            plist_file.write_text(plist_content, encoding='utf-8')
+            log.info("Autostart enabled (LaunchAgent)")
+        except Exception as exc:
+            log.error("Failed to create LaunchAgent: %s", exc)
+            _show_error(f"Ошибка создания LaunchAgent:\n{exc}")
     else:
-        if plist_file.exists():
-            plist_file.unlink()
+        try:
+            if plist_file.exists():
+                plist_file.unlink()
+                log.info("Autostart disabled (LaunchAgent removed)")
+        except Exception as exc:
+            log.error("Failed to remove LaunchAgent: %s", exc)
 
 
 def _set_autostart_linux(startup_path: Path, app_exe: str, enable: bool) -> None:
     """Set autostart on Linux using .desktop file."""
     desktop_file = startup_path / "tg-ws-proxy.desktop"
-    
+
     if enable:
         desktop_content = f"""[Desktop Entry]
 Type=Application
@@ -693,11 +708,20 @@ Terminal=false
 Categories=Network;ProxyServer;
 StartupNotify=false
 """
-        desktop_file.write_text(desktop_content)
-        os.chmod(desktop_file, 0o755)
+        try:
+            desktop_file.write_text(desktop_content, encoding='utf-8')
+            os.chmod(desktop_file, 0o755)
+            log.info("Autostart enabled (.desktop)")
+        except Exception as exc:
+            log.error("Failed to create .desktop file: %s", exc)
+            _show_error(f"Ошибка создания .desktop:\n{exc}")
     else:
-        if desktop_file.exists():
-            desktop_file.unlink()
+        try:
+            if desktop_file.exists():
+                desktop_file.unlink()
+                log.info("Autostart disabled (.desktop removed)")
+        except Exception as exc:
+            log.error("Failed to remove .desktop file: %s", exc)
 
 
 def _on_open_logs(icon=None, item=None) -> None:
