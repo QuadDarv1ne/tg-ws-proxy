@@ -28,7 +28,7 @@
 
 ### Инфраструктура
 - [x] CI/CD (GitHub Actions)
-- [x] Unit-тесты (64 теста)
+- [x] Unit-тесты (216 тестов)
 - [x] Интеграционные тесты (MTProto)
 - [x] Integration tests для веб-панели
 - [x] RotatingFileHandler для логов (5MB, 3 backup)
@@ -80,9 +80,11 @@
 
 #### Тесты (v2.12.0) ✅
 - [x] Integration tests для веб-панели — `tests/test_web_dashboard.py` ✅ (9 тестов)
-- [x] Unit-тесты для MTProtoProxy — `tests/test_mtproto_proxy.py` ✅ (32 теста: add_secret, remove_secret, get_secrets, get_stats, get_stats_summary, start/stop, context manager)
-- [x] Unit-тесты для tg_ws_proxy — `tests/test_proxy.py` ✅ (19 тестов: DNS cache, TcpPool, WsPool, ProxyServer, lazy initialization)
-- [x] Unit-тесты для profiler.py — `tests/test_profiler.py` ✅ (19 тестов: PerformanceProfiler, AsyncPerformanceProfiler)
+- [x] Unit-тесты для MTProtoProxy — `tests/test_mtproto_proxy.py` ✅ (32 теста)
+- [x] Unit-тесты для tg_ws_proxy — `tests/test_proxy.py` ✅ (19 тестов)
+- [x] Unit-тесты для profiler.py — `tests/test_profiler.py` ✅ (19 тестов)
+- [x] Unit-тесты для stats.py — `tests/test_stats.py` ✅ (30 тестов)
+- [x] Unit-тесты для dashboard.py — `tests/test_dashboard.py` ✅ (19 тестов)
 - [ ] Load tests — сценарии нагрузки
 - [ ] Coverage > 80% — текущее покрытие ~42%
 
@@ -110,7 +112,7 @@
 ### Код-качество
 - [x] Исправить ruff нарушения (682 → 0 ✅)
 - [x] Добавить type hints в profiler.py ✅
-- [x] Увеличить coverage тестов (20% → 39% ✅, цель >80%)
+- [x] Увеличить coverage тестов (20% → 42% ✅, цель >80%)
 - [ ] Пройти mypy без ошибок (11 ошибок — missing stubs)
 
 ### Документация (без запроса не менять)
@@ -157,10 +159,13 @@ pyinstaller>=5.0.0
 - ✅ Integration tests для веб-панели
 
 ### v2.13.0 (В разработке)
-- Валидация конфигурации
-- Recovery после сетевых сбоев
-- Lazy initialization пула
-- Load tests
+- ✅ Валидация конфигурации
+- ✅ Recovery после сетевых сбоев
+- ✅ Lazy initialization пула
+- ✅ Unit-тесты: 64 → 216 тестов
+- ✅ Покрытие: 20% → 42%
+- [ ] Load tests
+- [ ] Coverage > 80%
 
 ### v2.14.0 (Планируется)
 - Компактный режим tray
