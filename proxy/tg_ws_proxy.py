@@ -42,16 +42,11 @@ from .constants import (
 
 log = logging.getLogger('tg-ws-proxy')
 
-_RECV_BUF = RECV_BUF_SIZE
-_SEND_BUF = SEND_BUF_SIZE
-_WS_POOL_SIZE = WS_POOL_SIZE
-_WS_POOL_MAX_AGE = WS_POOL_MAX_AGE
-
-_TG_RANGES = TG_RANGES
-_TCP_NODELAY = TCP_NODELAY
-
 # IP -> (dc_id, is_media)
 _IP_TO_DC: Dict[str, Tuple[int, bool]] = _IP_TO_DC
+
+# Local aliases for frequently used constants
+_TG_RANGES = TG_RANGES
 
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
@@ -105,14 +100,14 @@ def _set_sock_opts(transport):
     sock = transport.get_extra_info('socket')
     if sock is None:
         return
-    if _TCP_NODELAY:
+    if TCP_NODELAY:
         try:
             sock.setsockopt(_socket.IPPROTO_TCP, _socket.TCP_NODELAY, 1)
         except (OSError, AttributeError):
             pass
     try:
-        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_RCVBUF, _RECV_BUF)
-        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_SNDBUF, _SEND_BUF)
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_RCVBUF, RECV_BUF_SIZE)
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_SNDBUF, SEND_BUF_SIZE)
     except OSError:
         pass
 
@@ -517,7 +512,7 @@ class _WsPool:
         while bucket:
             ws, created = bucket.pop(0)
             age = now - created
-            if age > _WS_POOL_MAX_AGE or ws._closed:
+            if age > WS_POOL_MAX_AGE or ws._closed:
                 asyncio.create_task(self._quiet_close(ws))
                 continue
             self.stats.pool_hits += 1
@@ -540,7 +535,7 @@ class _WsPool:
         dc, is_media = key
         try:
             bucket = self._idle.setdefault(key, [])
-            needed = _WS_POOL_SIZE - len(bucket)
+            needed = WS_POOL_SIZE - len(bucket)
             if needed <= 0:
                 return
             tasks = []
@@ -642,7 +637,7 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
                 writer.write(data)
                 # drain only when kernel buffer is filling up
                 buf = writer.transport.get_write_buffer_size()
-                if buf > _SEND_BUF:
+                if buf > SEND_BUF_SIZE:
                     await writer.drain()
         except (asyncio.CancelledError, ConnectionError, OSError):
             return
