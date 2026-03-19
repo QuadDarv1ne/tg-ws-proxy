@@ -275,12 +275,20 @@ class ProxyServer:
         # Statistics
         self.stats = Stats()
 
-        # WebSocket connection pool
-        self.ws_pool = _WsPool(self.stats)
+        # WebSocket connection pool (lazy initialized)
+        self._ws_pool: _WsPool | None = None
 
         # Server instance for graceful shutdown
         self._server_instance: asyncio.Server | None = None
         self._server_stop_event: asyncio.Event | None = None
+
+    @property
+    def ws_pool(self) -> _WsPool:
+        """Lazy initialization of WebSocket pool."""
+        if self._ws_pool is None:
+            self._ws_pool = _WsPool(self.stats)
+            log.debug("WebSocket pool initialized lazily")
+        return self._ws_pool
 
     def get_stats(self) -> dict:
         """Get current proxy statistics."""
@@ -942,8 +950,18 @@ class _TcpPool:
         log.info("TCP pool cleared")
 
 
-# Global TCP pool instance
+# Global TCP pool instance (lazy initialized)
 _tcp_pool: _TcpPool | None = None
+
+
+def _get_tcp_pool() -> _TcpPool:
+    """Lazy initialization of global TCP pool."""
+    global _tcp_pool
+    if _tcp_pool is None:
+        from .stats import Stats
+        _tcp_pool = _TcpPool(Stats())
+        log.debug("TCP pool initialized lazily")
+    return _tcp_pool
 
 
 async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
@@ -1109,15 +1127,15 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
     Uses connection pooling to reduce latency.
     Throttled by ISP, but functional. Returns True on success.
     """
-    global _tcp_pool
+    # Get TCP pool (lazy initialized)
+    tcp_pool = _get_tcp_pool()
 
     # Try to get cached connection
     rr, rw = None, None
-    if _tcp_pool:
-        cached = await _tcp_pool.get(dst, port)
-        if cached:
-            rr, rw = cached
-            log.debug("[%s] TCP pool hit for %s:%d", label, dst, port)
+    cached = await tcp_pool.get(dst, port)
+    if cached:
+        rr, rw = cached
+        log.debug("[%s] TCP pool hit for %s:%d", label, dst, port)
 
     # Create new connection if cache miss
     if rr is None or rw is None:
@@ -1139,9 +1157,9 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
                           dc=dc, dst=dst, port=port, is_media=is_media)
 
     # Return connection to pool if still valid
-    if _tcp_pool and rw and not rw.is_closing():
-        _tcp_pool.put(dst, port, rr, rw)
-    elif rw:
+    if rw and not rw.is_closing():
+        tcp_pool.put(dst, port, rr, rw)
+    else:
         # Close if not pooling
         try:
             rw.close()
