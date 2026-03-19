@@ -59,7 +59,7 @@ async def _close_writer_safe(writer) -> None:
     try:
         writer.close()
         await writer.wait_closed()
-    except BaseException:
+    except Exception:
         pass
 
 
@@ -70,7 +70,7 @@ async def _cancel_tasks(tasks) -> None:
     for t in tasks:
         try:
             await t
-        except BaseException:
+        except Exception:
             pass
 
 
@@ -1123,7 +1123,7 @@ def _close_client_writer(writer) -> None:
     """Safely close client writer connection."""
     try:
         writer.close()
-    except BaseException:
+    except Exception:
         pass
 
 

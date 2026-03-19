@@ -772,11 +772,11 @@ class MTProtoProxy:
             for t in tasks:
                 try:
                     await t
-                except BaseException:
+                except Exception:
                     pass
             # Cleanup
             _close_writer_safe(tg_writer)
-            
+
             _close_writer_safe(client_writer)
             
             # Note: stats decrement is handled by _handle_client
