@@ -157,22 +157,22 @@ class RateLimiter:
                 return False
         return True
 
-    def add_to_blacklist(self, ip: str):
+    def add_to_blacklist(self, ip: str) -> None:
         """Add IP to blacklist."""
         with self._lock:
             self.ip_blacklist.add(ip)
 
-    def add_to_whitelist(self, ip: str):
+    def add_to_whitelist(self, ip: str) -> None:
         """Add IP to whitelist."""
         with self._lock:
             self.ip_whitelist.add(ip)
 
-    def remove_from_blacklist(self, ip: str):
+    def remove_from_blacklist(self, ip: str) -> None:
         """Remove IP from blacklist."""
         with self._lock:
             self.ip_blacklist.discard(ip)
 
-    def remove_from_whitelist(self, ip: str):
+    def remove_from_whitelist(self, ip: str) -> None:
         """Remove IP from whitelist."""
         with self._lock:
             self.ip_whitelist.discard(ip)
@@ -189,12 +189,12 @@ class RateLimiter:
                 return True
             return self.connections_per_ip[ip] < self.max_connections_per_ip
 
-    def increment_connections(self, ip: str):
+    def increment_connections(self, ip: str) -> None:
         """Increment connection count for IP."""
         with self._lock:
             self.connections_per_ip[ip] += 1
 
-    def decrement_connections(self, ip: str):
+    def decrement_connections(self, ip: str) -> None:
         """Decrement connection count for IP."""
         with self._lock:
             self.connections_per_ip[ip] = max(0, self.connections_per_ip[ip] - 1)
@@ -222,13 +222,13 @@ class RateLimiter:
 
             return True
 
-    def record_bytes(self, ip: str, bytes_count: int):
+    def record_bytes(self, ip: str, bytes_count: int) -> None:
         """Record bytes transferred for IP."""
         now = time.time()
         with self._lock:
             self.bytes_per_ip[ip].append((now, bytes_count))
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Clean up old entries (call periodically)."""
         now = time.time()
         window_start = now - self.window_seconds
@@ -255,7 +255,7 @@ class MTProtoTransport:
         self.key, self.iv = secret_to_key_iv(secret)
         self._initialized = False
 
-    def _init_ciphers(self):
+    def _init_ciphers(self) -> None:
         """Initialize AES-256 IGE ciphers."""
         if self._initialized:
             return
@@ -528,9 +528,9 @@ class MTProtoProxy:
         async with self._server:
             await self._server.serve_forever()
 
-    def _start_auto_rotation(self):
+    def _start_auto_rotation(self) -> None:
         """Start automatic secret rotation in background thread."""
-        def rotate_loop():
+        def rotate_loop() -> None:
             next_rotation = datetime.now() + timedelta(days=self.rotate_interval_days)
             log.info("Next secret rotation: %s", next_rotation.strftime("%Y-%m-%d %H:%M"))
 
@@ -543,7 +543,7 @@ class MTProtoProxy:
         self._rotate_thread = threading.Thread(target=rotate_loop, daemon=True)
         self._rotate_thread.start()
 
-    def rotate_secrets(self, new_secrets: list[str] | None = None):
+    def rotate_secrets(self, new_secrets: list[str] | None = None) -> None:
         """
         Rotate secrets (manual or automatic).
 

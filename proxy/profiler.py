@@ -11,7 +11,12 @@ import io
 import logging
 import pstats
 import time
-from typing import Callable, ParamSpec, TypeVar
+from typing import Any, Callable, TypeVar
+
+try:
+    from typing import ParamSpec
+except ImportError:
+    from typing_extensions import ParamSpec
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -66,7 +71,7 @@ class PerformanceProfiler:
 
         log.info("Profiling completed")
 
-    def profile(self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
+    def profile(self, func: Callable[..., R], *args: Any, **kwargs: Any) -> R:
         """
         Profile a function execution.
 
@@ -86,7 +91,7 @@ class PerformanceProfiler:
             self.stop()
 
     async def profile_async(
-        self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs
+        self, func: Callable[..., R], *args: Any, **kwargs: Any
     ) -> R:
         """
         Profile an async function execution.
@@ -101,12 +106,12 @@ class PerformanceProfiler:
         """
         self.start()
         try:
-            result = await func(*args, **kwargs)
+            result = await func(*args, **kwargs)  # type: ignore[no-any-return]
             return result
         finally:
             self.stop()
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get profiling statistics.
 
@@ -117,12 +122,12 @@ class PerformanceProfiler:
             return {}
 
         # Extract key statistics
-        total_calls = self._stats.total_calls
-        total_time = self._stats.total_tt
-        file_stats = []
+        total_calls: int = self._stats.total_calls  # type: ignore[attr-defined]
+        total_time: float = self._stats.total_tt  # type: ignore[attr-defined]
+        file_stats: list[dict[str, Any]] = []
 
         # Get top 20 functions by time
-        for func_key, func_stats in list(self._stats.stats.items())[:20]:
+        for func_key, func_stats in list(self._stats.stats.items())[:20]:  # type: ignore[attr-defined]
             filename, line_no, func_name = func_key
             cc, nc, tt, ct, callers = func_stats
 
@@ -200,10 +205,10 @@ class AsyncPerformanceProfiler:
 
     async def profile_async(
         self,
-        func: Callable[P, R],
+        func: Callable[..., R],
         name: str | None = None,
-        *args: P.args,
-        **kwargs: P.kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> R:
         """
         Profile an async function execution.
@@ -221,7 +226,7 @@ class AsyncPerformanceProfiler:
 
         start_time = time.perf_counter()
         try:
-            result = await func(*args, **kwargs)
+            result = await func(*args, **kwargs)  # type: ignore[no-any-return]
             return result
         finally:
             elapsed = time.perf_counter() - start_time

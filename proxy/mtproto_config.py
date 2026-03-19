@@ -182,7 +182,7 @@ def save_config(config: MTProtoConfig, config_path: str = "mtproto_config.json")
         return False
 
 
-def generate_sample_config(output_path: str = "mtproto_config.example.json"):
+def generate_sample_config(output_path: str = "mtproto_config.example.json") -> None:
     """Generate a sample configuration file."""
     config = MTProtoConfig(
         host="0.0.0.0",

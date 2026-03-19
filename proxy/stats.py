@@ -13,12 +13,12 @@ import time
 import psutil
 
 
-def _human_bytes(n: int) -> str:
+def _human_bytes(n: float) -> str:
     """Convert bytes to human-readable format."""
     if n < 0:
         return f"-{_human_bytes(-n)}"
     if n < 1024:
-        return f"{n}B"
+        return f"{int(n)}B"
     units = ('KB', 'MB', 'GB', 'TB')
     unit_idx = 0
     while n >= 1024 and unit_idx < len(units) - 1:
@@ -65,7 +65,7 @@ class Stats:
         # Session tracking
         self.session_start = time.monotonic()
         self.last_connection_time: float | None = None
-        self.peak_connections_per_minute = 0
+        self.peak_connections_per_minute: float = 0
 
         # Performance monitoring
         self._process = psutil.Process(os.getpid())
