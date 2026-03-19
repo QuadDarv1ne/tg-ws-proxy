@@ -11,12 +11,10 @@ import io
 import logging
 import pstats
 import time
-from typing import Any, Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 
-try:
-    from typing import ParamSpec
-except ImportError:
-    from typing_extensions import ParamSpec
+from typing_extensions import ParamSpec
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -91,7 +89,7 @@ class PerformanceProfiler:
             self.stop()
 
     async def profile_async(
-        self, func: Callable[..., R], *args: Any, **kwargs: Any
+        self, func: Callable[..., Awaitable[R]], *args: Any, **kwargs: Any
     ) -> R:
         """
         Profile an async function execution.
@@ -106,7 +104,7 @@ class PerformanceProfiler:
         """
         self.start()
         try:
-            result = await func(*args, **kwargs)  # type: ignore[no-any-return]
+            result = await func(*args, **kwargs)
             return result
         finally:
             self.stop()
@@ -205,7 +203,7 @@ class AsyncPerformanceProfiler:
 
     async def profile_async(
         self,
-        func: Callable[..., R],
+        func: Callable[..., Awaitable[R]],
         name: str | None = None,
         *args: Any,
         **kwargs: Any,
@@ -226,7 +224,7 @@ class AsyncPerformanceProfiler:
 
         start_time = time.perf_counter()
         try:
-            result = await func(*args, **kwargs)  # type: ignore[no-any-return]
+            result = await func(*args, **kwargs)
             return result
         finally:
             elapsed = time.perf_counter() - start_time

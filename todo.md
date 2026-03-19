@@ -146,8 +146,8 @@
 - [x] Исправить ruff нарушения (682 → 0 ✅)
 - [x] Добавить type hints в profiler.py ✅
 - [x] Увеличить coverage тестов (20% → 44% ✅, цель >80%)
-- [x] Исправить mypy ошибки (146 → 135 ✅)
-- [ ] Пройти mypy без ошибок (остались missing stubs: flask_cors, qrcode; сложные типы в dashboard.py, web_dashboard.py)
+- [x] Исправить mypy ошибки (146 → 128 ✅)
+- [ ] Пройти mypy без ошибок (остались missing stubs: flask_cors, qrcode; сложные типы в dashboard.py, web_dashboard.py, tray.py)
 
 ### Документация (без запроса не менять)
 - [ ] Скриншоты интерфейса — README.md
