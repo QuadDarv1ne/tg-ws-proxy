@@ -878,6 +878,79 @@ class _WsPool:
         log.info("WS pool warmup started for %d DC(s)", len(dc_opt))
 
 
+class _TcpPool:
+    """
+    Connection pool for TCP fallback connections.
+    Reuses existing TCP connections to reduce latency and connection overhead.
+    """
+    
+    def __init__(self, stats: Stats, max_size: int = 4, max_age: float = 60.0):
+        self.stats = stats
+        self.max_size = max_size
+        self.max_age = max_age
+        self._idle: Dict[str, list] = {}  # key: "host:port" -> [(reader, writer, created)]
+        
+    async def get(self, host: str, port: int) -> Optional[Tuple]:
+        """Get a cached TCP connection or None."""
+        key = f"{host}:{port}"
+        now = time.monotonic()
+        
+        bucket = self._idle.get(key, [])
+        while bucket:
+            reader, writer, created = bucket.pop(0)
+            age = now - created
+            
+            # Check if connection is still valid
+            if age > self.max_age:
+                log.debug("TCP pool: connection expired (age=%.1fs)", age)
+                await self._close_one(writer)
+                continue
+                
+            # Check if writer is still open
+            if writer.is_closing() or writer.transport.is_closing():
+                log.debug("TCP pool: connection closed")
+                continue
+                
+            log.debug("TCP pool hit for %s (age=%.1fs)", key, age)
+            return reader, writer
+            
+        return None
+        
+    def put(self, host: str, port: int, reader, writer) -> None:
+        """Return a connection to the pool."""
+        key = f"{host}:{port}"
+        bucket = self._idle.setdefault(key, [])
+        
+        # Limit pool size
+        if len(bucket) >= self.max_size:
+            log.debug("TCP pool full for %s, closing connection", key)
+            asyncio.create_task(self._close_one(writer))
+            return
+            
+        bucket.append((reader, writer, time.monotonic()))
+        log.debug("TCP pool: connection returned to %s (size=%d)", key, len(bucket))
+        
+    async def _close_one(self, writer) -> None:
+        """Close a single connection."""
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
+            
+    def clear(self) -> None:
+        """Clear all pooled connections (called on shutdown)."""
+        for key, bucket in self._idle.items():
+            for _, writer, _ in bucket:
+                asyncio.create_task(self._close_one(writer))
+        self._idle.clear()
+        log.info("TCP pool cleared")
+
+
+# Global TCP pool instance
+_tcp_pool: Optional[_TcpPool] = None
+
+
 async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
                      dc=None, dst=None, port=None, is_media=False,
                      splitter: _MsgSplitter = None):
@@ -1038,21 +1111,46 @@ async def _tcp_fallback(reader, writer, dst, port, init, label,
                         dc=None, is_media=False):
     """
     Fall back to direct TCP to the original DC IP.
-    Throttled by ISP, but functional.  Returns True on success.
+    Uses connection pooling to reduce latency.
+    Throttled by ISP, but functional. Returns True on success.
     """
-    try:
-        rr, rw = await asyncio.wait_for(
-            asyncio.open_connection(dst, port), timeout=10)
-    except Exception as exc:
-        log.warning("[%s] TCP fallback connect to %s:%d failed: %s",
-                    label, dst, port, exc)
-        return False
+    global _tcp_pool
+    
+    # Try to get cached connection
+    rr, rw = None, None
+    if _tcp_pool:
+        cached = await _tcp_pool.get(dst, port)
+        if cached:
+            rr, rw = cached
+            log.debug("[%s] TCP pool hit for %s:%d", label, dst, port)
+    
+    # Create new connection if cache miss
+    if rr is None or rw is None:
+        try:
+            rr, rw = await asyncio.wait_for(
+                asyncio.open_connection(dst, port), timeout=10)
+            log.debug("[%s] TCP new connection to %s:%d", label, dst, port)
+        except Exception as exc:
+            log.warning("[%s] TCP fallback connect to %s:%d failed: %s",
+                        label, dst, port, exc)
+            return False
 
     stats.add_connection('tcp_fallback', dc=dc)
     rw.write(init)
     await rw.drain()
     await _bridge_tcp(reader, writer, rr, rw, label, stats,
                       dc=dc, dst=dst, port=port, is_media=is_media)
+    
+    # Return connection to pool if still valid
+    if _tcp_pool and rw and not rw.is_closing():
+        _tcp_pool.put(dst, port, rr, rw)
+    elif rw:
+        # Close if not pooling
+        try:
+            rw.close()
+        except Exception:
+            pass
+            
     return True
 
 
