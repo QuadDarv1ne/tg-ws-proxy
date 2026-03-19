@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -12,8 +12,6 @@ from proxy.mtproto_proxy import (
     RateLimiter,
     generate_qr_code,
     generate_secret,
-    secret_to_key_iv,
-    validate_secret,
 )
 
 
@@ -24,11 +22,11 @@ class TestGenerateQrCode:
     def test_generate_qr_with_path(self):
         """Test QR code generation with file output."""
         secret = generate_secret()
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "qr.png"
             result = generate_qr_code("127.0.0.1", 443, secret, str(output_path))
-            
+
             assert result == str(output_path)
             assert output_path.exists()
 
@@ -73,7 +71,7 @@ class TestMTProtoProxySecretManagement:
         """Test adding a new secret."""
         proxy = MTProtoProxy(secrets=["0123456789abcdef"])
         proxy.add_secret("fedcba9876543210")
-        
+
         assert "fedcba9876543210" in proxy.secrets
         assert len(proxy.secrets) == 2
 
@@ -81,14 +79,14 @@ class TestMTProtoProxySecretManagement:
         """Test adding duplicate secret."""
         proxy = MTProtoProxy(secrets=["0123456789abcdef"])
         proxy.add_secret("0123456789abcdef")
-        
+
         assert len(proxy.secrets) == 1
 
     def test_remove_secret(self):
         """Test removing a secret."""
         proxy = MTProtoProxy(secrets=["0123456789abcdef", "fedcba9876543210"])
         proxy.remove_secret("0123456789abcdef")
-        
+
         assert "0123456789abcdef" not in proxy.secrets
         assert "fedcba9876543210" in proxy.secrets
 
@@ -96,14 +94,14 @@ class TestMTProtoProxySecretManagement:
         """Test removing nonexistent secret."""
         proxy = MTProtoProxy(secrets=["0123456789abcdef"])
         proxy.remove_secret("fedcba9876543210")  # Should not raise
-        
+
         assert proxy.secrets == ["0123456789abcdef"]
 
     def test_get_secrets(self):
         """Test getting secrets list."""
         proxy = MTProtoProxy(secrets=["0123456789abcdef", "fedcba9876543210"])
         secrets = proxy.get_secrets()
-        
+
         assert secrets == ["0123456789abcdef", "fedcba9876543210"]
 
 
@@ -114,7 +112,7 @@ class TestMTProtoProxyStats:
         """Test initial statistics."""
         proxy = MTProtoProxy(secrets=["0123456789abcdef"])
         stats = proxy.get_stats()
-        
+
         assert 'connections_total' in stats
         assert 'bytes_total' in stats
         assert 'secrets_count' in stats
@@ -124,7 +122,7 @@ class TestMTProtoProxyStats:
         """Test stats summary string."""
         proxy = MTProtoProxy(secrets=["0123456789abcdef"])
         summary = proxy.get_stats_summary()
-        
+
         assert isinstance(summary, str)
         assert len(summary) > 0
 
@@ -135,12 +133,12 @@ class TestMTProtoProxyStartStop:
     def test_start_stop(self):
         """Test starting and stopping proxy."""
         import time
-        
+
         proxy = MTProtoProxy(secrets=["0123456789abcdef0123456789abcdef"], port=0)  # 32 hex chars
 
         # Start should not raise
         proxy.start()
-        
+
         # Wait for server to start in background thread
         time.sleep(0.2)
         assert proxy._server is not None
@@ -152,7 +150,7 @@ class TestMTProtoProxyStartStop:
     def test_context_manager(self):
         """Test using proxy as context manager."""
         import time
-        
+
         proxy = MTProtoProxy(secrets=["0123456789abcdef0123456789abcdef"], port=0)
 
         with proxy:
@@ -196,14 +194,14 @@ class TestRateLimiterIpManagement:
         """Test adding IP to blacklist."""
         limiter = RateLimiter()
         limiter.add_to_blacklist("192.168.1.100")
-        
+
         assert "192.168.1.100" in limiter.ip_blacklist
 
     def test_add_to_whitelist(self):
         """Test adding IP to whitelist."""
         limiter = RateLimiter()
         limiter.add_to_whitelist("192.168.1.100")
-        
+
         assert "192.168.1.100" in limiter.ip_whitelist
 
     def test_remove_from_blacklist(self):
@@ -211,7 +209,7 @@ class TestRateLimiterIpManagement:
         limiter = RateLimiter()
         limiter.add_to_blacklist("192.168.1.100")
         limiter.remove_from_blacklist("192.168.1.100")
-        
+
         assert "192.168.1.100" not in limiter.ip_blacklist
 
     def test_remove_from_whitelist(self):
@@ -219,7 +217,7 @@ class TestRateLimiterIpManagement:
         limiter = RateLimiter()
         limiter.add_to_whitelist("192.168.1.100")
         limiter.remove_from_whitelist("192.168.1.100")
-        
+
         assert "192.168.1.100" not in limiter.ip_whitelist
 
     def test_remove_nonexistent_ip(self):
@@ -258,13 +256,13 @@ class TestRateLimiterConnectionManagement:
         """Test incrementing and decrementing connections."""
         limiter = RateLimiter()
         ip = "192.168.1.1"
-        
+
         limiter.increment_connections(ip)
         assert limiter.connections_per_ip[ip] == 1
-        
+
         limiter.increment_connections(ip)
         assert limiter.connections_per_ip[ip] == 2
-        
+
         limiter.decrement_connections(ip)
         assert limiter.connections_per_ip[ip] == 1
 
@@ -272,7 +270,7 @@ class TestRateLimiterConnectionManagement:
         """Test decrement doesn't go below zero."""
         limiter = RateLimiter()
         ip = "192.168.1.1"
-        
+
         limiter.decrement_connections(ip)  # Should not go negative
         assert limiter.connections_per_ip[ip] == 0
 
@@ -280,12 +278,12 @@ class TestRateLimiterConnectionManagement:
         """Test connection limit check - allowed."""
         limiter = RateLimiter(max_connections_per_ip=2)
         ip = "192.168.1.1"
-        
+
         assert limiter.check_connection_limit(ip) is True
-        
+
         limiter.increment_connections(ip)
         assert limiter.check_connection_limit(ip) is True
-        
+
         limiter.increment_connections(ip)
         assert limiter.check_connection_limit(ip) is False
 
@@ -293,11 +291,11 @@ class TestRateLimiterConnectionManagement:
         """Test whitelisted IP bypasses connection limit."""
         limiter = RateLimiter(max_connections_per_ip=1)
         ip = "192.168.1.1"
-        
+
         limiter.add_to_whitelist(ip)
         limiter.increment_connections(ip)
         limiter.increment_connections(ip)  # Exceed limit
-        
+
         # Should still be allowed due to whitelist
         assert limiter.check_connection_limit(ip) is True
 
@@ -309,26 +307,26 @@ class TestRateLimiterTrafficManagement:
         """Test rate limit check - allowed."""
         limiter = RateLimiter(max_bytes_per_second=1024)
         ip = "192.168.1.1"
-        
+
         assert limiter.check_rate_limit(ip, 512) is True
 
     def test_check_rate_limit_exceeded(self):
         """Test rate limit check - exceeded."""
         limiter = RateLimiter(max_bytes_per_second=100)
         ip = "192.168.1.1"
-        
+
         assert limiter.check_rate_limit(ip, 200) is False
 
     def test_cleanup(self):
         """Test cleanup method."""
         limiter = RateLimiter(window_seconds=1)
         ip = "192.168.1.1"
-        
+
         # Add some data
         with limiter._lock:
             import time
             limiter.bytes_per_ip[ip].append((time.time() - 2, 100))  # Old entry
-        
+
         limiter.cleanup()
         assert len(limiter.bytes_per_ip[ip]) == 0
 
@@ -340,6 +338,6 @@ class TestMTProtoTransportMethods:
         """Test string representation."""
         secret = generate_secret()
         transport = MTProtoTransport(secret)
-        
+
         repr_str = repr(transport)
         assert "MTProtoTransport" in repr_str

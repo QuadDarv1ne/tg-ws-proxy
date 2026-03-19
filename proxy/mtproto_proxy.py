@@ -860,7 +860,7 @@ class MTProtoProxy:
             self._server.close()
             self._server = None
 
-    def __enter__(self) -> "MTProtoProxy":
+    def __enter__(self) -> MTProtoProxy:
         """Context manager entry."""
         self.start()
         return self

@@ -223,8 +223,6 @@ class TestMTProtoProxyIntegration:
 
     async def test_proxy_start_stop(self):
         """Test proxy can start and stop."""
-        import time
-        
         secret = generate_secret()
         proxy = MTProtoProxy(
             secrets=[secret],
