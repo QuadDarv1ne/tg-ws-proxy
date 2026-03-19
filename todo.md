@@ -12,7 +12,7 @@
 - Автозапуск (Windows, macOS, Linux)
 - Проверка обновлений (GitHub API)
 - CI/CD (GitHub Actions)
-- Unit-тесты (36 тестов)
+- Unit-тесты (55 тестов)
 - Интеграционные тесты (MTProto)
 - MTProto proxy для мобильных
 - Консольная панель управления (TUI)
@@ -87,8 +87,8 @@
 ### 5. Производительность
 **Приоритет: Низкий**
 
-- [ ] Настройка размера пула WebSocket соединений (через конфиг)
-- [ ] Настройка таймаутов (через конфиг)
+- [x] Настройка размера пула WebSocket соединений (через конфиг)
+- [x] Настройка таймаутов (через конфиг)
 - [ ] Профилирование производительности
 
 **Файлы для изменения:** `proxy/constants.py`, `proxy/tg_ws_proxy.py`
@@ -113,6 +113,15 @@
 - [x] Рефакторинг `_show_first_run()` — разбиение на 6 подметодов
 - [x] Унификация обработки ошибок в `_handle_client()` — вынесено в `_handle_client_error()` и `_close_client_writer()`
 
+### ✅ Выполнено (v2.5.3)
+- [x] Поддержка cryptography>=42 (ручная IGE реализация)
+- [x] Исправление RateLimiter.check_connection_limit (проверка whitelist)
+- [x] Удаление дублирования `_human_bytes` (импорт из stats.py)
+- [x] Удаление неиспользуемого `ProxyConfig` TypedDict
+- [x] Рефакторинг закрытия writer в mtproto_proxy (`_close_writer`, `_wait_closed`)
+- [x] Обновление требований: >= вместо == для совместимости
+- [x] Очистка констант: объединение секций MTProto, удаление неиспользуемых
+
 ### Требуется рефакторинг
 - [ ] Упростить `_edit_config_dialog()` — слишком большой метод
 - [ ] Унифицировать обработку ошибок в `_bridge_ws()` и `_bridge_tcp()`
@@ -128,14 +137,15 @@
 
 ### Текущие версии (Python 3.14)
 ```
-cryptography (latest)
-customtkinter==5.2.2
-Pillow (latest, >=12.0)
-psutil (latest)
-pystray==0.19.5
-flask (latest)
-rich (latest)
-qrcode (latest)
+cryptography>=42.0.0
+customtkinter>=5.2.2
+Pillow>=10.3.0
+psutil>=5.9.8
+pystray>=0.19.5
+flask>=3.0.0
+flask-cors>=4.0.0
+rich>=13.7.0
+qrcode>=7.4.2
 ```
 
 ### Для сборки
@@ -154,7 +164,7 @@ black>=23.0.0
 
 ---
 
-## 🚀 Следующий релиз: v2.5.2
+## 🚀 Следующий релиз: v2.5.3
 
 **Выполнено:**
 - [x] Исправление статистики (выполнено ✅)
@@ -163,6 +173,13 @@ black>=23.0.0
 - [x] Вынос статистики в `proxy/stats.py`
 - [x] Рефакторинг `_show_first_run()`
 - [x] Унификация обработки ошибок
+- [x] Поддержка cryptography>=42 (ручная IGE реализация)
+- [x] Исправление RateLimiter.check_connection_limit (проверка whitelist)
+- [x] Удаление дублирования `_human_bytes` (импорт из stats.py)
+- [x] Удаление неиспользуемого `ProxyConfig` TypedDict
+- [x] Рефакторинг закрытия writer в mtproto_proxy
+- [x] Обновление требований: >= вместо == для совместимости
+- [x] Очистка констант: объединение секций MTProto
 
 **План:**
 - [ ] Обновление документации
@@ -181,9 +198,12 @@ tg-ws-proxy/
 ├── proxy/
 │   ├── tg_ws_proxy.py    # Основная логика прокси
 │   ├── mtproto_proxy.py  # MTProto proxy для мобильных
+│   ├── mtproto_config.py # Конфигурация MTProto
 │   ├── stats.py          # Модуль статистики
 │   ├── constants.py      # Константы
-│   └── dashboard.py      # Консольная панель (TUI)
+│   ├── dashboard.py      # Консольная панель (TUI)
+│   ├── web_dashboard.py  # Веб-панель (Flask)
+│   └── diagnostics.py    # Диагностика
 ├── tests/            # Unit-тесты
 ├── requirements.txt  # Зависимости
 └── pyproject.toml    # Метаданные проекта
