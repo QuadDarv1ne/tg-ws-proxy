@@ -53,6 +53,26 @@ _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
 
 
+async def _close_writer_safe(writer) -> None:
+    """Safely close and wait for writer to close."""
+    try:
+        writer.close()
+        await writer.wait_closed()
+    except BaseException:
+        pass
+
+
+async def _cancel_tasks(tasks) -> None:
+    """Cancel tasks and wait for completion, suppressing exceptions."""
+    for t in tasks:
+        t.cancel()
+    for t in tasks:
+        try:
+            await t
+        except BaseException:
+            pass
+
+
 class ProxyServer:
     """
     Main proxy server class that encapsulates all global state.
@@ -649,13 +669,7 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
     try:
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     finally:
-        for t in tasks:
-            t.cancel()
-        for t in tasks:
-            try:
-                await t
-            except BaseException:
-                pass
+        await _cancel_tasks(tasks)
         elapsed = asyncio.get_event_loop().time() - start_time
         log.info("[%s] %s (%s) WS session closed: "
                  "^%s (%d pkts) v%s (%d pkts) in %.1fs",
@@ -663,15 +677,8 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
                  _human_bytes(up_bytes), up_packets,
                  _human_bytes(down_bytes), down_packets,
                  elapsed)
-        try:
-            await ws.close()
-        except BaseException:
-            pass
-        try:
-            writer.close()
-            await writer.wait_closed()
-        except BaseException:
-            pass
+        await _close_writer_safe(ws)
+        await _close_writer_safe(writer)
 
 
 async def _bridge_tcp(reader, writer, remote_reader, remote_writer,
@@ -702,19 +709,9 @@ async def _bridge_tcp(reader, writer, remote_reader, remote_writer,
     try:
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     finally:
-        for t in tasks:
-            t.cancel()
-        for t in tasks:
-            try:
-                await t
-            except BaseException:
-                pass
-        for w in (writer, remote_writer):
-            try:
-                w.close()
-                await w.wait_closed()
-            except BaseException:
-                pass
+        await _cancel_tasks(tasks)
+        await _close_writer_safe(writer)
+        await _close_writer_safe(remote_writer)
 
 
 async def _pipe(r, w):
@@ -731,11 +728,7 @@ async def _pipe(r, w):
     except Exception:
         pass
     finally:
-        try:
-            w.close()
-            await w.wait_closed()
-        except Exception:
-            pass
+        await _close_writer_safe(w)
 
 
 def _socks5_reply(status):
