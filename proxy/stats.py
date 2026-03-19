@@ -111,8 +111,8 @@ class Stats:
         if now - self._traffic_snapshot_time >= 1.0:
             self.traffic_history.append({
                 'time': now,
-                'bytes_up': up,
-                'bytes_down': down
+                'bytes_up': self.bytes_up,
+                'bytes_down': self.bytes_down
             })
             if len(self.traffic_history) > self._history_size:
                 self.traffic_history.pop(0)
@@ -160,6 +160,12 @@ class Stats:
         up = sum(t['bytes_up'] for t in recent)
         down = sum(t['bytes_down'] for t in recent)
         return (up, down)
+
+    def get_traffic_history(self, limit: int = 60) -> List[Dict]:
+        """Get traffic history for chart rendering."""
+        if not self.traffic_history:
+            return []
+        return self.traffic_history[-limit:]
 
     def get_session_duration(self) -> float:
         """Get session duration in seconds."""
@@ -224,6 +230,7 @@ class Stats:
             "traffic_up_per_minute": traffic_per_min[0],
             "traffic_down_per_minute": traffic_per_min[1],
             "connection_history": self.connection_history[-10:],  # Last 10
+            "traffic_history": self.get_traffic_history(60),  # Last 60 snapshots
             "dc_stats": self.get_dc_stats(),
             "latency_ms": self.latency_ms,
             "session_duration_seconds": self.get_session_duration(),

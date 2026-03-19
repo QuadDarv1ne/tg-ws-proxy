@@ -320,6 +320,68 @@ DASHBOARD_HTML = """
             .section { padding: 15px; }
             .stat-card { padding: 15px; }
         }
+        .chart-container {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .chart-container h3 {
+            color: var(--bg-gradient-start);
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        .chart {
+            width: 100%;
+            height: 200px;
+            position: relative;
+            overflow: hidden;
+        }
+        .chart-line {
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+        .chart-line-up {
+            stroke: #48bb78;
+        }
+        .chart-line-down {
+            stroke: #3182ce;
+        }
+        .chart-area {
+            opacity: 0.2;
+        }
+        .chart-area-up {
+            fill: #48bb78;
+        }
+        .chart-area-down {
+            fill: #3182ce;
+        }
+        .chart-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        .chart-legend {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
@@ -363,6 +425,26 @@ DASHBOARD_HTML = """
                 <div class="stat-card">
                     <h3>📥 Трафик вниз</h3>
                     <div class="value" id="bytesDown">0<span class="unit">MB</span></div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>📈 Трафик в реальном времени</h3>
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#48bb78"></div>
+                        <span>Вверх</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#3182ce"></div>
+                        <span>Вниз</span>
+                    </div>
+                </div>
+                <svg class="chart" id="trafficChart" viewBox="0 0 600 200" preserveAspectRatio="none">
+                </svg>
+                <div class="chart-labels">
+                    <span>60с назад</span>
+                    <span>Сейчас</span>
                 </div>
             </div>
 
@@ -506,13 +588,18 @@ DASHBOARD_HTML = """
                 document.getElementById('uptime').textContent = data.uptime || '-';
 
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ru-RU');
-                
+
                 // Update status indicator
                 const statusIndicator = document.getElementById('statusIndicator');
                 if (data.ws_errors && data.ws_errors > 10) {
                     statusIndicator.className = 'status-indicator status-degraded';
                 } else {
                     statusIndicator.className = 'status-indicator status-online';
+                }
+
+                // Render traffic chart
+                if (data.traffic_history) {
+                    renderTrafficChart(data.traffic_history);
                 }
             } catch (error) {
                 console.error('Failed to load stats:', error);
@@ -625,6 +712,51 @@ DASHBOARD_HTML = """
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             html.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
+        }
+
+        function renderTrafficChart(trafficHistory) {
+            const svg = document.getElementById('trafficChart');
+            if (!trafficHistory || trafficHistory.length < 2) {
+                svg.innerHTML = '<text x=\"300\" y=\"100\" text-anchor=\"middle\" fill=\"#888\" font-size=\"14\">Нет данных для отображения</text>';
+                return;
+            }
+
+            const width = 600;
+            const height = 200;
+            const padding = 10;
+
+            // Find max value for scaling
+            let maxValue = 0;
+            trafficHistory.forEach(point => {
+                if (point.bytes_up > maxValue) maxValue = point.bytes_up;
+                if (point.bytes_down > maxValue) maxValue = point.bytes_down;
+            });
+
+            if (maxValue === 0) maxValue = 1;
+
+            // Generate path for line chart
+            const generatePath = (key) => {
+                return trafficHistory.map((point, i) => {
+                    const x = (i / (trafficHistory.length - 1)) * (width - padding * 2) + padding;
+                    const y = height - padding - (point[key] / maxValue) * (height - padding * 2);
+                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                }).join(' ');
+            };
+
+            const generateArea = (key) => {
+                const path = generatePath(key);
+                const lastX = width - padding;
+                const firstX = padding;
+                const baseY = height - padding;
+                return `${path} L ${lastX} ${baseY} L ${firstX} ${baseY} Z`;
+            };
+
+            svg.innerHTML = `
+                <path class="chart-area chart-area-up" d="${generateArea('bytes_up')}" />
+                <path class="chart-area chart-area-down" d="${generateArea('bytes_down')}" />
+                <path class="chart-line chart-line-up" d="${generatePath('bytes_up')}" />
+                <path class="chart-line chart-line-down" d="${generatePath('bytes_down')}" />
+            `;
         }
 
         // Load saved theme on page load
