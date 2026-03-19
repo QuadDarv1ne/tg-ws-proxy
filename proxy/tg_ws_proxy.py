@@ -85,12 +85,14 @@ class ProxyServer:
     """
 
     def __init__(self, dc_opt: Dict[int, Optional[str]], host: str = '127.0.0.1', port: int = DEFAULT_PORT,
-                 auth_required: bool = False, auth_credentials: Optional[Dict[str, str]] = None):
+                 auth_required: bool = False, auth_credentials: Optional[Dict[str, str]] = None,
+                 ip_whitelist: Optional[List[str]] = None):
         self.dc_opt = dc_opt
         self.host = host
         self.port = port
         self.auth_required = auth_required
         self.auth_credentials = auth_credentials
+        self.ip_whitelist = set(ip_whitelist) if ip_whitelist else None
 
         # DCs where WS is known to fail (302 redirect)
         # Raw TCP fallback will be used instead
@@ -798,9 +800,18 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
                          ws_pool: _WsPool, ws_blacklist: Set[Tuple[int, bool]],
                          dc_fail_until: Dict[Tuple[int, bool], float],
                          auth_required: bool = False,
-                         auth_credentials: Optional[Dict[str, str]] = None):
+                         auth_credentials: Optional[Dict[str, str]] = None,
+                         ip_whitelist: Optional[Set[str]] = None):
     peer = writer.get_extra_info('peername')
     label = f"{peer[0]}:{peer[1]}" if peer else "?"
+    client_ip = peer[0] if peer else "unknown"
+
+    # Check IP whitelist
+    if ip_whitelist is not None and client_ip not in ip_whitelist:
+        log.warning("[%s] client IP not in whitelist - rejected", label)
+        stats.add_connection('http_rejected', dc=None)
+        writer.close()
+        return
 
     _set_sock_opts(writer.transport)
 
@@ -1112,11 +1123,12 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
                stop_event: Optional[asyncio.Event] = None,
                host: str = '127.0.0.1',
                auth_required: bool = False,
-               auth_credentials: Optional[Dict[str, str]] = None):
+               auth_credentials: Optional[Dict[str, str]] = None,
+               ip_whitelist: Optional[List[str]] = None):
     global _server_instance
 
     # Create proxy server instance with encapsulated state
-    server_instance = ProxyServer(dc_opt, host, port, auth_required, auth_credentials)
+    server_instance = ProxyServer(dc_opt, host, port, auth_required, auth_credentials, ip_whitelist)
     _server_instance = server_instance
 
     # Create a wrapper for _handle_client that passes server state
@@ -1129,7 +1141,8 @@ async def _run(port: int, dc_opt: Dict[int, Optional[str]],
             ws_blacklist=server_instance.ws_blacklist,
             dc_fail_until=server_instance.dc_fail_until,
             auth_required=server_instance.auth_required,
-            auth_credentials=server_instance.auth_credentials
+            auth_credentials=server_instance.auth_credentials,
+            ip_whitelist=server_instance.ip_whitelist
         )
 
     server = await asyncio.start_server(
