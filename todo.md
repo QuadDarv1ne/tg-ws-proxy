@@ -28,7 +28,7 @@
 
 ### Инфраструктура
 - [x] CI/CD (GitHub Actions)
-- [x] Unit-тесты (194 теста)
+- [x] Unit-тесты (195 тестов)
 - [x] Интеграционные тесты (MTProto)
 - [x] Integration tests для веб-панели
 - [x] RotatingFileHandler для логов (5MB, 3 backup)
@@ -163,7 +163,7 @@ pyinstaller>=5.0.0
 - ✅ Валидация конфигурации
 - ✅ Recovery после сетевых сбоев
 - ✅ Lazy initialization пула
-- ✅ Unit-тесты: 64 → 194 теста
+- ✅ Unit-тесты: 64 → 195 тестов
 - ✅ Покрытие: 20% → 44%
 - ✅ mypy: 146 → ~100 ошибок
 - [ ] Load tests
