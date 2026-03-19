@@ -684,12 +684,26 @@ _server_instance: ProxyServer | None = None
 
 # Callback for client connection notifications
 _on_client_connect_callback = None
+_on_client_error_callback = None
+_on_high_latency_callback = None
 
 
 def set_on_client_connect_callback(callback) -> None:
     """Set callback for client connection notifications."""
     global _on_client_connect_callback
     _on_client_connect_callback = callback
+
+
+def set_on_client_error_callback(callback) -> None:
+    """Set callback for client error notifications."""
+    global _on_client_error_callback
+    _on_client_error_callback = callback
+
+
+def set_on_high_latency_callback(callback) -> None:
+    """Set callback for high latency notifications."""
+    global _on_high_latency_callback
+    _on_high_latency_callback = callback
 
 
 def get_stats() -> dict:
@@ -1393,6 +1407,12 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | N
                     break
                 except WsHandshakeError as exc:
                     stats.ws_errors += 1
+                    # Notify about error
+                    if _on_client_error_callback:
+                        try:
+                            _on_client_error_callback(dc, dst, port, "websocket_handshake", str(exc))
+                        except Exception:
+                            pass
                     if exc.is_redirect:
                         ws_failed_redirect = True
                         log.warning("%s DC%d%s got %d from %s -> %s",
@@ -1406,6 +1426,12 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | N
                                     label, dc, media_tag, exc.status_line)
                 except Exception as exc:
                     stats.add_ws_error(dc=dc)
+                    # Notify about error
+                    if _on_client_error_callback:
+                        try:
+                            _on_client_error_callback(dc, dst, port, "websocket_connect", str(exc))
+                        except Exception:
+                            pass
                     all_redirects = False
                     err_str = str(exc)
                     if ('CERTIFICATE_VERIFY_FAILED' in err_str or
@@ -1609,14 +1635,37 @@ async def _run(port: int, dc_opt: dict[int, str | None],
     asyncio.create_task(log_stats())
 
     # Background task for periodic DC ping monitoring
+    _last_latency_alert: dict[int, float] = {}  # dc_id -> last alert time
+    _high_latency_threshold = 200.0  # ms
+    _alert_cooldown = 300.0  # 5 minutes between alerts for same DC
+
     async def monitor_dc_latency():
         """Periodically re-measure DC latency to adapt to network changes."""
+        nonlocal _last_latency_alert
         while True:
             await asyncio.sleep(600)  # Check every 10 minutes
             log.debug("Re-checking DC latency...")
             dc_pings = await _measure_all_dc_pings(dc_opt)
+            now = time.monotonic()
+
             for dc_id, latency_ms in dc_pings.items():
                 server_instance.stats.record_latency(dc_id, latency_ms)
+
+                # Check for high latency and notify
+                if latency_ms > _high_latency_threshold:
+                    # Check cooldown
+                    last_alert = _last_latency_alert.get(dc_id, 0)
+                    if now - last_alert > _alert_cooldown:
+                        _last_latency_alert[dc_id] = now
+                        # Notify via callback
+                        if _on_high_latency_callback:
+                            try:
+                                _on_high_latency_callback(dc_id, latency_ms)
+                            except Exception:
+                                pass
+                        log.warning("DC%d: HIGH LATENCY %.1fms (threshold: %.1fms)",
+                                   dc_id, latency_ms, _high_latency_threshold)
+
             if dc_pings:
                 best_dc = min(dc_pings, key=dc_pings.get)
                 log.info("DC latency updated - best: DC%d (%.1fms)", best_dc, dc_pings[best_dc])

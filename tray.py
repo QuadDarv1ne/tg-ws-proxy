@@ -32,6 +32,9 @@ from proxy.constants import (
     FIRST_RUN_MARKER_NAME,
     IPV6_WARN_MARKER_NAME,
     LOG_FILE_NAME,
+    STATUS_ERROR,
+    STATUS_OK,
+    STATUS_WARNING,
     TG_BLUE,
     TG_BLUE_HOVER,
     UI_BG,
@@ -85,6 +88,7 @@ FIRST_RUN_MARKER = APP_DIR / FIRST_RUN_MARKER_NAME
 IPV6_WARN_MARKER = APP_DIR / IPV6_WARN_MARKER_NAME
 UPDATE_CHECK_MARKER = APP_DIR / ".update_checked"
 NOTIFICATIONS_MARKER = APP_DIR / ".notifications_enabled"
+DAILY_STATS_FILE = APP_DIR / ".daily_stats.json"  # Daily statistics file
 
 # GitHub repository for update checks
 GITHUB_REPO = "Flowseal/tg-ws-proxy"
@@ -101,6 +105,8 @@ _lock_file_path: Path | None = None
 _dark_theme: bool = False  # Theme toggle state
 _config_save_callback: Callable | None = None  # Keyboard shortcut callback
 _config_cancel_callback: Callable | None = None  # Keyboard shortcut callback
+_proxy_status: str = "starting"  # "starting", "running", "error", "stopped"
+_compact_menu: bool = False  # Compact menu mode
 
 log = logging.getLogger("tg-ws-tray")
 
@@ -279,8 +285,13 @@ def _has_ipv6_enabled() -> bool:
         return False
 
 
-def _make_icon_image(size: int = 64) -> Image.Image:
-    """Create a default tray icon."""
+def _make_icon_image(size: int = 64, status: str = "ok") -> Image.Image:
+    """Create a default tray icon with status indicator.
+
+    Args:
+        size: Icon size in pixels.
+        status: Status indicator - "ok", "error", "warning", or "starting".
+    """
     if Image is None:
         raise RuntimeError("Pillow is required for tray icon")
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
@@ -289,6 +300,25 @@ def _make_icon_image(size: int = 64) -> Image.Image:
     margin = 2
     draw.ellipse([margin, margin, size - margin, size - margin],
                  fill=(0, 136, 204, 255))
+
+    # Status indicator dot (bottom-right corner)
+    dot_size = int(size * 0.25)
+    dot_margin = int(size * 0.05)
+
+    if status == "ok":
+        dot_color = tuple(int(STATUS_OK.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    elif status == "error":
+        dot_color = tuple(int(STATUS_ERROR.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    elif status == "warning":
+        dot_color = tuple(int(STATUS_WARNING.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    else:  # starting
+        dot_color = (255, 255, 255, 255)
+
+    draw.ellipse(
+        [size - dot_size - dot_margin, size - dot_size - dot_margin,
+         size - dot_margin, size - dot_margin],
+        fill=dot_color
+    )
 
     try:
         if IS_WINDOWS:
@@ -311,12 +341,45 @@ def _make_icon_image(size: int = 64) -> Image.Image:
     return img
 
 
-def _load_icon() -> Image.Image | None:
-    """Load or create tray icon."""
+def _set_proxy_status(status: str) -> None:
+    """Update proxy status and refresh tray icon.
+
+    Args:
+        status: New status - "starting", "running", "error", or "stopped".
+    """
+    global _proxy_status
+    old_status = _proxy_status
+    _proxy_status = status
+
+    if status != old_status and _tray_icon:
+        # Update icon image to reflect new status
+        new_icon = _load_icon(status)
+        if new_icon:
+            try:
+                _tray_icon.icon = new_icon
+            except Exception as exc:
+                log.debug("Failed to update tray icon: %s", exc)
+
+        # Update menu to reflect new status text
+        try:
+            _tray_icon.update_menu()
+        except Exception as exc:
+            log.debug("Failed to update tray menu: %s", exc)
+
+
+def _load_icon(status: str | None = None) -> Image.Image | None:
+    """Load or create tray icon.
+
+    Args:
+        status: Optional status indicator. If None, uses current _proxy_status.
+    """
     if not HAS_TRAY:
         return None
 
-    # Try to load from file
+    # Use current status if not specified
+    icon_status = status if status is not None else _proxy_status
+
+    # Try to load from file (static icon without status indicator)
     icon_paths = [
         Path(__file__).parent / "icon.ico",
         Path(__file__).parent.parent / "icon.ico",
@@ -330,7 +393,8 @@ def _load_icon() -> Image.Image | None:
             except Exception:
                 pass
 
-    return _make_icon_image()
+    # Create dynamic icon with status indicator
+    return _make_icon_image(status=icon_status)
 
 
 def _show_error(text: str, title: str = "TG WS Proxy — Ошибка") -> None:
@@ -411,6 +475,7 @@ def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
     # Check port availability
     if not _check_port_available(port, host):
         log.error("Port %d on %s is already in use", port, host)
+        _set_proxy_status("error")
         _show_error(f"Не удалось запустить прокси:\nПорт {host}:{port} уже используется.\n\nЗакройте приложение или измените порт.")
         return
 
@@ -425,10 +490,13 @@ def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
     _async_stop = (loop, stop_ev)
 
     try:
+        # Proxy started - set status to running
+        _set_proxy_status("running")
         loop.run_until_complete(
             tg_ws_proxy._run(port, dc_opt, stop_event=stop_ev, host=host))
     except Exception as exc:
         log.error("Proxy thread crashed: %s", exc)
+        _set_proxy_status("error")
         if "10048" in str(exc) or "Address already in use" in str(exc):
             _show_error("Не удалось запустить прокси:\nПорт уже используется.")
         err_str = str(exc).lower()
@@ -444,6 +512,7 @@ def start_proxy() -> None:
     global _proxy_thread, _config
     if _proxy_thread and _proxy_thread.is_alive():
         log.info("Proxy already running")
+        _set_proxy_status("running")
         return
 
     cfg = _config
@@ -457,9 +526,11 @@ def start_proxy() -> None:
     except ValueError as e:
         log.error("Bad config dc_ip: %s", e)
         _show_error(f"Ошибка конфигурации:\n{e}")
+        _set_proxy_status("error")
         return
 
     log.info("Starting proxy on %s:%d ...", host, port)
+    _set_proxy_status("starting")
     _proxy_thread = threading.Thread(
         target=_run_proxy_thread,
         args=(port, dc_opt, verbose, host),
@@ -476,12 +547,14 @@ def stop_proxy() -> None:
         if _proxy_thread:
             _proxy_thread.join(timeout=2)
     _proxy_thread = None
+    _set_proxy_status("stopped")
     log.info("Proxy stopped")
 
 
 def restart_proxy() -> None:
     """Restart the proxy server."""
     log.info("Restarting proxy...")
+    _set_proxy_status("starting")
     stop_proxy()
     time.sleep(0.3)
     start_proxy()
@@ -545,6 +618,76 @@ def _on_toggle_theme(icon=None, item=None) -> None:
     # Update menu to reflect new theme state
     if _tray_icon and hasattr(_tray_icon, 'update_menu'):
         _tray_icon.update_menu()
+
+
+def _on_toggle_compact_menu(icon=None, item=None) -> None:
+    """Toggle compact menu mode."""
+    global _compact_menu
+    _compact_menu = not _compact_menu
+    # Save to config
+    _config["compact_menu"] = _compact_menu
+    save_config(_config)
+    menu_state = "включен" if _compact_menu else "выключен"
+    _show_info(f"Компактный режим меню {menu_state}", "TG WS Proxy")
+    # Update menu
+    if _tray_icon and hasattr(_tray_icon, 'update_menu'):
+        _tray_icon.update_menu()
+
+
+def _apply_dc_preset(preset: str) -> None:
+    """Apply DC preset configuration.
+
+    Args:
+        preset: Preset name - "dc2", "dc2_4", "all", "dc1", "dc3", "dc5".
+    """
+    presets = {
+        "dc2": ["2:149.154.167.220"],
+        "dc2_4": ["2:149.154.167.220", "4:149.154.167.220"],
+        "all": [
+            "1:149.154.175.53",
+            "2:149.154.167.220",
+            "3:149.154.175.100",
+            "4:149.154.167.91",
+            "5:91.108.56.100",
+        ],
+        "dc1": ["1:149.154.175.53"],
+        "dc3": ["3:149.154.175.100"],
+        "dc5": ["5:91.108.56.100"],
+    }
+
+    if preset not in presets:
+        log.warning("Unknown DC preset: %s", preset)
+        return
+
+    new_dc_ip = presets[preset]
+    _config["dc_ip"] = new_dc_ip
+    save_config(_config)
+
+    preset_names = {
+        "dc2": "DC 2",
+        "dc2_4": "DC 2+4",
+        "all": "Все DC",
+        "dc1": "DC 1",
+        "dc3": "DC 3",
+        "dc5": "DC 5",
+    }
+
+    log.info("DC preset applied: %s", preset_names.get(preset, preset))
+    _show_info(
+        f"Применён пресет: {preset_names.get(preset, preset)}\n\n"
+        f"DC: {', '.join(new_dc_ip)}\n\n"
+        f"Прокси будет перезапущен.",
+        "TG WS Proxy"
+    )
+
+    # Restart proxy with new config
+    threading.Thread(target=restart_proxy, daemon=True).start()
+
+
+def _on_dc_preset(icon=None, item=None, preset: str = "") -> None:
+    """Handle DC preset menu item click."""
+    if preset:
+        _apply_dc_preset(preset)
 
 
 def _on_toggle_autostart(icon=None, item=None) -> None:
@@ -749,6 +892,9 @@ def _on_exit(icon=None, item=None) -> None:
     _exiting = True
     log.info("User requested exit")
 
+    # Show daily summary before exit
+    _show_daily_summary()
+
     def _force_exit():
         time.sleep(3)
         os._exit(0)
@@ -756,6 +902,90 @@ def _on_exit(icon=None, item=None) -> None:
 
     if icon:
         icon.stop()
+
+
+def _load_daily_stats() -> dict:
+    """Load daily statistics from file."""
+    if DAILY_STATS_FILE.exists():
+        try:
+            data = json.loads(DAILY_STATS_FILE.read_text(encoding="utf-8"))
+            # Check if it's from today
+            today = time.strftime("%Y-%m-%d")
+            if data.get("date") == today:
+                return data
+        except Exception:
+            pass
+    # Return fresh stats for today
+    return {
+        "date": time.strftime("%Y-%m-%d"),
+        "connections_total": 0,
+        "connections_ws": 0,
+        "connections_tcp_fallback": 0,
+        "bytes_up": 0,
+        "bytes_down": 0,
+        "ws_errors": 0,
+        "session_start": time.time(),
+    }
+
+
+def _save_daily_stats(stats: dict) -> None:
+    """Save daily statistics to file."""
+    try:
+        DAILY_STATS_FILE.write_text(json.dumps(stats, indent=2), encoding="utf-8")
+    except Exception as exc:
+        log.debug("Failed to save daily stats: %s", exc)
+
+
+def _show_daily_summary() -> None:
+    """Show daily statistics summary on exit."""
+    try:
+        # Load previous stats
+        daily_stats = _load_daily_stats()
+
+        # Get current session stats
+        current_stats = tg_ws_proxy.get_stats()
+
+        # Update daily stats
+        daily_stats["connections_total"] = current_stats.get("connections_total", 0)
+        daily_stats["connections_ws"] = current_stats.get("connections_ws", 0)
+        daily_stats["connections_tcp_fallback"] = current_stats.get("connections_tcp_fallback", 0)
+        daily_stats["bytes_up"] = current_stats.get("bytes_up", 0)
+        daily_stats["bytes_down"] = current_stats.get("bytes_down", 0)
+        daily_stats["ws_errors"] = current_stats.get("ws_errors", 0)
+        daily_stats["session_end"] = time.time()
+
+        # Save updated stats
+        _save_daily_stats(daily_stats)
+
+        # Format summary
+        from proxy.stats import _human_bytes
+        session_hours = (daily_stats["session_end"] - daily_stats["session_start"]) / 3600
+
+        summary = (
+            f"Статистика за {daily_stats['date']}:\n\n"
+            f"Всего подключений: {daily_stats['connections_total']}\n"
+            f"  WebSocket: {daily_stats['connections_ws']}\n"
+            f"  TCP fallback: {daily_stats['connections_tcp_fallback']}\n"
+            f"\n"
+            f"Трафик вверх: {_human_bytes(daily_stats['bytes_up'])}\n"
+            f"Трафик вниз: {_human_bytes(daily_stats['bytes_down'])}\n"
+            f"\n"
+            f"Ошибки WS: {daily_stats['ws_errors']}\n"
+            f"Время работы: {session_hours:.1f}ч"
+        )
+
+        log.info("Daily summary:\n%s", summary)
+
+        # Show as info dialog (non-blocking, just log)
+        # Dialog can be annoying on exit, so just log it
+        _show_notification(
+            f"Статистика сохранена в лог.\n\n"
+            f"Подключений: {daily_stats['connections_total']}\n"
+            f"Трафик: {_human_bytes(daily_stats['bytes_up'] + daily_stats['bytes_down'])}",
+            "TG WS Proxy — Статистика за день")
+
+    except Exception as exc:
+        log.debug("Failed to show daily summary: %s", exc)
 
 
 def _edit_config_dialog() -> None:
@@ -1420,14 +1650,74 @@ def _build_menu() -> pystray.Menu | None:
     is_autostart = _is_autostart_enabled()
     is_notifications = NOTIFICATIONS_MARKER.exists()
     theme_text = "Тёмная тема: Вкл" if _dark_theme else "Тёмная тема: Выкл"
+    is_compact = _config.get("compact_menu", False)
+    current_dc_ip = _config.get("dc_ip", DEFAULT_CONFIG["dc_ip"])
 
+    # Status indicator text
+    status_texts = {
+        "starting": "⏳ Запуск...",
+        "running": "🟢 Работает",
+        "error": "🔴 Ошибка",
+        "stopped": "⏹ Остановлен",
+    }
+    status_text = status_texts.get(_proxy_status, f"? {_proxy_status}")
+
+    # DC preset submenu
+    dc_submenu = pystray.Menu(
+        pystray.MenuItem(
+            "DC 2 (рекомендуется)",
+            lambda: _on_dc_preset(preset="dc2"),
+            checked=current_dc_ip == ["2:149.154.167.220"]),
+        pystray.MenuItem(
+            "DC 2+4 (рекомендуется)",
+            lambda: _on_dc_preset(preset="dc2_4"),
+            checked=current_dc_ip == ["2:149.154.167.220", "4:149.154.167.220"]),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(
+            "DC 1",
+            lambda: _on_dc_preset(preset="dc1"),
+            checked=current_dc_ip == ["1:149.154.175.53"]),
+        pystray.MenuItem(
+            "DC 3",
+            lambda: _on_dc_preset(preset="dc3"),
+            checked=current_dc_ip == ["3:149.154.175.100"]),
+        pystray.MenuItem(
+            "DC 5",
+            lambda: _on_dc_preset(preset="dc5"),
+            checked=current_dc_ip == ["5:91.108.56.100"]),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(
+            "Все DC (автовыбор)",
+            lambda: _on_dc_preset(preset="all"),
+            checked=len(current_dc_ip) >= 5),
+    )
+
+    # Compact menu - show only essential items
+    if is_compact:
+        return pystray.Menu(
+            pystray.MenuItem(status_text, enabled=False),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                f"Открыть в Telegram ({host}:{port})",
+                _on_open_in_telegram,
+                default=True),
+            pystray.MenuItem("Быстрые DC", dc_submenu),
+            pystray.MenuItem("Перезапустить прокси", _on_restart),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Настройки...", _on_edit_config),
+            pystray.MenuItem("Выход", _on_exit),
+        )
+
+    # Full menu
     return pystray.Menu(
         pystray.MenuItem(
             f"Открыть в Telegram ({host}:{port})",
             _on_open_in_telegram,
             default=True),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem(status_text, enabled=False),
         pystray.MenuItem("Статистика", _on_show_stats),
+        pystray.MenuItem("Быстрые DC", dc_submenu),
         pystray.MenuItem("Перезапустить прокси", _on_restart),
         pystray.MenuItem("Настройки...", _on_edit_config),
         pystray.Menu.SEPARATOR,
@@ -1440,6 +1730,9 @@ def _build_menu() -> pystray.Menu | None:
         pystray.MenuItem(
             theme_text,
             _on_toggle_theme),
+        pystray.MenuItem(
+            f"Компактный режим: {'Вкл' if is_compact else 'Выкл'}",
+            _on_toggle_compact_menu),
         pystray.MenuItem("Открыть логи", _on_open_logs),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Выход", _on_exit),
@@ -1461,6 +1754,10 @@ def run_tray() -> None:
 
     _config = load_config()
     save_config(_config)
+
+    # Initialize compact menu mode from config
+    global _compact_menu
+    _compact_menu = _config.get("compact_menu", False)
 
     if LOG_FILE.exists():
         try:
@@ -1484,7 +1781,32 @@ def run_tray() -> None:
                     f"Клиент подключился\nDC{dc} {dst}:{port}",
                     "TG WS Proxy — Подключение")
 
+    # Set up client error notification callback
+    def on_client_error(dc, dst, port, error_type, error_msg):
+        if NOTIFICATIONS_MARKER.exists():
+            log.warning("Client error DC%d %s:%d - %s: %s", dc, dst, port, error_type, error_msg)
+            # Show notification for errors
+            error_titles = {
+                "websocket_handshake": "Ошибка WS handshake",
+                "websocket_connect": "Ошибка WS подключения",
+                "tcp_fallback": "TCP fallback",
+            }
+            _show_notification(
+                f"Ошибка подключения\nDC{dc} {dst}:{port}\n{error_type}: {error_msg[:50]}",
+                f"TG WS Proxy — {error_titles.get(error_type, 'Ошибка')}")
+
+    # Set up high latency notification callback
+    def on_high_latency(dc, latency_ms):
+        if NOTIFICATIONS_MARKER.exists():
+            log.warning("High latency detected: DC%d - %.1fms", dc, latency_ms)
+            _show_notification(
+                f"Высокая задержка DC{dc}\nПинг: {latency_ms:.1f}ms\n\n"
+                f"Рекомендуется выбрать другой DC в настройках.",
+                "TG WS Proxy — Низкое качество соединения")
+
     tg_ws_proxy.set_on_client_connect_callback(on_client_connect)
+    tg_ws_proxy.set_on_client_error_callback(on_client_error)
+    tg_ws_proxy.set_on_high_latency_callback(on_high_latency)
 
     if not HAS_TRAY or not HAS_GUI:
         log.error("pystray, Pillow, or customtkinter not installed; "

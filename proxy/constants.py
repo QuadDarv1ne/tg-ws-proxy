@@ -148,6 +148,7 @@ DEFAULT_CONFIG = {
     "dc_ip": ["2:149.154.167.220", "4:149.154.167.220"],
     "verbose": False,
     "ip_whitelist": [],  # Empty = allow all IPs
+    "compact_menu": False,  # Compact tray menu mode
 }
 
 # =============================================================================
@@ -156,6 +157,11 @@ DEFAULT_CONFIG = {
 
 TG_BLUE = "#3390ec"
 TG_BLUE_HOVER = "#2b7cd4"
+
+# Status indicator colors
+STATUS_OK = "#4ade80"        # Green - proxy running normally
+STATUS_ERROR = "#f87171"     # Red - proxy error/stopped
+STATUS_WARNING = "#fbbf24"   # Yellow - degraded performance
 
 # Light theme
 UI_BG = "#ffffff"
