@@ -1022,10 +1022,10 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: Dict[int, Optiona
 def _handle_client_error(label: str) -> None:
     """Handle client connection errors with appropriate logging."""
     exc = sys.exc_info()[1]
-    
+
     # Expected/common errors - log at DEBUG level
     if isinstance(exc, asyncio.TimeoutError):
-        log.warning("[%s] timeout during SOCKS5 handshake", label)
+        log.debug("[%s] timeout during SOCKS5 handshake", label)
     elif isinstance(exc, asyncio.IncompleteReadError):
         log.debug("[%s] client disconnected", label)
     elif isinstance(exc, asyncio.CancelledError):
