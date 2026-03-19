@@ -1,93 +1,117 @@
-# TG WS Proxy v1.3.0
+# TG WS Proxy — Release Notes
 
-## 📋 Описание
+## v2.5.5 (в разработке)
 
-Локальный SOCKS5-прокси для Telegram Desktop, который перенаправляет трафик через WebSocket-соединения к указанным серверам, помогая ускорить работу Telegram.
+**Улучшения:**
+- 🌐 Веб-панель управления: добавлена возможность управления настройками прокси
+- 📊 Расширенная статистика: история подключений, график трафика в реальном времени
+- 🔔 Уведомления Windows: toast-уведомления при подключении клиентов
+- ✅ Health checks: автоматическая проверка работоспособности WebSocket endpoints
+- 🎨 Улучшенный UI веб-панели: тёмная тема, адаптивный дизайн
 
-## 🔧 Изменения в версии 1.3.0
+**Исправления:**
+- Исправлено логирование TimeoutError (WARNING → DEBUG)
+- Вынесена `_pipe_passthrough()` для passthrough-трафика
 
+---
+
+## v2.5.3
+
+**Улучшения:**
+- ✅ Вынесена статистика в отдельный модуль `proxy/stats.py`
+- ✅ Рефакторинг `_show_first_run()` — разбиение на 6 подметодов
+- ✅ Унификация обработки ошибок в `_handle_client()` — вынесено в `_handle_client_error()` и `_close_client_writer()`
+- ✅ Поддержка cryptography>=42 (ручная IGE реализация)
+- ✅ Исправление RateLimiter.check_connection_limit (проверка whitelist)
+- ✅ Удаление дублирования `_human_bytes` (импорт из stats.py)
+- ✅ Удаление неиспользуемого `ProxyConfig` TypedDict
+- ✅ Рефакторинг закрытия writer в mtproto_proxy (`_close_writer`, `_wait_closed`)
+- ✅ Обновление требований: >= вместо == для совместимости
+- ✅ Очистка констант: объединение секций MTProto, удаление неиспользуемых
+- ✅ Рефакторинг `_edit_config_dialog()` — разбиение на 5 подметодов
+- ✅ Удаление дублирования `_human_bytes` в tray.py (импорт из proxy.stats)
+- ✅ Очистка импортов в tray.py (socket, asyncio)
+- ✅ Упрощение управления автостартом (объединение функций, индикатор в меню)
+- ✅ Удаление избыточных алиасов констант в tg_ws_proxy.py
+- ✅ Вынесена _pipe_passthrough() для passthrough-трафика
+- ✅ Исправлено логирование TimeoutError (WARNING → DEBUG)
+
+---
+
+## v2.5.2
+
+**Новые функции:**
+- 🎯 Rate limiting для защиты от перегрузки
+- 🛡️ IP фильтрация (whitelist/blacklist)
+- 📊 JSON конфигурация с валидацией
+- ⚠️ IPv6 warning при обнаружении
+- 🔍 Проверка порта перед запуском
+- 📝 Type hints для публичного API
+- 📋 RotatingFileHandler для логов (5MB, 3 backup)
+
+**Исправления:**
+- ✅ Статистика: добавлен `pool_hits` в `Stats.to_dict()` (ошибка KeyError)
+- ✅ tray.py: исправлен запуск через `if __name__ == "__main__"`
+- ✅ tray.py: иконка создаётся до показа диалога первого запуска
+- ✅ Python 3.14: совместимость с новой версией Python
+
+---
+
+## v2.5.1
+
+**Исправления:**
+- ✅ Исправлена ошибка KeyError в Stats.to_dict()
+- ✅ Улучшена обработка ошибок в tray.py
+- ✅ Добавлена проверка создания иконки до первого запуска
+
+---
+
+## v2.5.0
+
+**Новые функции:**
+- 🚀 Базовая функциональность SOCKS5-прокси
+- 🌐 WebSocket relay к Telegram DC
+- 🔄 TCP fallback при недоступности WS
+- 📱 Tray-приложение (Windows, Linux, macOS)
+- 🎨 GUI настройки (customtkinter)
+- 🍏 Нативное меню macOS на rumps
+- 📈 Статистика в трее
+- ⚡ Автозапуск (Windows, macOS, Linux)
+- 🔄 Проверка обновлений (GitHub API)
+- 🧪 CI/CD (GitHub Actions)
+- ✅ Unit-тесты (55 тестов)
+- 🔬 Интеграционные тесты (MTProto)
+- 📱 MTProto proxy для мобильных
+- 🖥️ Консольная панель управления (TUI)
+
+---
+
+## v2.0.0
+
+**Новые функции:**
+- 🌐 Веб-панель управления (Flask)
+- 📊 Расширенная статистика по DC
+- 🔔 Система уведомлений
+- 🔐 Аутентификация SOCKS5 (логин/пароль)
+- 📝 IP whitelist для фильтрации подключений
+- 🎛️ Настройка размера WS пула через конфиг
+
+---
+
+## v1.3.0
+
+**Изменения:**
 - Обновлена версия приложения
 - Улучшена кроссплатформенная поддержка
 - Добавлены spec-файлы для сборки на Linux и macOS
 - Обновлены зависимости
 
-## 📦 Готовые бинарники
+---
 
-### Windows
-- **TgWsProxy.exe** — основная версия для Windows 10/11
-- Размер: ~24 MB
+## v1.0.0
 
-### Linux
-Соберите самостоятельно:
-```bash
-pip install -r requirements-build.txt -r requirements.txt
-pyinstaller packaging/linux.spec
-```
-
-### macOS
-Соберите самостоятельно:
-```bash
-pip install -r requirements-build.txt -r requirements.txt
-pyinstaller packaging/macos.spec
-```
-
-## 🚀 Быстрый старт
-
-### Windows
-1. Скачайте `TgWsProxy.exe`
-2. Запустите приложение
-3. ПКМ по иконке в трее → «Открыть в Telegram»
-
-### Linux/macOS
-```bash
-# Установка зависимостей
-pip install -r requirements.txt
-
-# Запуск
-python linux.py    # Linux
-python macos.py    # macOS
-```
-
-## 📊 Статистика сборки
-
-| Платформа | Файл | Размер | Python |
-|-----------|------|--------|--------|
-| Windows | TgWsProxy.exe | ~24 MB | 3.13 |
-| Linux | TgWsProxy | ~ | 3.8+ |
-| macOS | TgWsProxy.app | ~ | 3.8+ |
-
-## 🔨 Сборка из исходников
-
-```bash
-# Установка зависимостей
-pip install -r requirements-build.txt -r requirements.txt
-
-# Windows
-pyinstaller packaging/windows.spec
-
-# Linux
-pyinstaller packaging/linux.spec
-
-# macOS
-pyinstaller packaging/macos.spec
-```
-
-## 📝 Конфигурация
-
-Приложение хранит настройки в:
-- **Windows**: `%APPDATA%/TgWsProxy`
-- **macOS**: `~/Library/Application Support/TgWsProxy`
-- **Linux**: `~/.config/TgWsProxy`
-
-## ⚠️ Важно
-
-**Антивирусы**: Windows Defender может ложно определять приложение как угрозу (Wacatac). Это известная проблема PyInstaller. Добавьте приложение в исключения.
-
-## 📄 Лицензия
-
-MIT License
-
-## 🔗 Ссылки
-
-- [Исходный код](https://github.com/Flowseal/tg-ws-proxy)
-- [Баги и предложения](https://github.com/Flowseal/tg-ws-proxy/issues)
+**Первый релиз:**
+- Базовая функциональность прокси
+- Поддержка Windows
+- WebSocket relay к Telegram DC
+- TCP fallback

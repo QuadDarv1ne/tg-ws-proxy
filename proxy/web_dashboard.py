@@ -6,16 +6,18 @@ Provides a web interface to monitor proxy statistics and manage settings.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 import os
 import threading
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional, Callable, Any
 
 try:
-    from flask import Flask, jsonify, render_template_string, request
+    from flask import Flask, jsonify, render_template_string, request, Response
     from flask_cors import CORS
     HAS_FLASK = True
 except ImportError:
@@ -42,7 +44,7 @@ DASHBOARD_HTML = """
             padding: 20px;
         }
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
         h1 {
@@ -63,10 +65,11 @@ DASHBOARD_HTML = """
             border-radius: 15px;
             padding: 25px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
         .stat-card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
         }
         .stat-card h3 {
             color: #667eea;
@@ -126,6 +129,9 @@ DASHBOARD_HTML = """
         .status-online {
             background: #48bb78;
         }
+        .status-degraded {
+            background: #ed8936;
+        }
         .status-offline {
             background: #f56565;
         }
@@ -133,8 +139,62 @@ DASHBOARD_HTML = """
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
-        .refresh-btn {
+        .btn {
             background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s, transform 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+        .btn-secondary {
+            background: #718096;
+        }
+        .btn-secondary:hover {
+            background: #4a5568;
+        }
+        .btn-success {
+            background: #48bb78;
+        }
+        .btn-success:hover {
+            background: #38a169;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .last-update {
+            color: #888;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+        }
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .nav-tab {
+            background: rgba(255,255,255,0.2);
             color: white;
             border: none;
             padding: 10px 20px;
@@ -143,18 +203,97 @@ DASHBOARD_HTML = """
             font-size: 1rem;
             transition: background 0.3s;
         }
-        .refresh-btn:hover {
-            background: #5568d3;
+        .nav-tab:hover {
+            background: rgba(255,255,255,0.3);
         }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .nav-tab.active {
+            background: white;
+            color: #667eea;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
             margin-bottom: 20px;
         }
-        .last-update {
-            color: #888;
-            font-size: 0.9rem;
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #667eea;
+            font-weight: 600;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #f56565;
+        }
+        .health-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .health-ok {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        .health-degraded {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+        code {
+            background: #f7fafc;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e53e3e;
+        }
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
     </style>
 </head>
@@ -164,63 +303,128 @@ DASHBOARD_HTML = """
 
         <div class="header">
             <div class="last-update">
-                <span class="status-indicator status-online"></span>
+                <span class="status-indicator status-online" id="statusIndicator"></span>
                 Обновлено: <span id="lastUpdate">-</span>
             </div>
-            <button class="refresh-btn" onclick="loadStats()">🔄 Обновить</button>
+            <div class="header-actions">
+                <button class="btn" onclick="loadStats()">🔄 Обновить</button>
+                <button class="btn btn-secondary" onclick="exportStats('json')">📥 JSON</button>
+                <button class="btn btn-secondary" onclick="exportStats('csv')">📊 CSV</button>
+                <button class="btn btn-success" onclick="checkHealth()">❤️ Health</button>
+            </div>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>📡 Всего подключений</h3>
-                <div class="value" id="totalConnections">0</div>
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('stats')">📊 Статистика</button>
+            <button class="nav-tab" onclick="switchTab('dc')">🌐 DC Stats</button>
+            <button class="nav-tab" onclick="switchTab('settings')">⚙️ Настройки</button>
+        </div>
+
+        <!-- Statistics Tab -->
+        <div id="stats-tab" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>📡 Всего подключений</h3>
+                    <div class="value" id="totalConnections">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>🟢 Активных сейчас</h3>
+                    <div class="value" id="activeConnections">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>📤 Трафик вверх</h3>
+                    <div class="value" id="bytesUp">0<span class="unit">MB</span></div>
+                </div>
+                <div class="stat-card">
+                    <h3>📥 Трафик вниз</h3>
+                    <div class="value" id="bytesDown">0<span class="unit">MB</span></div>
+                </div>
             </div>
-            <div class="stat-card">
-                <h3>🟢 Активных сейчас</h3>
-                <div class="value" id="activeConnections">0</div>
+
+            <div class="section">
+                <h2>📊 Статистика по секретам (MTProto)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Секрет</th>
+                            <th>Подключений всего</th>
+                            <th>Активных</th>
+                            <th>Получено</th>
+                            <th>Отправлено</th>
+                        </tr>
+                    </thead>
+                    <tbody id="secretsTable">
+                        <tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>
+                    </tbody>
+                </table>
             </div>
-            <div class="stat-card">
-                <h3>📤 Трафик вверх</h3>
-                <div class="value" id="bytesUp">0<span class="unit">MB</span></div>
+        </div>
+
+        <!-- DC Stats Tab -->
+        <div id="dc-tab" class="tab-content">
+            <div class="section">
+                <h2>🌐 Статистика по Data Center</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>DC ID</th>
+                            <th>Подключений</th>
+                            <th>Ошибок</th>
+                            <th>Задержка (ms)</th>
+                            <th>Средняя задержка (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dcTable">
+                        <tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>
+                    </tbody>
+                </table>
             </div>
-            <div class="stat-card">
-                <h3>📥 Трафик вниз</h3>
-                <div class="value" id="bytesDown">0<span class="unit">MB</span></div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-content">
+            <div class="section">
+                <h2>⚙️ Настройки прокси</h2>
+                <div id="configAlert"></div>
+                <form id="configForm" onsubmit="saveConfig(event)">
+                    <div class="form-group">
+                        <label for="proxyHost">Хост:</label>
+                        <input type="text" id="proxyHost" name="host" value="127.0.0.1" placeholder="127.0.0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="proxyPort">Порт:</label>
+                        <input type="number" id="proxyPort" name="port" value="1080" min="1" max="65535">
+                    </div>
+                    <div class="form-group">
+                        <label for="dcIp">DC IP (каждый с новой строки, формат: ID:IP):</label>
+                        <textarea id="dcIp" name="dc_ip" placeholder="2:149.154.167.220&#10;4:149.154.167.220"></textarea>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="verbose" name="verbose">
+                        <label for="verbose">Подробное логирование (verbose)</label>
+                    </div>
+                    <button type="submit" class="btn btn-success">💾 Сохранить</button>
+                </form>
             </div>
         </div>
 
         <div class="section">
-            <h2>📊 Статистика по секретам (MTProto)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Секрет</th>
-                        <th>Подключений всего</th>
-                        <th>Активных</th>
-                        <th>Получено</th>
-                        <th>Отправлено</th>
-                    </tr>
-                </thead>
-                <tbody id="secretsTable">
-                    <tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="section">
-            <h2>⚙️ Информация о сервере</h2>
+            <h2>ℹ️ Информация о сервере</h2>
             <table>
                 <tbody>
                     <tr><th>Версия</th><td id="version">-</td></tr>
                     <tr><th>Хост</th><td id="host">-</td></tr>
                     <tr><th>Порт</th><td id="port">-</td></tr>
                     <tr><th>Время работы</th><td id="uptime">-</td></tr>
+                    <tr><th>Health Status</th><td id="healthStatus"><span class="health-badge health-ok">Unknown</span></td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
     <script>
+        let currentConfig = {};
+
         function formatBytes(bytes) {
             if (bytes === 0) return '0 MB';
             const mb = bytes / (1024 * 1024);
@@ -229,6 +433,20 @@ DASHBOARD_HTML = """
 
         function truncateSecret(secret) {
             return secret.substring(0, 8) + '...' + secret.substring(secret.length - 4);
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            if (tabName === 'settings') {
+                loadConfig();
+            } else if (tabName === 'dc') {
+                loadDCStats();
+            }
         }
 
         async function loadStats() {
@@ -257,14 +475,122 @@ DASHBOARD_HTML = """
                     secretsTable.innerHTML = '<tr><td colspan="5" style="text-align:center;">Нет данных</td></tr>';
                 }
 
-                document.getElementById('version').textContent = data.version || '2.1.0';
+                document.getElementById('version').textContent = data.version || '2.5.5';
                 document.getElementById('host').textContent = data.host || '-';
                 document.getElementById('port').textContent = data.port || '-';
                 document.getElementById('uptime').textContent = data.uptime || '-';
 
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ru-RU');
+                
+                // Update status indicator
+                const statusIndicator = document.getElementById('statusIndicator');
+                if (data.ws_errors && data.ws_errors > 10) {
+                    statusIndicator.className = 'status-indicator status-degraded';
+                } else {
+                    statusIndicator.className = 'status-indicator status-online';
+                }
             } catch (error) {
                 console.error('Failed to load stats:', error);
+                document.getElementById('statusIndicator').className = 'status-indicator status-offline';
+            }
+        }
+
+        async function loadDCStats() {
+            try {
+                const response = await fetch('/api/dc-stats');
+                const data = await response.json();
+                
+                const dcTable = document.getElementById('dcTable');
+                if (data.dc_stats && data.dc_stats.length > 0) {
+                    dcTable.innerHTML = data.dc_stats.map(dc => `
+                        <tr>
+                            <td><strong>DC ${dc.dc_id}</strong></td>
+                            <td>${dc.connections}</td>
+                            <td>${dc.errors}</td>
+                            <td>${dc.latency_ms !== null ? dc.latency_ms.toFixed(2) : 'N/A'}</td>
+                            <td>${dc.avg_latency_ms !== null ? dc.avg_latency_ms.toFixed(2) : 'N/A'}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    dcTable.innerHTML = '<tr><td colspan="5" style="text-align:center;">Нет данных</td></tr>';
+                }
+            } catch (error) {
+                console.error('Failed to load DC stats:', error);
+                document.getElementById('dcTable').innerHTML = '<tr><td colspan="5" style="text-align:center;">Ошибка загрузки</td></tr>';
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    currentConfig = await response.json();
+                    document.getElementById('proxyHost').value = currentConfig.host || '127.0.0.1';
+                    document.getElementById('proxyPort').value = currentConfig.port || 1080;
+                    document.getElementById('dc_ip').value = (currentConfig.dc_ip || []).join('\\n');
+                    document.getElementById('verbose').checked = currentConfig.verbose || false;
+                }
+            } catch (error) {
+                console.log('Config not available or not editable');
+            }
+        }
+
+        async function saveConfig(event) {
+            event.preventDefault();
+            
+            const config = {
+                host: document.getElementById('proxyHost').value,
+                port: parseInt(document.getElementById('proxyPort').value),
+                dc_ip: document.getElementById('dc_ip').value.split('\\n').filter(line => line.trim()),
+                verbose: document.getElementById('verbose').checked,
+            };
+
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config),
+                });
+                
+                const result = await response.json();
+                const alertDiv = document.getElementById('configAlert');
+                
+                if (response.ok && result.status === 'success') {
+                    alertDiv.innerHTML = '<div class="alert alert-success">✅ Настройки успешно сохранены!</div>';
+                    setTimeout(() => alertDiv.innerHTML = '', 5000);
+                } else {
+                    alertDiv.innerHTML = '<div class="alert alert-error">❌ Ошибка: ' + (result.error || 'Неизвестная ошибка') + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('configAlert').innerHTML = '<div class="alert alert-error">❌ Ошибка соединения: ' + error + '</div>';
+            }
+        }
+
+        async function exportStats(format) {
+            window.location.href = '/api/stats/export?format=' + format;
+        }
+
+        async function checkHealth() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                
+                const healthBadge = document.getElementById('healthStatus');
+                if (data.status === 'ok') {
+                    healthBadge.innerHTML = '<span class="health-badge health-ok">✓ OK</span>';
+                } else if (data.status === 'degraded') {
+                    healthBadge.innerHTML = '<span class="health-badge health-degraded">⚠ Degraded</span>';
+                } else {
+                    healthBadge.innerHTML = '<span class="health-badge" style="background:#fed7d7;color:#742a2a">✗ Unhealthy</span>';
+                }
+                
+                alert('Health Check:\\n' +
+                      'Status: ' + data.status + '\\n' +
+                      'WS Errors: ' + (data.websocket?.ws_errors || 0) + '\\n' +
+                      'Pool Hits: ' + (data.websocket?.pool_hits || 0) + '\\n' +
+                      'Pool Misses: ' + (data.websocket?.pool_misses || 0));
+            } catch (error) {
+                alert('Health check failed: ' + error);
             }
         }
 
@@ -283,6 +609,7 @@ class WebDashboard:
     def __init__(
         self,
         get_stats_callback: Callable[[], dict],
+        update_config_callback: Optional[Callable[[dict], bool]] = None,
         host: str = "127.0.0.1",
         port: int = 5000,
         debug: bool = False,
@@ -292,6 +619,7 @@ class WebDashboard:
             raise ImportError("Flask is required for web dashboard")
 
         self.get_stats = get_stats_callback
+        self.update_config = update_config_callback
         self.host = host
         self.port = port
         self.debug = debug
@@ -316,19 +644,113 @@ class WebDashboard:
         def api_stats():
             """API endpoint for statistics."""
             stats = self.get_stats()
-            stats['version'] = '2.1.0'
+            stats['version'] = '2.5.5'
             stats['host'] = self.host
             stats['port'] = self.port
             stats['uptime'] = str(datetime.now() - self.start_time).split('.')[0]
             return jsonify(stats)
 
+        @self.app.route('/api/stats/export')
+        def api_stats_export():
+            """Export statistics as JSON or CSV."""
+            format_type = request.args.get('format', 'json')
+            stats = self.get_stats()
+            stats['exported_at'] = datetime.now().isoformat()
+            
+            if format_type == 'csv':
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow(['Metric', 'Value'])
+                
+                # Basic stats
+                for key, value in stats.items():
+                    if isinstance(value, (int, float, str)):
+                        writer.writerow([key, value])
+                
+                output.seek(0)
+                return Response(
+                    output.getvalue(),
+                    mimetype='text/csv',
+                    headers={'Content-Disposition': 'attachment; filename=stats.csv'}
+                )
+            else:
+                return jsonify(stats)
+
+        @self.app.route('/api/config', methods=['GET'])
+        def api_get_config():
+            """Get current configuration."""
+            if self.update_config is None:
+                return jsonify({'error': 'Configuration updates not enabled'}), 403
+            
+            stats = self.get_stats()
+            config = {
+                'host': stats.get('host', '127.0.0.1'),
+                'port': stats.get('port', 1080),
+                'dc_ip': stats.get('dc_ip', []),
+                'verbose': stats.get('verbose', False),
+            }
+            return jsonify(config)
+
+        @self.app.route('/api/config', methods=['POST'])
+        def api_update_config():
+            """Update configuration."""
+            if self.update_config is None:
+                return jsonify({'error': 'Configuration updates not enabled'}), 403
+            
+            try:
+                data = request.get_json()
+                if not data:
+                    return jsonify({'error': 'Invalid JSON'}), 400
+                
+                success = self.update_config(data)
+                if success:
+                    return jsonify({'status': 'success'})
+                else:
+                    return jsonify({'error': 'Failed to update configuration'}), 500
+            except Exception as e:
+                log.error(f"Config update error: {e}")
+                return jsonify({'error': str(e)}), 500
+
         @self.app.route('/api/health')
         def api_health():
             """Health check endpoint."""
+            stats = self.get_stats()
+            is_healthy = stats.get('connections_active', 0) >= 0  # Always healthy if running
+            
+            # Check WebSocket endpoints
+            ws_health = {
+                'status': 'ok' if stats.get('ws_errors', 0) < 10 else 'degraded',
+                'ws_errors': stats.get('ws_errors', 0),
+                'pool_hits': stats.get('pool_hits', 0),
+                'pool_misses': stats.get('pool_misses', 0),
+            }
+            
             return jsonify({
-                'status': 'ok',
+                'status': 'ok' if is_healthy else 'unhealthy',
                 'timestamp': datetime.now().isoformat(),
+                'version': '2.5.5',
+                'uptime_seconds': (datetime.now() - self.start_time).total_seconds(),
+                'websocket': ws_health,
             })
+
+        @self.app.route('/api/dc-stats')
+        def api_dc_stats():
+            """Get detailed DC statistics."""
+            stats = self.get_stats()
+            dc_stats = stats.get('dc_stats', {})
+            
+            # Format for frontend
+            formatted = []
+            for dc_id, dc_data in dc_stats.items():
+                formatted.append({
+                    'dc_id': dc_id,
+                    'connections': dc_data.get('connections', 0),
+                    'errors': dc_data.get('errors', 0),
+                    'latency_ms': dc_data.get('latency_ms'),
+                    'avg_latency_ms': dc_data.get('avg_latency_ms'),
+                })
+            
+            return jsonify({'dc_stats': formatted})
 
     def start(self):
         """Start the web dashboard in a background thread."""
@@ -359,6 +781,7 @@ class WebDashboard:
 
 def run_dashboard(
     get_stats_callback: Callable[[], dict],
+    update_config_callback: Optional[Callable[[dict], bool]] = None,
     host: str = "127.0.0.1",
     port: int = 5000,
     open_browser: bool = True,
@@ -368,6 +791,7 @@ def run_dashboard(
 
     Args:
         get_stats_callback: Function that returns proxy statistics.
+        update_config_callback: Optional function to update configuration.
         host: Host to bind to.
         port: Port to listen on.
         open_browser: Open browser automatically.
@@ -376,7 +800,7 @@ def run_dashboard(
         log.error("Flask not installed. Install with: pip install flask flask-cors")
         return
 
-    dashboard = WebDashboard(get_stats_callback, host, port)
+    dashboard = WebDashboard(get_stats_callback, update_config_callback, host, port)
     dashboard.start()
 
     if open_browser:
