@@ -489,13 +489,8 @@ def _on_show_stats(icon=None, item=None) -> None:
 
 def _on_toggle_autostart(icon=None, item=None) -> None:
     """Show autostart toggle dialog."""
-    threading.Thread(target=_toggle_autostart_dialog, daemon=True).start()
-
-
-def _toggle_autostart_dialog() -> None:
-    """Show autostart toggle dialog."""
     is_enabled = _is_autostart_enabled()
-    
+
     if IS_WINDOWS:
         result = ctypes.windll.user32.MessageBoxW(
             0,
@@ -510,7 +505,7 @@ def _toggle_autostart_dialog() -> None:
     elif HAS_GUI:
         import tkinter as tk
         from tkinter import messagebox
-        
+
         root = tk.Tk()
         root.withdraw()
         result = messagebox.askyesno(
@@ -1161,6 +1156,7 @@ def _build_menu() -> Optional["pystray.Menu"]:
 
     host = _config.get("host", DEFAULT_CONFIG["host"])
     port = _config.get("port", DEFAULT_CONFIG["port"])
+    is_autostart = _is_autostart_enabled()
 
     return pystray.Menu(
         pystray.MenuItem(
@@ -1171,6 +1167,10 @@ def _build_menu() -> Optional["pystray.Menu"]:
         pystray.MenuItem("Статистика", _on_show_stats),
         pystray.MenuItem("Перезапустить прокси", _on_restart),
         pystray.MenuItem("Настройки...", _on_edit_config),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(
+            f"Автозапуск: {'Вкл' if is_autostart else 'Выкл'}",
+            _on_toggle_autostart),
         pystray.MenuItem("Открыть логи", _on_open_logs),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Выход", _on_exit),
