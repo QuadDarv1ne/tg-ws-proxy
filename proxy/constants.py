@@ -149,6 +149,11 @@ DEFAULT_CONFIG = {
     "verbose": False,
     "ip_whitelist": [],  # Empty = allow all IPs
     "compact_menu": False,  # Compact tray menu mode
+    
+    # Modern encryption settings
+    "encryption_type": "aes-256-gcm",  # aes-256-gcm, chacha20-poly1305, xchacha20-poly1305
+    "encryption_enabled": True,  # Enable additional encryption layer
+    "key_rotation_interval": 3600,  # Rotate keys every hour (seconds)
 }
 
 # =============================================================================

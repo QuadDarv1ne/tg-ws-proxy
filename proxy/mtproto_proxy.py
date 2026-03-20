@@ -108,12 +108,13 @@ def generate_qr_code(server: str, port: int, secret: str, output_path: str | Non
     # Save to file if path provided
     if output_path:
         img = qr.make_image(fill_color="black", back_color="white")
-        img.save(output_path)
+        img.save(output_path)  # type: ignore[arg-type]
         log.info("QR code saved to: %s", output_path)
         return output_path
 
     # Return ASCII art for console display
-    return qr.print_ascii(invert=True) or ""
+    qr.print_ascii(invert=True)
+    return ""
 
 
 class RateLimiter:
@@ -865,7 +866,7 @@ class MTProtoProxy:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object | None) -> None:
         """Context manager exit."""
         self.stop()
 

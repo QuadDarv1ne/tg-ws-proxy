@@ -9,7 +9,7 @@ Author: Dupley Maxim Igorevich
 
 Usage:
     python build_desktop.py [platform]
-    
+
 Platforms:
     - windows: Build for Windows (.exe)
     - linux: Build for Linux (binary)
@@ -39,7 +39,7 @@ def clean_build_dirs():
     for dir_path in [BUILD_DIR, DIST_DIR]:
         if dir_path.exists():
             shutil.rmtree(dir_path)
-    
+
     # Clean PyInstaller cache
     for pattern in ["build", "dist", "*.spec"]:
         for path in PROJECT_ROOT.glob(pattern):
@@ -51,16 +51,16 @@ def install_build_deps():
     """Install build dependencies."""
     print("📦 Installing build dependencies...")
     subprocess.check_call([
-        PYTHON, "-m", "pip", "install", "-r", 
+        PYTHON, "-m", "pip", "install", "-r",
         str(PROJECT_ROOT / "requirements-build.txt")
     ])
-    
+
     # Install runtime dependencies
     subprocess.check_call([
         PYTHON, "-m", "pip", "install", "-r",
         str(PROJECT_ROOT / "requirements.txt")
     ])
-    
+
     # Install tray dependencies
     try:
         subprocess.check_call([
@@ -74,13 +74,13 @@ def install_build_deps():
 def build_platform(platform: str):
     """Build for a specific platform."""
     spec_file = PACKAGING_DIR / f"{platform}.spec"
-    
+
     if not spec_file.exists():
         print(f"❌ Spec file not found: {spec_file}")
         return False
-    
+
     print(f"🔨 Building for {platform.upper()}...")
-    
+
     try:
         # When using a .spec file, we can't use --specpath
         # The spec file path is passed directly to PyInstaller
@@ -91,11 +91,11 @@ def build_platform(platform: str):
             "--workpath", str(BUILD_DIR / platform),
             str(spec_file)
         ])
-        
+
         print(f"✅ Build completed for {platform.upper()}")
         print(f"📁 Output: {DIST_DIR}")
         return True
-        
+
     except subprocess.CalledProcessError as e:
         print(f"❌ Build failed for {platform.upper()}: {e}")
         return False
@@ -104,7 +104,7 @@ def build_platform(platform: str):
 def create_release_archive(platform: str):
     """Create a release archive for the platform."""
     dist_path = DIST_DIR
-    
+
     if platform == "windows":
         exe_path = dist_path / "TgWsProxy.exe"
         if exe_path.exists():
@@ -122,7 +122,7 @@ def create_release_archive(platform: str):
                 if license_file.exists():
                     zf.write(license_file, "LICENSE")
             print(f"📦 Created archive: {archive_path}")
-            
+
     elif platform == "linux":
         exe_path = dist_path / "TgWsProxy"
         if exe_path.exists():
@@ -139,21 +139,21 @@ def create_release_archive(platform: str):
                 if license_file.exists():
                     tar.add(license_file, arcname="LICENSE")
             print(f"📦 Created archive: {archive_path}")
-            
+
     elif platform == "macos":
         app_path = dist_path / "TgWsProxy.app"
         if app_path.exists():
             import shutil
             import tarfile
             archive_path = dist_path / "TgWsProxy-macOS.tar.gz"
-            
+
             # Create temp directory for archiving
             temp_dir = DIST_DIR / "_temp_app"
             shutil.copytree(app_path, temp_dir / "TgWsProxy.app")
-            
+
             with tarfile.open(archive_path, "w:gz") as tar:
                 tar.add(temp_dir, arcname="TgWsProxy.app")
-            
+
             shutil.rmtree(temp_dir)
             print(f"📦 Created archive: {archive_path}")
 
@@ -161,38 +161,37 @@ def create_release_archive(platform: str):
 def main():
     """Main build function."""
     platform = sys.argv[1] if len(sys.argv) > 1 else "all"
-    
+
     # Detect current OS
-    import platform as plat
     current_os = "windows" if os.name == "nt" else "darwin" if sys.platform == "darwin" else "linux"
-    
+
     print("=" * 60)
     print("TG WS Proxy - Desktop Build Script")
     print("=" * 60)
     print(f"Current OS: {current_os.upper()}")
     print(f"Target: {platform.upper()}")
     print("=" * 60)
-    
+
     # Clean
     clean_build_dirs()
-    
+
     # Install dependencies
     install_build_deps()
-    
+
     # Determine platforms to build
     if platform == "all":
         # Can only build for current OS
         platforms_to_build = [current_os]
     else:
         platforms_to_build = [platform]
-    
+
     # Build
     success = False
-    for plat in platforms_to_build:
-        if build_platform(plat):
-            create_release_archive(plat)
+    for target_platform in platforms_to_build:
+        if build_platform(target_platform):
+            create_release_archive(target_platform)
             success = True
-    
+
     if success:
         print("\n" + "=" * 60)
         print("✅ Build completed successfully!")

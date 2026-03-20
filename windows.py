@@ -237,7 +237,8 @@ def _check_port_available(port: int, host: str) -> bool:
 
 
 def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
-                      host: str = '127.0.0.1'):
+                      host: str = '127.0.0.1',
+                      encryption_config: dict | None = None):
     global _async_stop
 
     # Check port availability before starting
@@ -258,7 +259,14 @@ def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
 
     try:
         loop.run_until_complete(
-            tg_ws_proxy._run(port, dc_opt, stop_event=stop_ev, host=host))
+            tg_ws_proxy._run(
+                port,
+                dc_opt,
+                stop_event=stop_ev,
+                host=host,
+                encryption_config=encryption_config,
+            )
+        )
     except Exception as exc:
         log.error("Proxy thread crashed: %s", exc)
         if "10048" in str(exc) or "Address already in use" in str(exc):
@@ -284,6 +292,13 @@ def start_proxy() -> None:
     host = cfg.get("host", DEFAULT_CONFIG["host"])
     dc_ip_list = cfg.get("dc_ip", DEFAULT_CONFIG["dc_ip"])
     verbose = cfg.get("verbose", False)
+    
+    # Modern encryption configuration
+    encryption_config = {
+        "encryption_type": cfg.get("encryption_type", "aes-256-gcm"),
+        "encryption_enabled": cfg.get("encryption_enabled", True),
+        "key_rotation_interval": cfg.get("key_rotation_interval", 3600),
+    }
 
     try:
         dc_opt = tg_ws_proxy.parse_dc_ip_list(dc_ip_list)
@@ -293,9 +308,13 @@ def start_proxy() -> None:
         return
 
     log.info("Starting proxy on %s:%d ...", host, port)
+    log.info("Encryption: %s (rotation: %ds)", 
+             encryption_config["encryption_type"],
+             encryption_config["key_rotation_interval"])
+    
     _proxy_thread = threading.Thread(
         target=_run_proxy_thread,
-        args=(port, dc_opt, verbose, host),
+        args=(port, dc_opt, verbose, host, encryption_config),
         daemon=True, name="proxy")
     _proxy_thread.start()
 
@@ -374,7 +393,7 @@ def _edit_config_dialog():
     icon_path = str(Path(__file__).parent / "icon.ico")
     root.iconbitmap(icon_path)
 
-    w, h = 420, 480
+    w, h = 520, 580
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
@@ -423,7 +442,78 @@ def _edit_config_dialog():
                     text_color=UI_TEXT_PRIMARY,
                     fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
                     corner_radius=6, border_width=2,
-                    border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 8))
+                    border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 12))
+
+    # Encryption section
+    encryption_frame = ctk.CTkFrame(frame, fg_color=UI_FIELD_BG, corner_radius=10)
+    encryption_frame.pack(fill="x", pady=(0, 12))
+    
+    ctk.CTkLabel(
+        encryption_frame,
+        text="🔐 Современное шифрование",
+        font=(UI_FONT_FAMILY, 13, "bold"),
+        text_color=UI_TEXT_PRIMARY
+    ).pack(anchor="w", padx=12, pady=(10, 5))
+    
+    # Encryption type selector
+    ctk.CTkLabel(
+        encryption_frame,
+        text="Алгоритм:",
+        font=(UI_FONT_FAMILY, 11),
+        text_color=UI_TEXT_SECONDARY
+    ).pack(anchor="w", padx=12, pady=(5, 0))
+    
+    encryption_types = ["aes-256-gcm", "chacha20-poly1305", "xchacha20-poly1305", "aes-256-ctr", "mtproto-ige"]
+    encryption_type_var = ctk.StringVar(value=cfg.get("encryption_type", "aes-256-gcm"))
+    encryption_type_menu = ctk.CTkOptionMenu(
+        encryption_frame,
+        variable=encryption_type_var,
+        values=encryption_types,
+        width=280,
+        height=32,
+        font=(UI_FONT_FAMILY, 12),
+        fg_color=UI_FIELD_BG,
+        border_color=UI_FIELD_BORDER,
+    )
+    encryption_type_menu.pack(anchor="w", padx=12, pady=(0, 10))
+    
+    # Encryption enabled checkbox
+    encryption_enabled_var = ctk.BooleanVar(value=cfg.get("encryption_enabled", True))
+    ctk.CTkCheckBox(
+        encryption_frame,
+        text="Включить шифрование",
+        variable=encryption_enabled_var,
+        font=(UI_FONT_FAMILY, 12),
+        text_color=UI_TEXT_PRIMARY,
+        fg_color=TG_BLUE,
+        hover_color=TG_BLUE_HOVER,
+        corner_radius=6,
+        border_width=2,
+        border_color=UI_FIELD_BORDER,
+    ).pack(anchor="w", padx=12, pady=(0, 10))
+    
+    # Key rotation interval
+    ctk.CTkLabel(
+        encryption_frame,
+        text="Интервал ротации ключей (сек):",
+        font=(UI_FONT_FAMILY, 11),
+        text_color=UI_TEXT_SECONDARY
+    ).pack(anchor="w", padx=12, pady=(5, 0))
+    
+    rotation_var = ctk.StringVar(value=str(cfg.get("key_rotation_interval", 3600)))
+    rotation_entry = ctk.CTkEntry(
+        encryption_frame,
+        textvariable=rotation_var,
+        width=120,
+        height=32,
+        font=(UI_FONT_FAMILY, 12),
+        corner_radius=8,
+        fg_color=UI_FIELD_BG,
+        border_color=UI_FIELD_BORDER,
+        border_width=1,
+        text_color=UI_TEXT_PRIMARY,
+    )
+    rotation_entry.pack(anchor="w", padx=12, pady=(0, 10))
 
     # Info label
     ctk.CTkLabel(frame, text="Изменения вступят в силу после перезапуска прокси.",
@@ -455,11 +545,24 @@ def _edit_config_dialog():
             _show_error(str(e))
             return
 
+        # Validate rotation interval
+        try:
+            rotation_val = int(rotation_var.get().strip())
+            if rotation_val < 60:
+                _show_error("Интервал ротации должен быть не менее 60 секунд")
+                return
+        except ValueError:
+            _show_error("Интервал ротации должен быть числом")
+            return
+
         new_cfg = {
             "host": host_val,
             "port": port_val,
             "dc_ip": lines,
             "verbose": verbose_var.get(),
+            "encryption_type": encryption_type_var.get(),
+            "encryption_enabled": encryption_enabled_var.get(),
+            "key_rotation_interval": rotation_val,
         }
         save_config(new_cfg)
         _config.update(new_cfg)

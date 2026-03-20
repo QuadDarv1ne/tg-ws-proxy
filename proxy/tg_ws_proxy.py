@@ -36,6 +36,12 @@ from .constants import (
     WS_POOL_SIZE,
 )
 from .stats import Stats, _human_bytes
+from .crypto import (
+    CryptoManager,
+    EncryptionType,
+    CryptoConfig,
+    EncryptedData,
+)
 
 log = logging.getLogger('tg-ws-proxy')
 
@@ -250,17 +256,34 @@ class ProxyServer:
     - WebSocket connection pool
     - Statistics tracking
     - Client connection handling
+    - Modern encryption (AES-256-GCM, ChaCha20-Poly1305, XChaCha20-Poly1305)
     """
 
-    def __init__(self, dc_opt: dict[int, str | None], host: str = '127.0.0.1', port: int = DEFAULT_PORT,
-                 auth_required: bool = False, auth_credentials: dict[str, str] | None = None,
-                 ip_whitelist: list[str] | None = None):
+    def __init__(
+        self,
+        dc_opt: dict[int, str | None],
+        host: str = '127.0.0.1',
+        port: int = DEFAULT_PORT,
+        auth_required: bool = False,
+        auth_credentials: dict[str, str] | None = None,
+        ip_whitelist: list[str] | None = None,
+        encryption_config: dict | None = None,
+    ):
         self.dc_opt = dc_opt
         self.host = host
         self.port = port
         self.auth_required = auth_required
         self.auth_credentials = auth_credentials
         self.ip_whitelist = set(ip_whitelist) if ip_whitelist else None
+
+        # Modern encryption support
+        self.encryption_enabled = False
+        self.crypto_manager: CryptoManager | None = None
+        self._key_rotation_task: asyncio.Task | None = None
+        self._key_rotation_interval = 3600  # Default 1 hour
+        
+        if encryption_config:
+            self._setup_encryption(encryption_config)
 
         # DCs where WS is known to fail (302 redirect)
         # Raw TCP fallback will be used instead
@@ -283,6 +306,67 @@ class ProxyServer:
         self._server_instance: asyncio.Server | None = None
         self._server_stop_event: asyncio.Event | None = None
 
+    def _setup_encryption(self, config: dict) -> None:
+        """Setup modern encryption based on configuration."""
+        try:
+            # Map config string to EncryptionType enum
+            encryption_map = {
+                "aes-256-gcm": EncryptionType.AES_256_GCM,
+                "chacha20-poly1305": EncryptionType.CHACHA20_POLY1305,
+                "xchacha20-poly1305": EncryptionType.XCHACHA20_POLY1305,
+                "aes-256-ctr": EncryptionType.AES_256_CTR,
+                "mtproto-ige": EncryptionType.MTROTO_IGE,
+            }
+            
+            algo_name = config.get("encryption_type", "aes-256-gcm")
+            algo = encryption_map.get(algo_name, EncryptionType.AES_256_GCM)
+            
+            # Create crypto configuration
+            crypto_config = CryptoConfig(
+                algorithm=algo,
+                key_size=32,  # 256-bit
+                nonce_size=12,
+                tag_size=16,
+                kdf_iterations=100_000,
+            )
+            
+            # Initialize crypto manager
+            self.crypto_manager = CryptoManager(crypto_config)
+            self.encryption_enabled = config.get("encryption_enabled", True)
+            self._key_rotation_interval = config.get("key_rotation_interval", 3600)
+            
+            log.info(
+                "Modern encryption enabled: %s (key rotation: %ds)",
+                algo_name.upper(),
+                self._key_rotation_interval
+            )
+            
+        except Exception as e:
+            log.warning("Failed to setup encryption: %s. Running without encryption.", e)
+            self.encryption_enabled = False
+
+    async def _start_key_rotation(self) -> None:
+        """Start automatic key rotation task."""
+        if not self.encryption_enabled or self._key_rotation_interval <= 0:
+            return
+
+        async def rotate_keys_loop() -> None:
+            while True:
+                await asyncio.sleep(self._key_rotation_interval)
+                if self.crypto_manager:
+                    self.crypto_manager.rotate_all_keys()
+                    log.info("Encryption keys rotated automatically")
+
+        self._key_rotation_task = asyncio.create_task(rotate_keys_loop())
+        log.debug("Key rotation task started")
+
+    def _stop_key_rotation(self) -> None:
+        """Stop automatic key rotation."""
+        if self._key_rotation_task:
+            self._key_rotation_task.cancel()
+            self._key_rotation_task = None
+            log.debug("Key rotation task stopped")
+
     @property
     def ws_pool(self) -> _WsPool:
         """Lazy initialization of WebSocket pool."""
@@ -293,11 +377,34 @@ class ProxyServer:
 
     def get_stats(self) -> dict:
         """Get current proxy statistics."""
-        return self.stats.to_dict()
+        stats = self.stats.to_dict()
+        
+        # Add encryption statistics
+        if self.encryption_enabled and self.crypto_manager:
+            stats["encryption"] = {
+                "enabled": True,
+                "algorithm": self.crypto_manager.config.algorithm.name,
+                "key_rotation_interval": self._key_rotation_interval,
+                "supported_algorithms": [
+                    algo.name for algo in self.crypto_manager.get_supported_algorithms()
+                ],
+            }
+        else:
+            stats["encryption"] = {
+                "enabled": False,
+            }
+        
+        return stats
 
     def get_stats_summary(self) -> str:
         """Get current stats as a human-readable summary."""
-        return self.stats.summary()
+        base_summary = self.stats.summary()
+        
+        if self.encryption_enabled and self.crypto_manager:
+            algo = self.crypto_manager.config.algorithm.name
+            return f"{base_summary} | encrypt={algo}"
+        
+        return base_summary
 
 
 def _set_sock_opts(transport: asyncio.BaseTransport) -> None:
@@ -1417,7 +1524,7 @@ async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     # Notify about error
                     if _on_client_error_callback:
                         try:
-                            _on_client_error_callback(dc, dst, port, "websocket_handshake", str(exc))  # type: ignore[arg-type]
+                            _on_client_error_callback(dc, dst, port, "websocket_handshake", str(exc))  # type: ignore[arg-type, call-arg]
                         except Exception:
                             pass
                     if exc.is_redirect:
@@ -1436,7 +1543,7 @@ async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     # Notify about error
                     if _on_client_error_callback:
                         try:
-                            _on_client_error_callback(dc, dst, port, "websocket_connect", str(exc))  # type: ignore[arg-type]
+                            _on_client_error_callback(dc, dst, port, "websocket_connect", str(exc))  # type: ignore[arg-type, call-arg]
                         except Exception:
                             pass
                     all_redirects = False
@@ -1498,7 +1605,7 @@ async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         # Notify about client connection
         if _on_client_connect_callback:
             try:
-                _on_client_connect_callback(dc, dst, port)  # type: ignore[arg-type]
+                _on_client_connect_callback(dc, dst, port)  # type: ignore[arg-type, call-arg]
             except Exception:
                 pass
 
@@ -1550,17 +1657,32 @@ def _close_client_writer(writer: asyncio.StreamWriter | None) -> None:
         pass
 
 
-async def _run(port: int, dc_opt: dict[int, str | None],
-               stop_event: asyncio.Event | None = None,
-               host: str = '127.0.0.1',
-               auth_required: bool = False,
-               auth_credentials: dict[str, str] | None = None,
-               ip_whitelist: list[str] | None = None) -> None:
+async def _run(
+    port: int,
+    dc_opt: dict[int, str | None],
+    stop_event: asyncio.Event | None = None,
+    host: str = '127.0.0.1',
+    auth_required: bool = False,
+    auth_credentials: dict[str, str] | None = None,
+    ip_whitelist: list[str] | None = None,
+    encryption_config: dict | None = None,
+) -> None:
     global _server_instance
 
     # Create proxy server instance with encapsulated state
-    server_instance = ProxyServer(dc_opt, host, port, auth_required, auth_credentials, ip_whitelist)
+    server_instance = ProxyServer(
+        dc_opt,
+        host,
+        port,
+        auth_required,
+        auth_credentials,
+        ip_whitelist,
+        encryption_config,
+    )
     _server_instance = server_instance
+
+    # Start automatic key rotation if encryption is enabled
+    await server_instance._start_key_rotation()
 
     # Create a wrapper for _handle_client that passes server state
     async def handle_client_wrapper(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -1749,7 +1871,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
     _server_instance = None
 
 
-def parse_dc_ip_list(dc_ip_list: list[str]) -> dict[int, str]:
+def parse_dc_ip_list(dc_ip_list: list[str]) -> dict[int, str | None]:
     """
     Parse list of 'DC:IP' strings into {dc: ip} dict.
 
@@ -1778,11 +1900,12 @@ def parse_dc_ip_list(dc_ip_list: list[str]) -> dict[int, str]:
 
 def run_proxy(
     port: int,
-    dc_opt: dict[int, str],
+    dc_opt: dict[int, str | None],
     stop_event: asyncio.Event | None = None,
     host: str = '127.0.0.1',
     auth_required: bool = False,
-    auth_credentials: dict[str, str] | None = None
+    auth_credentials: dict[str, str] | None = None,
+    encryption_config: dict | None = None,
 ) -> None:
     """
     Run the proxy server (blocking).
@@ -1796,8 +1919,18 @@ def run_proxy(
         host: Host to bind to (default: 127.0.0.1)
         auth_required: Require username/password authentication
         auth_credentials: Dict with 'username' and 'password' keys
+        encryption_config: Optional dict with encryption settings
     """
-    asyncio.run(_run(port, dc_opt, stop_event, host, auth_required, auth_credentials))  # type: ignore[arg-type]
+    asyncio.run(_run(
+        port,
+        dc_opt,
+        stop_event,
+        host,
+        auth_required,
+        auth_credentials,
+        None,  # ip_whitelist
+        encryption_config,
+    ))
 
 
 def main() -> None:
@@ -1822,7 +1955,7 @@ def main() -> None:
     args = ap.parse_args()
 
     try:
-        dc_opt = parse_dc_ip_list(args.dc_ip)
+        dc_opt: dict[int, str | None] = parse_dc_ip_list(args.dc_ip)
     except ValueError as e:
         log.error(str(e))
         sys.exit(1)
@@ -1843,7 +1976,7 @@ def main() -> None:
     try:
         asyncio.run(_run(args.port, dc_opt, host=args.host,
                         auth_required=args.auth,
-                        auth_credentials=auth_credentials))  # type: ignore[arg-type]
+                        auth_credentials=auth_credentials))
     except KeyboardInterrupt:
         log.info("Shutting down. Final stats: %s", get_stats_summary())
 

@@ -2070,7 +2070,7 @@ class WebDashboard:
 
                 # Save to bytes
                 img_bytes = io.BytesIO()
-                img.save(img_bytes, format='PNG')
+                img.save(img_bytes)
                 img_bytes.seek(0)
 
                 return Response(
