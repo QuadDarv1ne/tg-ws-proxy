@@ -206,3 +206,42 @@ class TestAsyncPerformanceProfiler:
 
         assert result == 7
         assert "test_func" in profiler._timings
+
+
+class TestPerformanceProfilerExtended:
+    """Extended tests for PerformanceProfiler."""
+
+    def test_profile_async_method(self):
+        """Test profile_async method."""
+        import asyncio
+
+        profiler = AsyncPerformanceProfiler()
+
+        async def test_func():
+            return 42
+
+        result = asyncio.run(profiler.profile_async(test_func))
+
+        assert result == 42
+        assert "test_func" in profiler._timings
+
+
+class TestAsyncPerformanceProfilerExtended:
+    """Extended tests for AsyncPerformanceProfiler."""
+
+    def test_clear_multiple_times(self):
+        """Test clear can be called multiple times."""
+        profiler = AsyncPerformanceProfiler()
+
+        profiler._record_timing("func1", 0.1)
+        profiler.clear()
+        profiler.clear()  # Should not raise
+
+        assert profiler._timings == {}
+
+    def test_get_stats_empty_async(self):
+        """Test get_stats on empty async profiler."""
+        profiler = AsyncPerformanceProfiler()
+        stats = profiler.get_stats()
+
+        assert stats == {}

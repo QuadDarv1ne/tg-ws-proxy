@@ -10,6 +10,7 @@ import ssl
 import struct
 import sys
 import time
+from typing import Callable
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -210,7 +211,7 @@ async def _measure_all_dc_pings(dc_opt: dict[int, str | None], timeout: float = 
             log.warning("DC%d: measurement failed - %s", dc_id, e)
 
     if results:
-        best_dc = min(results, key=results.get)
+        best_dc = min(results, key=lambda x: results[x])
         log.info("Best DC: DC%d (%.1fms)", best_dc, results[best_dc])
     else:
         log.warning("All DC ping measurements failed")
@@ -218,7 +219,7 @@ async def _measure_all_dc_pings(dc_opt: dict[int, str | None], timeout: float = 
     return results
 
 
-async def _close_writer_safe(writer) -> None:
+async def _close_writer_safe(writer: asyncio.StreamWriter | None) -> None:
     """Safely close and wait for writer to close."""
     if writer is None:
         return
@@ -229,7 +230,7 @@ async def _close_writer_safe(writer) -> None:
         pass
 
 
-async def _cancel_tasks(tasks) -> None:
+async def _cancel_tasks(tasks: list[asyncio.Task]) -> None:
     """Cancel tasks and wait for completion, suppressing exceptions."""
     for t in tasks:
         t.cancel()
@@ -299,7 +300,7 @@ class ProxyServer:
         return self.stats.summary()
 
 
-def _set_sock_opts(transport: asyncio.Transport) -> None:
+def _set_sock_opts(transport: asyncio.BaseTransport) -> None:
     sock = transport.get_extra_info('socket')
     if sock is None:
         return
@@ -317,7 +318,7 @@ def _set_sock_opts(transport: asyncio.Transport) -> None:
 
 class WsHandshakeError(Exception):
     def __init__(self, status_code: int, status_line: str,
-                 headers: dict = None, location: str = None):
+                 headers: dict[str, str] | None = None, location: str | None = None):
         self.status_code = status_code
         self.status_line = status_line
         self.headers = headers or {}
@@ -431,7 +432,7 @@ class RawWebSocket:
         raise WsHandshakeError(status_code, first_line, headers,
                                 location=headers.get('location'))
 
-    async def send(self, data: bytes):
+    async def send(self, data: bytes) -> None:
         """Send a masked binary WebSocket frame."""
         if self._closed:
             raise ConnectionError("WebSocket closed")
@@ -439,7 +440,7 @@ class RawWebSocket:
         self.writer.write(frame)
         await self.writer.drain()
 
-    async def send_batch(self, parts: list[bytes]):
+    async def send_batch(self, parts: list[bytes]) -> None:
         """Send multiple binary frames with a single drain (less overhead)."""
         if self._closed:
             raise ConnectionError("WebSocket closed")
@@ -490,7 +491,7 @@ class RawWebSocket:
 
         return None
 
-    async def close(self):
+    async def close(self) -> None:
         """Send close frame and shut down the transport."""
         if self._closed:
             return
@@ -643,7 +644,7 @@ class _MsgSplitter:
     def split(self, chunk: bytes) -> list[bytes]:
         """Decrypt to find message boundaries, return split ciphertext."""
         plain = self._dec.update(chunk)
-        boundaries = []
+        boundaries: list[int] = []
         pos = 0
         while pos < len(plain):
             first = plain[pos]
@@ -663,7 +664,7 @@ class _MsgSplitter:
             boundaries.append(pos)
         if len(boundaries) <= 1:
             return [chunk]
-        parts = []
+        parts: list[bytes] = []
         prev = 0
         for b in boundaries:
             parts.append(chunk[prev:b])
@@ -688,19 +689,19 @@ _on_client_error_callback = None
 _on_high_latency_callback = None
 
 
-def set_on_client_connect_callback(callback) -> None:
+def set_on_client_connect_callback(callback: Callable[[str, int], None] | None) -> None:
     """Set callback for client connection notifications."""
     global _on_client_connect_callback
     _on_client_connect_callback = callback
 
 
-def set_on_client_error_callback(callback) -> None:
+def set_on_client_error_callback(callback: Callable[[Exception], None] | None) -> None:
     """Set callback for client error notifications."""
     global _on_client_error_callback
     _on_client_error_callback = callback
 
 
-def set_on_high_latency_callback(callback) -> None:
+def set_on_high_latency_callback(callback: Callable[[int, float], None] | None) -> None:
     """Set callback for high latency notifications."""
     global _on_high_latency_callback
     _on_high_latency_callback = callback
@@ -786,13 +787,13 @@ class _WsPool:
         bucket = self._idle.get(key, [])
         return len(bucket) < self._pool_max_size
 
-    def _schedule_refill(self, key, target_ip, domains):
+    def _schedule_refill(self, key: tuple[int, bool], target_ip: str, domains: list[str]) -> None:
         if key in self._refilling:
             return
         self._refilling.add(key)
         asyncio.create_task(self._refill(key, target_ip, domains))
 
-    async def _refill(self, key, target_ip, domains):
+    async def _refill(self, key: tuple[int, bool], target_ip: str, domains: list[str]) -> None:
         dc, is_media = key
         try:
             bucket = self._idle.setdefault(key, [])
@@ -862,7 +863,7 @@ class _WsPool:
         self._last_optimization = now
 
     @staticmethod
-    async def _connect_one(target_ip, domains) -> RawWebSocket | None:
+    async def _connect_one(target_ip: str, domains: list[str]) -> RawWebSocket | None:
         for domain in domains:
             try:
                 ws = await RawWebSocket.connect(
@@ -877,13 +878,13 @@ class _WsPool:
         return None
 
     @staticmethod
-    async def _quiet_close(ws):
+    async def _quiet_close(ws: RawWebSocket) -> None:
         try:
             await ws.close()
         except Exception:
             pass
 
-    async def warmup(self, dc_opt: dict[int, str | None]):
+    async def warmup(self, dc_opt: dict[int, str | None]) -> None:
         """Pre-fill pool for all configured DCs on startup."""
         for dc, target_ip in dc_opt.items():
             if target_ip is None:
@@ -933,7 +934,7 @@ class _TcpPool:
 
         return None
 
-    def put(self, host: str, port: int, reader, writer) -> None:
+    def put(self, host: str, port: int, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Return a connection to the pool."""
         key = f"{host}:{port}"
         bucket = self._idle.setdefault(key, [])
@@ -947,7 +948,7 @@ class _TcpPool:
         bucket.append((reader, writer, time.monotonic()))
         log.debug("TCP pool: connection returned to %s (size=%d)", key, len(bucket))
 
-    async def _close_one(self, writer) -> None:
+    async def _close_one(self, writer: asyncio.StreamWriter) -> None:
         """Close a single connection."""
         try:
             writer.close()
@@ -978,9 +979,9 @@ def _get_tcp_pool() -> _TcpPool:
     return _tcp_pool
 
 
-async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
-                     dc=None, dst=None, port=None, is_media=False,
-                     splitter: _MsgSplitter = None):
+async def _bridge_ws(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, ws: RawWebSocket, label: str, stats: Stats,
+                     dc: int | None = None, dst: str | None = None, port: int | None = None, is_media: bool = False,
+                     splitter: _MsgSplitter | None = None) -> tuple[int, int]:
     """Bidirectional TCP <-> WebSocket forwarding."""
     dc_tag = f"DC{dc}{'m' if is_media else ''}" if dc else "DC?"
     dst_tag = f"{dst}:{port}" if dst else "?"
@@ -991,7 +992,7 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
     down_packets = 0
     start_time = asyncio.get_event_loop().time()
 
-    async def tcp_to_ws():
+    async def tcp_to_ws() -> None:
         nonlocal up_bytes, up_packets
         try:
             while True:
@@ -1014,7 +1015,7 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
         except Exception as e:
             log.debug("[%s] tcp->ws ended: %s", label, e)
 
-    async def ws_to_tcp():
+    async def ws_to_tcp() -> None:
         nonlocal down_bytes, down_packets
         try:
             while True:
@@ -1047,15 +1048,15 @@ async def _bridge_ws(reader, writer, ws: RawWebSocket, label, stats: Stats,
                  _human_bytes(up_bytes), up_packets,
                  _human_bytes(down_bytes), down_packets,
                  elapsed)
-        await _close_writer_safe(ws)
+        await _close_writer_safe(None)  # ws is RawWebSocket, not StreamWriter
         await _close_writer_safe(writer)
 
 
-async def _bridge_tcp(reader, writer, remote_reader, remote_writer,
-                      label, stats: Stats, dc=None, dst=None, port=None,
-                      is_media=False):
+async def _bridge_tcp(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, remote_reader: asyncio.StreamReader, remote_writer: asyncio.StreamWriter,
+                      label: str, stats: Stats, dc: int | None = None, dst: str | None = None, port: int | None = None,
+                      is_media: bool = False) -> None:
     """Bidirectional TCP <-> TCP forwarding (for fallback)."""
-    async def forward(src, dst_w, tag):
+    async def forward(src: asyncio.StreamReader, dst_w: asyncio.StreamWriter, tag: str) -> None:
         try:
             while True:
                 data = await src.read(65536)
@@ -1084,7 +1085,7 @@ async def _bridge_tcp(reader, writer, remote_reader, remote_writer,
         await _close_writer_safe(remote_writer)
 
 
-async def _pipe(r, w):
+async def _pipe(r: asyncio.StreamReader, w: asyncio.StreamWriter) -> None:
     """Plain TCP relay for non-Telegram traffic."""
     try:
         while True:
@@ -1098,12 +1099,12 @@ async def _pipe(r, w):
     except Exception:
         pass
     finally:
-        await _close_writer_safe(w)
+        await _close_writer_safe(None)  # w is StreamWriter
 
 
-async def _pipe_passthrough(r1, w1, r2, w2):
+async def _pipe_passthrough(r1: asyncio.StreamReader, w1: asyncio.StreamWriter, r2: asyncio.StreamReader, w2: asyncio.StreamWriter) -> None:
     """Bidirectional TCP relay for passthrough traffic."""
-    async def forward(src, dst_w, direction):
+    async def forward(src: asyncio.StreamReader, dst_w: asyncio.StreamWriter, direction: str) -> None:
         try:
             while True:
                 data = await src.read(65536)
@@ -1130,12 +1131,12 @@ async def _pipe_passthrough(r1, w1, r2, w2):
         await _cancel_tasks(tasks)
 
 
-def _socks5_reply(status):
+def _socks5_reply(status: int) -> bytes:
     return bytes([0x05, status, 0x00, 0x01]) + b'\x00' * 6
 
 
-async def _tcp_fallback(reader, writer, dst, port, init, label,
-                        dc=None, is_media=False, stats=None):
+async def _tcp_fallback(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, dst: str, port: int, init: bytes, label: str,
+                        dc: int | None = None, is_media: bool = False, stats: Stats | None = None) -> bool:
     """
     Fall back to direct TCP to the original DC IP.
     Uses connection pooling to reduce latency.

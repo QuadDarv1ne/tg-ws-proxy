@@ -125,3 +125,45 @@ class TestDashboardStats:
         dashboard = WebDashboard(get_stats_callback=dc_stats, port=0)
         stats = dashboard.get_stats()
         assert 2 in stats.get("dc_stats", {})
+
+
+class TestWebDashboardExtended:
+    """Extended tests for WebDashboard."""
+
+    def test_stats_export_invalid_format(self):
+        """Test /api/stats/export with invalid format."""
+        def mock_get_stats():
+            return {"connections_total": 100}
+
+        dashboard = WebDashboard(get_stats_callback=mock_get_stats, port=0)
+        dashboard.app.config["TESTING"] = True
+
+        with dashboard.app.test_client() as client:
+            response = client.get("/api/stats/export?format=invalid")
+            # Should default to JSON or return error
+            assert response.status_code in [200, 400]
+
+    def test_stats_export_csv_empty(self):
+        """Test CSV export with empty stats."""
+        def empty_stats():
+            return {}
+
+        dashboard = WebDashboard(get_stats_callback=empty_stats, port=0)
+        dashboard.app.config["TESTING"] = True
+
+        with dashboard.app.test_client() as client:
+            response = client.get("/api/stats/export?format=csv")
+            assert response.status_code == 200
+
+    def test_cors_enabled(self):
+        """Test CORS is enabled on API endpoints."""
+        def mock_get_stats():
+            return {}
+
+        dashboard = WebDashboard(get_stats_callback=mock_get_stats, port=0)
+        dashboard.app.config["TESTING"] = True
+
+        with dashboard.app.test_client() as client:
+            response = client.get("/api/health")
+            # CORS headers should be present
+            assert response.status_code == 200

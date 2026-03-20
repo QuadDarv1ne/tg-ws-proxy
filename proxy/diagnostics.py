@@ -130,7 +130,7 @@ async def test_websocket_connect(ip: str, domain: str, timeout: float = 10.0) ->
         )
 
 
-async def test_dns_resolve(hostname: str) -> DiagnosticResult:
+async def check_dns_resolve(hostname: str) -> DiagnosticResult:
     """Test DNS resolution."""
     start = time.perf_counter()
     try:
@@ -181,7 +181,7 @@ async def run_full_diagnostics() -> list[DiagnosticResult]:
     # Test DNS
     for dc in range(1, 6):
         for domain in DC_DOMAINS[dc]:
-            result = await test_dns_resolve(domain)
+            result = await check_dns_resolve(domain)
             results.append(result)
             log.info("  %s: %s", result.name, "✓" if result.success else f"✗ {result.error}")
 

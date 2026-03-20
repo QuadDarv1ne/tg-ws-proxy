@@ -233,7 +233,7 @@ class Stats:
         """Get DC with lowest average latency."""
         if not self.latency_ms:
             return None
-        return min(self.latency_ms, key=self.latency_ms.get)
+        return min(self.latency_ms, key=lambda x: self.latency_ms[x])
 
     def get_dc_stats(self) -> dict[int, dict]:
         """Get statistics per DC."""

@@ -978,16 +978,16 @@ class WebDashboard:
         self._setup_routes()
         self._thread: threading.Thread | None = None
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         """Setup Flask routes."""
 
         @self.app.route('/')
-        def dashboard():
+        def dashboard() -> str:
             """Main dashboard page."""
             return render_template_string(DASHBOARD_HTML)
 
         @self.app.route('/api/stats')
-        def api_stats():
+        def api_stats() -> Response:
             """API endpoint for statistics."""
             stats = self.get_stats()
             stats['version'] = '2.5.5'
@@ -997,7 +997,7 @@ class WebDashboard:
             return jsonify(stats)
 
         @self.app.route('/api/stats/export')
-        def api_stats_export():
+        def api_stats_export() -> Response:
             """Export statistics as JSON or CSV."""
             format_type = request.args.get('format', 'json')
             stats = self.get_stats()
@@ -1023,7 +1023,7 @@ class WebDashboard:
                 return jsonify(stats)
 
         @self.app.route('/api/config', methods=['GET'])
-        def api_get_config():
+        def api_get_config() -> Response:
             """Get current configuration."""
             if self.update_config is None:
                 return jsonify({'error': 'Configuration updates not enabled'}), 403
@@ -1038,7 +1038,7 @@ class WebDashboard:
             return jsonify(config)
 
         @self.app.route('/api/config', methods=['POST'])
-        def api_update_config():
+        def api_update_config() -> tuple[Response, int] | Response:
             """Update configuration."""
             if self.update_config is None:
                 return jsonify({'error': 'Configuration updates not enabled'}), 403
@@ -1058,7 +1058,7 @@ class WebDashboard:
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/api/qr')
-        def api_generate_qr():
+        def api_generate_qr() -> Response:
             """Generate QR code for Telegram Mobile configuration."""
             try:
                 import qrcode
@@ -1099,7 +1099,7 @@ class WebDashboard:
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/api/health')
-        def api_health():
+        def api_health() -> Response:
             """Health check endpoint with detailed diagnostics."""
             stats = self.get_stats()
 
@@ -1151,7 +1151,7 @@ class WebDashboard:
             })
 
         @self.app.route('/api/dc-stats')
-        def api_dc_stats():
+        def api_dc_stats() -> Response:
             """Get detailed DC statistics."""
             stats = self.get_stats()
             dc_stats = stats.get('dc_stats', {})
@@ -1169,7 +1169,7 @@ class WebDashboard:
 
             return jsonify({'dc_stats': formatted})
 
-    def start(self):
+    def start(self) -> None:
         """Start the web dashboard in a background thread."""
         if self._thread and self._thread.is_alive():
             log.warning("Dashboard already running")
@@ -1188,7 +1188,7 @@ class WebDashboard:
         self._thread = threading.Thread(target=run_app, daemon=True)
         self._thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the web dashboard."""
         if self._thread and self._thread.is_alive():
             log.info("Stopping web dashboard")
@@ -1202,7 +1202,7 @@ def run_dashboard(
     host: str = "127.0.0.1",
     port: int = 5000,
     open_browser: bool = True,
-):
+) -> None:
     """
     Run web dashboard for proxy monitoring.
 

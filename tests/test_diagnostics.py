@@ -9,8 +9,8 @@ from proxy.diagnostics import (
     DC_DOMAINS,
     DC_IPS,
     DiagnosticResult,
+    check_dns_resolve,
     print_diagnostics_report,
-    test_dns_resolve,
     test_tcp_connect,
     test_websocket_connect,
 )
@@ -104,8 +104,8 @@ class TestTestTcpConnect:
 
 
 @pytest.mark.asyncio
-class TestTestDnsResolve:
-    """Tests for test_dns_resolve function."""
+class TestCheckDnsResolve:
+    """Tests for check_dns_resolve function."""
 
     @patch('asyncio.get_event_loop')
     @patch('proxy.diagnostics.time.perf_counter')
@@ -120,7 +120,7 @@ class TestTestDnsResolve:
         ]
         mock_loop.return_value.getaddrinfo = mock_resolver
 
-        result = await test_dns_resolve("google.com")
+        result = await check_dns_resolve("google.com")
 
         assert result.success is True
         assert result.name == "DNS google.com"
@@ -134,7 +134,7 @@ class TestTestDnsResolve:
         mock_resolver.side_effect = socket.gaierror("Name or service not known")
         mock_loop.return_value.getaddrinfo = mock_resolver
 
-        result = await test_dns_resolve("nonexistent.invalid")
+        result = await check_dns_resolve("nonexistent.invalid")
 
         assert result.success is False
         assert result.error is not None
@@ -308,3 +308,90 @@ class TestDcConstants:
             assert dc_id in DC_IPS
             assert isinstance(DC_IPS[dc_id], list)
             assert len(DC_IPS[dc_id]) >= 1
+
+
+class TestDiagnosticsExtended:
+    """Extended tests for diagnostics functions."""
+
+    @pytest.mark.asyncio
+    async def test_dns_resolve_localhost(self):
+        """Test DNS resolve for localhost."""
+        result = await check_dns_resolve("127.0.0.1")
+
+        # Should resolve to something (may vary by system)
+        assert result.name == "DNS 127.0.0.1"
+        # Success depends on system configuration
+        assert isinstance(result.success, bool)
+
+    @pytest.mark.asyncio
+    async def test_dns_resolve_invalid(self):
+        """Test DNS resolve for invalid domain."""
+        result = await check_dns_resolve("invalid.domain.that.does.not.exist")
+
+        assert result.name == "DNS invalid.domain.that.does.not.exist"
+        assert result.success is False
+        assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_tcp_connect_localhost(self):
+        """Test TCP connect to localhost (may fail if no service)."""
+        result = await test_tcp_connect("127.0.0.1", 65535, timeout=0.1)
+
+        assert result.name == "TCP 127.0.0.1:65535"
+        # May succeed or fail depending on system
+        assert isinstance(result.success, bool)
+
+    @pytest.mark.asyncio
+    async def test_tcp_connect_timeout(self):
+        """Test TCP connect timeout."""
+        # Use a non-routable IP to trigger timeout
+        result = await test_tcp_connect("10.255.255.1", 80, timeout=0.5)
+
+        assert result.name == "TCP 10.255.255.1:80"
+        assert result.success is False
+        assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_websocket_connect_invalid(self):
+        """Test WebSocket connect to invalid endpoint."""
+        result = await test_websocket_connect("127.0.0.1", "invalid.local", timeout=0.5)
+
+        assert result.name == "WS invalid.local via 127.0.0.1"
+        assert result.success is False
+        assert result.error is not None
+
+    def test_print_diagnostics_report_empty_list(self, capsys):
+        """Test printing empty report."""
+        print_diagnostics_report([])
+        captured = capsys.readouterr()
+        assert "No tests run" in captured.out
+
+    def test_print_diagnostics_report_dns_only(self, capsys):
+        """Test printing DNS only report."""
+        results = [
+            DiagnosticResult(name="DNS test.com", success=True, latency_ms=30.0, details="1.2.3.4"),
+        ]
+        print_diagnostics_report(results)
+        captured = capsys.readouterr()
+        assert "DNS Resolution" in captured.out
+
+    def test_print_diagnostics_report_tcp_only(self, capsys):
+        """Test printing TCP only report."""
+        results = [
+            DiagnosticResult(name="TCP 1.2.3.4:443", success=True, latency_ms=50.0),
+        ]
+        print_diagnostics_report(results)
+        captured = capsys.readouterr()
+        assert "TCP Connectivity" in captured.out
+
+    def test_diagnostic_result_str(self):
+        """Test DiagnosticResult string representation."""
+        result = DiagnosticResult(
+            name="Test",
+            success=True,
+            latency_ms=50.0,
+            details="OK"
+        )
+        str_repr = str(result)
+        assert "Test" in str_repr
+        assert "50.0" in str_repr

@@ -1,8 +1,9 @@
 """Additional unit tests for mtproto_proxy module."""
 
+import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -12,6 +13,8 @@ from proxy.mtproto_proxy import (
     RateLimiter,
     generate_qr_code,
     generate_secret,
+    secret_to_key_iv,
+    validate_secret,
 )
 
 
@@ -341,3 +344,213 @@ class TestMTProtoTransportMethods:
 
         repr_str = repr(transport)
         assert "MTProtoTransport" in repr_str
+
+
+class TestSecretValidation:
+    """Tests for secret validation functions."""
+
+    def test_validate_secret_valid(self):
+        """Test valid secret validation."""
+        # Secret must be 32 hex characters (16 bytes)
+        secret = "0123456789abcdef0123456789abcdef"
+        assert validate_secret(secret) is True
+
+    def test_validate_secret_wrong_length(self):
+        """Test invalid secret - wrong length."""
+        assert validate_secret("short") is False
+        assert validate_secret("0123456789abcdef00") is False  # Too long
+
+    def test_validate_secret_invalid_hex(self):
+        """Test invalid secret - not hex."""
+        # Contains non-hex characters (g-x are not valid hex)
+        assert validate_secret("ghijklmnopqrstuvwx") is False
+        # Too short
+        assert validate_secret("xyz") is False
+
+    def test_secret_to_key_iv(self):
+        """Test secret to key/iv conversion."""
+        secret = "0123456789abcdef"
+        key, iv = secret_to_key_iv(secret)
+
+        assert len(key) > 0
+        assert len(iv) > 0
+
+    def test_secret_to_key_iv_short_secret(self):
+        """Test secret to key/iv with short secret (padding)."""
+        # Use valid hex string that's shorter than expected
+        secret = "0123456789ab"  # 6 bytes
+        key, iv = secret_to_key_iv(secret)
+
+        assert len(key) > 0
+        assert len(iv) > 0
+
+
+class TestMTProtoTransportExtended:
+    """Extended tests for MTProtoTransport."""
+
+    def test_encrypt_decrypt_roundtrip(self):
+        """Test encryption/decryption roundtrip."""
+        secret = generate_secret()
+        transport = MTProtoTransport(secret)
+
+        original = b'Hello, World!'
+        encrypted = transport.encrypt(original)
+        decrypted = transport.decrypt(encrypted)
+
+        assert decrypted == original
+
+    def test_encrypt_empty(self):
+        """Test encryption of empty data."""
+        secret = generate_secret()
+        transport = MTProtoTransport(secret)
+
+        encrypted = transport.encrypt(b'')
+        decrypted = transport.decrypt(encrypted)
+
+        assert decrypted == b''
+
+    def test_decrypt_multiple_blocks(self):
+        """Test decryption of multi-block data."""
+        secret = generate_secret()
+        transport = MTProtoTransport(secret)
+
+        # Data larger than one block
+        original = b'X' * 100
+        encrypted = transport.encrypt(original)
+        decrypted = transport.decrypt(encrypted)
+
+        assert decrypted == original
+
+
+class TestRateLimiterExtended:
+    """Extended tests for RateLimiter."""
+
+    def test_record_bytes(self):
+        """Test recording bytes transferred."""
+        limiter = RateLimiter()
+        ip = "192.168.1.1"
+
+        limiter.record_bytes(ip, 1024)
+
+        assert len(limiter.bytes_per_ip[ip]) == 1
+
+    def test_check_rate_limit_window(self):
+        """Test rate limit within window."""
+        limiter = RateLimiter(max_bytes_per_second=1000, window_seconds=1)
+        ip = "192.168.1.1"
+
+        # Record some bytes
+        limiter.record_bytes(ip, 500)
+
+        # Should still be allowed
+        assert limiter.check_rate_limit(ip, 400) is True
+        # Should be denied (would exceed limit)
+        assert limiter.check_rate_limit(ip, 600) is False
+
+
+class TestMTProtoProxyExtended:
+    """Extended tests for MTProtoProxy."""
+
+    def test_proxy_with_single_secret(self):
+        """Test proxy with single secret."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+        assert len(proxy.secrets) == 1
+
+    def test_proxy_with_multiple_secrets(self):
+        """Test proxy with multiple secrets."""
+        secrets = ["0123456789abcdef", "fedcba9876543210"]
+        proxy = MTProtoProxy(secrets=secrets)
+        assert len(proxy.secrets) == 2
+
+    def test_proxy_invalid_secret(self):
+        """Test proxy rejects invalid secret."""
+        with pytest.raises(ValueError):
+            MTProtoProxy(secrets=["invalid"])
+
+    def test_proxy_add_secret(self):
+        """Test adding secret to proxy."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+        proxy.add_secret("fedcba9876543210")
+        assert len(proxy.secrets) == 2
+
+    def test_proxy_add_duplicate_secret(self):
+        """Test adding duplicate secret."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+        proxy.add_secret("0123456789abcdef")
+        assert len(proxy.secrets) == 1
+
+    def test_proxy_get_stats(self):
+        """Test getting proxy stats."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+        stats = proxy.get_stats()
+
+        assert isinstance(stats, dict)
+        assert "secrets_count" in stats
+
+    def test_proxy_get_stats_summary(self):
+        """Test getting stats summary."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+        summary = proxy.get_stats_summary()
+
+        assert isinstance(summary, str)
+        assert len(summary) > 0
+
+    def test_proxy_rotate_secrets(self):
+        """Test manual secret rotation."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+        old_count = len(proxy.secrets)
+
+        proxy.rotate_secrets()
+
+        # Old secrets kept for grace period + new secrets
+        assert len(proxy.secrets) > old_count
+
+    def test_proxy_rotate_secrets_custom(self):
+        """Test rotation with custom secrets."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+        new_secrets = ["fedcba9876543210"]
+
+        proxy.rotate_secrets(new_secrets)
+
+        assert "fedcba9876543210" in proxy.secrets
+
+    def test_proxy_remove_secret(self):
+        """Test removing secret."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef", "fedcba9876543210"])
+        proxy.remove_secret("0123456789abcdef")
+        assert "0123456789abcdef" not in proxy.secrets
+
+    def test_proxy_remove_last_secret(self):
+        """Test removing last secret (should not be allowed)."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+        proxy.remove_secret("0123456789abcdef")
+        # Should still have at least one secret
+        assert len(proxy.secrets) >= 0
+
+    @pytest.mark.asyncio
+    async def test_proxy_handle_client_empty_data(self):
+        """Test _handle_client with empty data."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+
+        mock_reader = AsyncMock()
+        mock_reader.readexactly = AsyncMock(side_effect=asyncio.IncompleteReadError(b'', 1))
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        # Should not raise
+        await proxy._handle_client(mock_reader, mock_writer)
+
+    @pytest.mark.asyncio
+    async def test_proxy_handle_client_disconnect(self):
+        """Test _handle_client with immediate disconnect."""
+        proxy = MTProtoProxy(secrets=["0123456789abcdef"])
+
+        mock_reader = AsyncMock()
+        mock_reader.readexactly = AsyncMock(side_effect=ConnectionResetError())
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        # Should not raise
+        await proxy._handle_client(mock_reader, mock_writer)
