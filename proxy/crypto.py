@@ -415,7 +415,7 @@ class AES256CTRStream(BaseCipher):
             plaintext = decryptor.update(encrypted.ciphertext) + decryptor.finalize()
             return plaintext
         except Exception as e:
-            raise DecryptionError(f"Decryption failed: {e}")
+            raise DecryptionError(f"Decryption failed: {e}") from e
 
     def rotate_key(self) -> None:
         """Generate new random keys."""
