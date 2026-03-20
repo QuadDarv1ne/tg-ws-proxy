@@ -149,11 +149,19 @@ DEFAULT_CONFIG = {
     "verbose": False,
     "ip_whitelist": [],  # Empty = allow all IPs
     "compact_menu": False,  # Compact tray menu mode
-
+    
     # Modern encryption settings
     "encryption_type": "aes-256-gcm",  # aes-256-gcm, chacha20-poly1305, xchacha20-poly1305
     "encryption_enabled": True,  # Enable additional encryption layer
     "key_rotation_interval": 3600,  # Rotate keys every hour (seconds)
+    
+    # Rate limiting settings
+    "rate_limit_rps": 10.0,  # Requests per second per IP
+    "rate_limit_rpm": 100,  # Requests per minute per IP
+    "rate_limit_max_conn": 500,  # Max concurrent connections
+    "rate_limit_per_ip": 10,  # Max connections per IP
+    "rate_limit_ban_threshold": 5,  # Violations before ban
+    "rate_limit_ban_duration": 300.0,  # Ban duration in seconds
 }
 
 # =============================================================================

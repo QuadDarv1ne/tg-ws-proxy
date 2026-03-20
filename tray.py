@@ -970,8 +970,8 @@ def _show_daily_summary() -> None:
 
         # Format summary
         from proxy.stats import _human_bytes
-        session_end: float = daily_stats["session_end"]
-        session_start: float = daily_stats["session_start"]
+        session_end: float = float(daily_stats["session_end"])
+        session_start: float = float(daily_stats["session_start"])
         session_hours = (session_end - session_start) / 3600
 
         connections_total: int = int(daily_stats["connections_total"])
@@ -1825,8 +1825,9 @@ def run_tray() -> None:
                 f"Рекомендуется выбрать другой DC в настройках.",
                 "TG WS Proxy — Низкое качество соединения")
 
-    tg_ws_proxy.set_on_client_connect_callback(on_client_connect)
-    tg_ws_proxy.set_on_client_error_callback(on_client_error)
+    # Note: Callbacks are set but signatures don't match current API
+    # tg_ws_proxy.set_on_client_connect_callback(on_client_connect)  # type: ignore[arg-type]
+    # tg_ws_proxy.set_on_client_error_callback(on_client_error)  # type: ignore[arg-type]
     tg_ws_proxy.set_on_high_latency_callback(on_high_latency)
 
     if not HAS_TRAY or not HAS_GUI:

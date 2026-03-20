@@ -238,7 +238,8 @@ def _check_port_available(port: int, host: str) -> bool:
 
 def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
                       host: str = '127.0.0.1',
-                      encryption_config: dict | None = None):
+                      encryption_config: dict | None = None,
+                      rate_limit_config: dict | None = None):
     global _async_stop
 
     # Check port availability before starting
@@ -265,6 +266,7 @@ def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
                 stop_event=stop_ev,
                 host=host,
                 encryption_config=encryption_config,
+                rate_limit_config=rate_limit_config,
             )
         )
     except Exception as exc:
@@ -292,12 +294,22 @@ def start_proxy() -> None:
     host = cfg.get("host", DEFAULT_CONFIG["host"])
     dc_ip_list = cfg.get("dc_ip", DEFAULT_CONFIG["dc_ip"])
     verbose = cfg.get("verbose", False)
-    
+
     # Modern encryption configuration
     encryption_config = {
         "encryption_type": cfg.get("encryption_type", "aes-256-gcm"),
         "encryption_enabled": cfg.get("encryption_enabled", True),
         "key_rotation_interval": cfg.get("key_rotation_interval", 3600),
+    }
+    
+    # Rate limiting configuration
+    rate_limit_config = {
+        "requests_per_second": cfg.get("rate_limit_rps", 10.0),
+        "requests_per_minute": cfg.get("rate_limit_rpm", 100),
+        "max_concurrent_connections": cfg.get("rate_limit_max_conn", 500),
+        "max_connections_per_ip": cfg.get("rate_limit_per_ip", 10),
+        "ban_threshold": cfg.get("rate_limit_ban_threshold", 5),
+        "ban_duration_seconds": cfg.get("rate_limit_ban_duration", 300.0),
     }
 
     try:
@@ -308,13 +320,16 @@ def start_proxy() -> None:
         return
 
     log.info("Starting proxy on %s:%d ...", host, port)
-    log.info("Encryption: %s (rotation: %ds)", 
+    log.info("Encryption: %s (rotation: %ds)",
              encryption_config["encryption_type"],
              encryption_config["key_rotation_interval"])
-    
+    log.info("Rate limiting: %d req/min, %d max connections",
+             rate_limit_config["requests_per_minute"],
+             rate_limit_config["max_concurrent_connections"])
+
     _proxy_thread = threading.Thread(
         target=_run_proxy_thread,
-        args=(port, dc_opt, verbose, host, encryption_config),
+        args=(port, dc_opt, verbose, host, encryption_config, rate_limit_config),
         daemon=True, name="proxy")
     _proxy_thread.start()
 

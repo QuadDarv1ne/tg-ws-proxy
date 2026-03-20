@@ -279,7 +279,7 @@ class ProxyServer:
         # Rate limiting support
         self.rate_limiter = None
         self._rate_limit_task: asyncio.Task | None = None
-        
+
         if rate_limit_config:
             self._setup_rate_limiter(rate_limit_config)
 
@@ -380,8 +380,8 @@ class ProxyServer:
     def _setup_rate_limiter(self, config: dict) -> None:
         """Setup rate limiter based on configuration."""
         try:
-            from proxy.rate_limiter import RateLimiter, RateLimitConfig
-            
+            from proxy.rate_limiter import RateLimitConfig, RateLimiter
+
             self.rate_limiter = RateLimiter(
                 RateLimitConfig(
                     requests_per_second=config.get("requests_per_second", 10.0),
@@ -1368,7 +1368,7 @@ async def _handle_client(
     if rate_limiter is not None:
         from proxy.rate_limiter import RateLimitAction
         action, delay = rate_limiter.check_rate_limit(client_ip)
-        
+
         if action == RateLimitAction.BAN:
             log.warning("%s client banned (IP: %s)", label, client_ip)
             stats.add_connection('http_rejected', dc=None)
@@ -1760,7 +1760,7 @@ async def _run(
 
     # Start automatic key rotation if encryption is enabled
     await server_instance._start_key_rotation()
-    
+
     # Start rate limiter if configured
     await server_instance._start_rate_limiter()
 
@@ -1928,7 +1928,7 @@ async def _run(
             # Stop real-time monitoring
             server_instance.stats.stop_realtime_monitoring()
             log.info("Real-time monitoring stopped")
-            
+
             # Stop rate limiter
             await server_instance._stop_rate_limiter()
             log.info("Rate limiter stopped")
@@ -1995,6 +1995,7 @@ def run_proxy(
     auth_required: bool = False,
     auth_credentials: dict[str, str] | None = None,
     encryption_config: dict | None = None,
+    rate_limit_config: dict | None = None,
 ) -> None:
     """
     Run the proxy server (blocking).
@@ -2009,6 +2010,7 @@ def run_proxy(
         auth_required: Require username/password authentication
         auth_credentials: Dict with 'username' and 'password' keys
         encryption_config: Optional dict with encryption settings
+        rate_limit_config: Optional dict with rate limiting settings
     """
     asyncio.run(_run(
         port,
@@ -2019,6 +2021,7 @@ def run_proxy(
         auth_credentials,
         None,  # ip_whitelist
         encryption_config,
+        rate_limit_config,
     ))
 
 
