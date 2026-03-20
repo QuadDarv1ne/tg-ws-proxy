@@ -11,8 +11,8 @@ from proxy.diagnostics import (
     DiagnosticResult,
     check_dns_resolve,
     print_diagnostics_report,
-    test_tcp_connect,
-    test_websocket_connect,
+    check_tcp_connect,
+    check_websocket_connect,
 )
 
 
@@ -57,8 +57,8 @@ class TestDiagnosticResult:
 
 
 @pytest.mark.asyncio
-class TestTestTcpConnect:
-    """Tests for test_tcp_connect function."""
+class TestCheckTcpConnect:
+    """Tests for check_tcp_connect function."""
 
     @patch('proxy.diagnostics.asyncio.open_connection')
     @patch('proxy.diagnostics.time.perf_counter')
@@ -73,7 +73,7 @@ class TestTestTcpConnect:
         mock_writer.wait_closed = AsyncMock()
         mock_open.return_value = (mock_reader, mock_writer)
 
-        result = await test_tcp_connect("127.0.0.1", 443)
+        result = await check_tcp_connect("127.0.0.1", 443)
 
         assert result.success is True
         assert result.name == "TCP 127.0.0.1:443"
@@ -86,7 +86,7 @@ class TestTestTcpConnect:
         import asyncio
         mock_wait_for.side_effect = asyncio.TimeoutError()
 
-        result = await test_tcp_connect("127.0.0.1", 443, timeout=0.001)
+        result = await check_tcp_connect("127.0.0.1", 443, timeout=0.001)
 
         assert result.success is False
         assert result.error == "Connection timeout"
@@ -97,7 +97,7 @@ class TestTestTcpConnect:
         """Test TCP connection refused."""
         mock_open.side_effect = ConnectionRefusedError("Connection refused")
 
-        result = await test_tcp_connect("127.0.0.1", 443)
+        result = await check_tcp_connect("127.0.0.1", 443)
 
         assert result.success is False
         assert result.error is not None
@@ -141,8 +141,8 @@ class TestCheckDnsResolve:
 
 
 @pytest.mark.asyncio
-class TestTestWebsocketConnect:
-    """Tests for test_websocket_connect function."""
+class TestCheckWebsocketConnect:
+    """Tests for check_websocket_connect function."""
 
     @patch('proxy.diagnostics.asyncio.open_connection')
     @patch('proxy.diagnostics.time.perf_counter')
@@ -159,7 +159,7 @@ class TestTestWebsocketConnect:
         mock_writer.wait_closed = AsyncMock()
         mock_open.return_value = (mock_reader, mock_writer)
 
-        result = await test_websocket_connect("142.250.185.78", "test.domain.com")
+        result = await check_websocket_connect("142.250.185.78", "test.domain.com")
 
         assert result.success is True
         assert result.name == "WS test.domain.com via 142.250.185.78"
@@ -177,7 +177,7 @@ class TestTestWebsocketConnect:
         mock_writer.wait_closed = AsyncMock()
         mock_open.return_value = (mock_reader, mock_writer)
 
-        result = await test_websocket_connect("142.250.185.78", "test.domain.com")
+        result = await check_websocket_connect("142.250.185.78", "test.domain.com")
 
         assert result.success is False
         assert "302" in result.error
@@ -194,7 +194,7 @@ class TestTestWebsocketConnect:
         mock_writer.wait_closed = AsyncMock()
         mock_open.return_value = (mock_reader, mock_writer)
 
-        result = await test_websocket_connect("142.250.185.78", "test.domain.com")
+        result = await check_websocket_connect("142.250.185.78", "test.domain.com")
 
         assert result.success is False
         assert "Unexpected response" in result.error
@@ -205,7 +205,7 @@ class TestTestWebsocketConnect:
         import asyncio
         mock_wait_for.side_effect = asyncio.TimeoutError()
 
-        result = await test_websocket_connect("142.250.185.78", "test.domain.com", timeout=0.001)
+        result = await check_websocket_connect("142.250.185.78", "test.domain.com", timeout=0.001)
 
         assert result.success is False
         assert result.error == "Connection timeout"
@@ -335,7 +335,7 @@ class TestDiagnosticsExtended:
     @pytest.mark.asyncio
     async def test_tcp_connect_localhost(self):
         """Test TCP connect to localhost (may fail if no service)."""
-        result = await test_tcp_connect("127.0.0.1", 65535, timeout=0.1)
+        result = await check_tcp_connect("127.0.0.1", 65535, timeout=0.1)
 
         assert result.name == "TCP 127.0.0.1:65535"
         # May succeed or fail depending on system
@@ -345,7 +345,7 @@ class TestDiagnosticsExtended:
     async def test_tcp_connect_timeout(self):
         """Test TCP connect timeout."""
         # Use a non-routable IP to trigger timeout
-        result = await test_tcp_connect("10.255.255.1", 80, timeout=0.5)
+        result = await check_tcp_connect("10.255.255.1", 80, timeout=0.5)
 
         assert result.name == "TCP 10.255.255.1:80"
         assert result.success is False
@@ -354,7 +354,7 @@ class TestDiagnosticsExtended:
     @pytest.mark.asyncio
     async def test_websocket_connect_invalid(self):
         """Test WebSocket connect to invalid endpoint."""
-        result = await test_websocket_connect("127.0.0.1", "invalid.local", timeout=0.5)
+        result = await check_websocket_connect("127.0.0.1", "invalid.local", timeout=0.5)
 
         assert result.name == "WS invalid.local via 127.0.0.1"
         assert result.success is False

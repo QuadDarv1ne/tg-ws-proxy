@@ -336,6 +336,16 @@ pip install pyinstaller
 pyinstaller packaging/windows.spec
 ```
 
+**Полная инструкция по сборке:** [docs/BUILD.md](docs/BUILD.md)
+
+## 📚 Документация
+
+| Файл | Описание |
+|------|----------|
+| [docs/BUILD.md](docs/BUILD.md) | Сборка для всех платформ (Windows, Linux, macOS, Android, iOS) |
+| [docs/INSTALL_MOBILE.md](docs/INSTALL_MOBILE.md) | Установка на телефон (PWA и APK) |
+| [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) | История версий и изменения |
+
 ## Лицензия
 
 [MIT License](LICENSE)

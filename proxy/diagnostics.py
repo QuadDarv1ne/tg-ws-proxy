@@ -26,7 +26,7 @@ class DiagnosticResult:
     details: str | None = None
 
 
-async def test_tcp_connect(host: str, port: int, timeout: float = 5.0) -> DiagnosticResult:
+async def check_tcp_connect(host: str, port: int, timeout: float = 5.0) -> DiagnosticResult:
     """Test TCP connection to host:port."""
     start = time.perf_counter()
     try:
@@ -56,7 +56,7 @@ async def test_tcp_connect(host: str, port: int, timeout: float = 5.0) -> Diagno
         )
 
 
-async def test_websocket_connect(ip: str, domain: str, timeout: float = 10.0) -> DiagnosticResult:
+async def check_websocket_connect(ip: str, domain: str, timeout: float = 10.0) -> DiagnosticResult:
     """Test WebSocket connection to Telegram DC."""
     start = time.perf_counter()
     ssl_ctx = ssl.create_default_context()
@@ -189,7 +189,7 @@ async def run_full_diagnostics() -> list[DiagnosticResult]:
     # Test TCP connectivity to DC IPs
     for _dc, ips in DC_IPS.items():
         for ip in ips:
-            result = await test_tcp_connect(ip, 443)
+            result = await check_tcp_connect(ip, 443)
             results.append(result)
             log.info("  %s: %s", result.name, "✓" if result.success else f"✗ {result.error}")
 
@@ -197,7 +197,7 @@ async def run_full_diagnostics() -> list[DiagnosticResult]:
     for dc, domains in DC_DOMAINS.items():
         ip = DC_IPS[dc][0]
         for domain in domains[:1]:  # Test first domain only
-            result = await test_websocket_connect(ip, domain)
+            result = await check_websocket_connect(ip, domain)
             results.append(result)
             log.info("  %s: %s", result.name, "✓" if result.success else f"✗ {result.error}")
 
