@@ -1884,7 +1884,7 @@ def parse_dc_ip_list(dc_ip_list: list[str]) -> dict[int, str | None]:
     Raises:
         ValueError: If any entry has invalid format
     """
-    dc_opt: dict[int, str] = {}
+    dc_opt: dict[int, str | None] = {}
     for entry in dc_ip_list:
         if ':' not in entry:
             raise ValueError(f"Invalid --dc-ip format {entry!r}, expected DC:IP")
@@ -1895,7 +1895,7 @@ def parse_dc_ip_list(dc_ip_list: list[str]) -> dict[int, str | None]:
         except (ValueError, OSError) as exc:
             raise ValueError(f"Invalid --dc-ip {entry!r}") from exc
         dc_opt[dc_n] = ip_s
-    return dc_opt
+    return dc_opt  # type: ignore[return-value]
 
 
 def run_proxy(
