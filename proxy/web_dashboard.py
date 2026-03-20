@@ -21,8 +21,8 @@ try:
     HAS_FLASK = True
 except ImportError:
     HAS_FLASK = False
-    Flask = None  # type: ignore
-    CORS = None  # type: ignore
+    Flask = None  # type: ignore[assignment, misc]
+    CORS = None  # type: ignore[assignment, misc]
 
 log = logging.getLogger('tg-web-dashboard')
 
@@ -1023,7 +1023,7 @@ class WebDashboard:
                 return jsonify(stats)
 
         @self.app.route('/api/config', methods=['GET'])
-        def api_get_config() -> Response:
+        def api_get_config() -> Response | tuple[Response, int]:
             """Get current configuration."""
             if self.update_config is None:
                 return jsonify({'error': 'Configuration updates not enabled'}), 403
@@ -1038,7 +1038,7 @@ class WebDashboard:
             return jsonify(config)
 
         @self.app.route('/api/config', methods=['POST'])
-        def api_update_config() -> tuple[Response, int] | Response:
+        def api_update_config() -> Response | tuple[Response, int]:
             """Update configuration."""
             if self.update_config is None:
                 return jsonify({'error': 'Configuration updates not enabled'}), 403
@@ -1058,7 +1058,7 @@ class WebDashboard:
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/api/qr')
-        def api_generate_qr() -> Response:
+        def api_generate_qr() -> Response | tuple[Response, int]:
             """Generate QR code for Telegram Mobile configuration."""
             try:
                 import qrcode
@@ -1175,7 +1175,7 @@ class WebDashboard:
             log.warning("Dashboard already running")
             return
 
-        def run_app():
+        def run_app() -> None:
             log.info("Starting web dashboard on http://%s:%d", self.host, self.port)
             self.app.run(
                 host=self.host,
@@ -1238,7 +1238,7 @@ def run_dashboard(
 
 if __name__ == '__main__':
     # Demo mode with mock stats
-    def mock_stats():
+    def mock_stats() -> dict:
         return {
             "connections_total": 150,
             "connections_active": 12,

@@ -723,21 +723,21 @@ def get_stats_summary() -> str:
     return Stats().summary()
 
 
-def get_dns_cache_info() -> dict:
+def get_dns_cache_info() -> dict[str, int | dict[str, dict[str, int | float]]]:
     """Get DNS cache statistics."""
     now = time.monotonic()
-    stats = {
-        "domains_cached": len(_dns_cache),
-        "entries": {}
-    }
+    entries_dict: dict[str, dict[str, int | float]] = {}
     for domain, entries in _dns_cache.items():
         valid = [(ip, exp) for ip, exp in entries if exp > now]
         if valid:
-            stats["entries"][domain] = {
+            entries_dict[domain] = {
                 "count": len(valid),
                 "ttl_remaining": max(0, valid[0][1] - now) if valid else 0
             }
-    return stats
+    return {
+        "domains_cached": len(_dns_cache),
+        "entries": entries_dict
+    }
 
 
 def clear_dns_cache() -> None:
@@ -765,7 +765,7 @@ class _WsPool:
         key = (dc, is_media)
         now = time.monotonic()
 
-        bucket = self._idle.get(key, [])
+        bucket: list[tuple[RawWebSocket, float]] = self._idle.get(key, [])
         while bucket:
             ws, created = bucket.pop(0)
             age = now - created
@@ -1051,6 +1051,8 @@ async def _bridge_ws(reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
         await _close_writer_safe(None)  # ws is RawWebSocket, not StreamWriter
         await _close_writer_safe(writer)
 
+    return up_bytes, down_bytes
+
 
 async def _bridge_tcp(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, remote_reader: asyncio.StreamReader, remote_writer: asyncio.StreamWriter,
                       label: str, stats: Stats, dc: int | None = None, dst: str | None = None, port: int | None = None,
@@ -1165,32 +1167,34 @@ async def _tcp_fallback(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
     if stats:
         stats.add_connection('tcp_fallback', dc=dc)
-    rw.write(init)
-    await rw.drain()
-    if stats:
+    if rw is not None:
+        rw.write(init)
+        await rw.drain()
+    if stats and rr is not None and rw is not None:
         await _bridge_tcp(reader, writer, rr, rw, label, stats,
                           dc=dc, dst=dst, port=port, is_media=is_media)
 
     # Return connection to pool if still valid
-    if rw and not rw.is_closing():
+    if rw is not None and not rw.is_closing() and rr is not None:
         tcp_pool.put(dst, port, rr, rw)
     else:
         # Close if not pooling
         try:
-            rw.close()
+            if rw is not None:
+                rw.close()
         except Exception:
             pass
 
     return True
 
 
-async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | None],
+async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, stats: Stats, dc_opt: dict[int, str | None],
                          ws_pool: _WsPool, ws_blacklist: set[tuple[int, bool]],
                          dc_fail_until: dict[tuple[int, bool], float],
                          auth_required: bool = False,
                          auth_credentials: dict[str, str] | None = None,
                          ip_whitelist: set[str] | None = None,
-                         dc_error_count: dict | None = None):
+                         dc_error_count: dict[tuple[int, bool], int] | None = None) -> None:
     peer = writer.get_extra_info('peername')
     client_ip = peer[0] if peer else "unknown"
     client_port = peer[1] if peer else 0
@@ -1345,8 +1349,10 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | N
 
         # Android (may be ios too) with useSecret=0 has random dc_id bytes — patch it
         if dc is None and dst in _IP_TO_DC:
-            dc, is_media = _IP_TO_DC.get(dst)
-            if dc in dc_opt:
+            dc_result = _IP_TO_DC.get(dst)
+            if dc_result is not None:
+                dc, is_media = dc_result
+            if dc is not None and dc in dc_opt:
                 init = _patch_init_dc(init, dc if is_media else -dc)
                 init_patched = True
 
@@ -1392,7 +1398,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | N
         ws_failed_redirect = False
         all_redirects = True
 
-        ws = await ws_pool.get(dc, is_media, target, domains)
+        ws = await ws_pool.get(dc, is_media, target, domains)  # type: ignore[arg-type]
         if ws:
             log.info("%s DC%d%s (%s:%d) -> pool hit via %s",
                      label, dc, media_tag, dst, port, target)
@@ -1402,7 +1408,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | N
                 log.info("%s DC%d%s (%s:%d) -> %s via %s",
                          label, dc, media_tag, dst, port, url, target)
                 try:
-                    ws = await RawWebSocket.connect(target, domain,
+                    ws = await RawWebSocket.connect(target, domain,  # type: ignore[arg-type]
                                                     timeout=10)
                     all_redirects = False
                     break
@@ -1411,7 +1417,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | N
                     # Notify about error
                     if _on_client_error_callback:
                         try:
-                            _on_client_error_callback(dc, dst, port, "websocket_handshake", str(exc))
+                            _on_client_error_callback(dc, dst, port, "websocket_handshake", str(exc))  # type: ignore[arg-type]
                         except Exception:
                             pass
                     if exc.is_redirect:
@@ -1430,7 +1436,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | N
                     # Notify about error
                     if _on_client_error_callback:
                         try:
-                            _on_client_error_callback(dc, dst, port, "websocket_connect", str(exc))
+                            _on_client_error_callback(dc, dst, port, "websocket_connect", str(exc))  # type: ignore[arg-type]
                         except Exception:
                             pass
                     all_redirects = False
@@ -1492,7 +1498,7 @@ async def _handle_client(reader, writer, stats: Stats, dc_opt: dict[int, str | N
         # Notify about client connection
         if _on_client_connect_callback:
             try:
-                _on_client_connect_callback(dc, dst, port)
+                _on_client_connect_callback(dc, dst, port)  # type: ignore[arg-type]
             except Exception:
                 pass
 
@@ -1535,10 +1541,11 @@ def _handle_client_error(label: str) -> None:
         log.error("%s unexpected error: %s", label, exc)
 
 
-def _close_client_writer(writer) -> None:
+def _close_client_writer(writer: asyncio.StreamWriter | None) -> None:
     """Safely close client writer connection."""
     try:
-        writer.close()
+        if writer is not None:
+            writer.close()
     except Exception:
         pass
 
@@ -1548,7 +1555,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
                host: str = '127.0.0.1',
                auth_required: bool = False,
                auth_credentials: dict[str, str] | None = None,
-               ip_whitelist: list[str] | None = None):
+               ip_whitelist: list[str] | None = None) -> None:
     global _server_instance
 
     # Create proxy server instance with encapsulated state
@@ -1556,7 +1563,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
     _server_instance = server_instance
 
     # Create a wrapper for _handle_client that passes server state
-    async def handle_client_wrapper(reader, writer):
+    async def handle_client_wrapper(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         await _handle_client(
             reader, writer,
             stats=server_instance.stats,
@@ -1600,7 +1607,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
 
     # Log optimal DC selection
     if dc_pings:
-        best_dc = min(dc_pings, key=dc_pings.get)
+        best_dc = min(dc_pings, key=lambda x: dc_pings[x])
         log.info("Optimal DC selected: DC%d (%.1fms)", best_dc, dc_pings[best_dc])
     else:
         log.warning("Could not measure DC latency - will use default routing")
@@ -1615,7 +1622,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
     if dc_pings:
         log.info("  DC Latency:")
         for dc_id, latency in sorted(dc_pings.items()):
-            marker = " ✓" if dc_id == min(dc_pings, key=dc_pings.get) else ""
+            marker = " ✓" if dc_id == min(dc_pings, key=lambda x: dc_pings[x]) else ""
             log.info("    DC%d: %.1fms%s", dc_id, latency, marker)
     log.info("=" * 60)
     log.info("  Configure Telegram Desktop:")
@@ -1625,7 +1632,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
         log.info("    SOCKS5 proxy -> %s:%d  (no user/pass)", host, port)
     log.info("=" * 60)
 
-    async def log_stats():
+    async def log_stats() -> None:
         while True:
             await asyncio.sleep(60)
             bl = ', '.join(
@@ -1640,7 +1647,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
     _high_latency_threshold = 200.0  # ms
     _alert_cooldown = 300.0  # 5 minutes between alerts for same DC
 
-    async def monitor_dc_latency():
+    async def monitor_dc_latency() -> None:
         """Periodically re-measure DC latency to adapt to network changes."""
         nonlocal _last_latency_alert
         while True:
@@ -1668,13 +1675,13 @@ async def _run(port: int, dc_opt: dict[int, str | None],
                                    dc_id, latency_ms, _high_latency_threshold)
 
             if dc_pings:
-                best_dc = min(dc_pings, key=dc_pings.get)
+                best_dc = min(dc_pings, key=lambda x: dc_pings[x])
                 log.info("DC latency updated - best: DC%d (%.1fms)", best_dc, dc_pings[best_dc])
 
     asyncio.create_task(monitor_dc_latency())
 
     # Background task for dynamic pool optimization
-    async def optimize_pool():
+    async def optimize_pool() -> None:
         """Periodically optimize WebSocket pool size."""
         while True:
             await asyncio.sleep(30)  # Check every 30 seconds
@@ -1686,7 +1693,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
     asyncio.create_task(optimize_pool())
 
     # Background task for DNS cache cleanup
-    async def cleanup_dns_cache():
+    async def cleanup_dns_cache() -> None:
         """Periodically clean expired DNS cache entries."""
         while True:
             await asyncio.sleep(300)  # Check every 5 minutes
@@ -1711,7 +1718,7 @@ async def _run(port: int, dc_opt: dict[int, str | None],
     await server_instance.ws_pool.warmup(dc_opt)
 
     if stop_event:
-        async def wait_stop():
+        async def wait_stop() -> None:
             await stop_event.wait()
             log.info("Graceful shutdown initiated...")
 
@@ -1790,7 +1797,7 @@ def run_proxy(
         auth_required: Require username/password authentication
         auth_credentials: Dict with 'username' and 'password' keys
     """
-    asyncio.run(_run(port, dc_opt, stop_event, host, auth_required, auth_credentials))
+    asyncio.run(_run(port, dc_opt, stop_event, host, auth_required, auth_credentials))  # type: ignore[arg-type]
 
 
 def main() -> None:
@@ -1836,7 +1843,7 @@ def main() -> None:
     try:
         asyncio.run(_run(args.port, dc_opt, host=args.host,
                         auth_required=args.auth,
-                        auth_credentials=auth_credentials))
+                        auth_credentials=auth_credentials))  # type: ignore[arg-type]
     except KeyboardInterrupt:
         log.info("Shutting down. Final stats: %s", get_stats_summary())
 
