@@ -12,7 +12,8 @@
 - [x] Исправлены ruff предупреждения (W291, W293, F401, F402)
 - [x] Установлены missing stubs: types-psutil, types-qrcode, types-Flask-Cors, types-pyperclip
 - [x] Исправлены mypy ошибки в tg_ws_proxy.py, mtproto_proxy.py, web_dashboard.py, crypto.py
-- [x] Mypy: 1 ошибка (rich.typing stubs не существует)
+- [x] Mypy: ~10 ошибок (только missing stubs - не критично)
+- [x] Ruff: 127 ошибок (whitespace, требуют unsafe-fixes)
 
 ### Тесты и покрытие
 - [ ] Покрытие tg_ws_proxy.py: 19% → 60%
@@ -21,7 +22,7 @@
   - [ ] Тесты для TCP fallback логики
   - [ ] Тесты для callbacks уведомлений
 - [ ] Load tests (100+ одновременных подключений)
-- [ ] Coverage > 80% (текущее ~46%)
+- [ ] Coverage > 80% (текущее ~48%)
 
 ---
 
@@ -123,8 +124,8 @@
 ## 📊 Статус тестов
 
 ```
-Tests: 236 passed, 3 skipped, 0 errors
-Coverage: ~46% (цель >80%)
+Tests: 243 passed, 3 skipped
+Coverage: ~48% (цель >80%)
 ```
 
 **Проблемные зоны:**
@@ -136,10 +137,12 @@ Coverage: ~46% (цель >80%)
 **Исправлено в v2.18.0:**
 - ✅ Переименованы функции в `diagnostics.py`: `test_*` → `check_*`
 - ✅ Обновлены импорты и вызовы в `test_diagnostics.py`
-- ✅ Тесты запускаются без ошибок (236 passed, 3 skipped, 0 errors)
-- ✅ Mypy ошибки: ~30 → 1 (rich.typing stubs не существует)
-- ✅ Ruff предупреждения: исправлены все
+- ✅ Тесты запускаются без ошибок (243 passed, 3 skipped)
+- ✅ Mypy ошибки: ~50 → ~10 (только missing stubs)
+- ✅ Ruff ошибки: 128 → 127 (whitespace)
 - ✅ Установлены missing stubs
+- ✅ Добавлены расширенные функции мониторинга в stats.py
+- ✅ Добавлены тесты для health status и CSV экспорта
 
 ---
 
