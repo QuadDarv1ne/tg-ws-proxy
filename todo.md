@@ -145,9 +145,9 @@
 ### Код-качество
 - [x] Исправить ruff нарушения (682 → 0 ✅)
 - [x] Добавить type hints в profiler.py ✅
-- [x] Увеличить coverage тестов (20% → 44% ✅, цель >80%)
-- [x] Исправить mypy ошибки (146 → 128 ✅)
-- [ ] Пройти mypy без ошибок (остались missing stubs: flask_cors, qrcode; сложные типы в dashboard.py, web_dashboard.py, tray.py)
+- [x] Увеличить coverage тестов (20% → 46% ✅, цель >80%)
+- [x] Исправить mypy ошибки (146 → ~30 ✅)
+- [ ] Пройти mypy без ошибок (остались missing stubs: flask_cors, qrcode; сложные типы в dashboard.py, web_dashboard.py, tray.py, tg_ws_proxy.py)
 
 ### Документация (без запроса не менять)
 - [ ] Скриншоты интерфейса — README.md
@@ -200,8 +200,10 @@ pyinstaller>=5.0.0
 - ✅ Daily summary при закрытии
 
 ### v2.16.0 (В разработке)
+- [x] Увеличение coverage тестов (44% → 46%)
+- [x] Исправление mypy ошибок (частично, ~30 осталось)
 - [ ] Load tests — сценарии нагрузки
-- [ ] Coverage > 80% — текущее покрытие ~44%
+- [ ] Coverage > 80% — текущее покрытие ~46%
 - [ ] Пройти mypy без ошибок (остались missing stubs и сложные типы)
 
 ### v2.17.0 (Планируется)
