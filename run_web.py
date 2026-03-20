@@ -8,14 +8,14 @@
 Откройте в браузере: http://localhost:8080
 """
 
-import sys
 import os
+import sys
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from proxy.web_dashboard import WebDashboard
 from proxy.stats import Stats
+from proxy.web_dashboard import WebDashboard
 
 # Create stats instance
 stats = Stats()

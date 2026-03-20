@@ -10,9 +10,9 @@ from proxy.diagnostics import (
     DC_IPS,
     DiagnosticResult,
     check_dns_resolve,
-    print_diagnostics_report,
     check_tcp_connect,
     check_websocket_connect,
+    print_diagnostics_report,
 )
 
 

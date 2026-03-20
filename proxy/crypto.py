@@ -21,7 +21,6 @@ import secrets
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -46,7 +45,7 @@ class EncryptedData:
     """Container for encrypted data with metadata."""
     ciphertext: bytes
     nonce: bytes
-    tag: Optional[bytes] = None  # Authentication tag for AEAD
+    tag: bytes | None = None  # Authentication tag for AEAD
     algorithm: EncryptionType = EncryptionType.AES_256_GCM
 
 
@@ -93,16 +92,16 @@ class BaseCipher(ABC):
 class AES256GCMCipher(BaseCipher):
     """
     AES-256-GCM (Galois/Counter Mode).
-    
+
     ✅ Authenticated encryption (AEAD)
     ✅ High performance with AES-NI
     ✅ Widely supported standard
     ✅ Recommended for most use cases
-    
+
     Performance: ~100-500 MB/s with AES-NI
     """
 
-    def __init__(self, key: Optional[bytes] = None):
+    def __init__(self, key: bytes | None = None):
         if key is None:
             key = secrets.token_bytes(32)
         elif len(key) != 32:
@@ -160,7 +159,7 @@ class AES256GCMCipher(BaseCipher):
             plaintext = decryptor.update(encrypted.ciphertext) + decryptor.finalize()
             return plaintext
         except Exception as e:
-            raise DecryptionError(f"Authentication failed: {e}")
+            raise DecryptionError(f"Authentication failed: {e}") from e
 
     def rotate_key(self) -> None:
         """Generate new random key."""
@@ -172,17 +171,17 @@ class AES256GCMCipher(BaseCipher):
 class ChaCha20Poly1305Cipher(BaseCipher):
     """
     ChaCha20-Poly1305.
-    
+
     ✅ Authenticated encryption (AEAD)
     ✅ Excellent software performance
     ✅ No timing attacks (constant-time)
     ✅ Best choice for mobile/ARM devices
     ✅ Resistant to cache-timing attacks
-    
+
     Performance: ~150-300 MB/s (software implementation)
     """
 
-    def __init__(self, key: Optional[bytes] = None):
+    def __init__(self, key: bytes | None = None):
         if key is None:
             key = secrets.token_bytes(32)
         elif len(key) != 32:
@@ -231,7 +230,7 @@ class ChaCha20Poly1305Cipher(BaseCipher):
             plaintext = decryptor.update(encrypted.ciphertext) + decryptor.finalize()
             return plaintext
         except Exception as e:
-            raise DecryptionError(f"Decryption failed: {e}")
+            raise DecryptionError(f"Decryption failed: {e}") from e
 
     def rotate_key(self) -> None:
         """Generate new random key."""
@@ -243,17 +242,17 @@ class ChaCha20Poly1305Cipher(BaseCipher):
 class XChaCha20Poly1305Cipher(BaseCipher):
     """
     XChaCha20-Poly1305 (Extended-nonce ChaCha20).
-    
+
     ✅ 192-bit nonce (safe for random generation)
     ✅ Authenticated encryption
     ✅ Best for long-term keys
     ✅ Safe for stateless protocols
     ✅ No nonce-reuse concerns
-    
+
     Use case: Long sessions, distributed systems
     """
 
-    def __init__(self, key: Optional[bytes] = None):
+    def __init__(self, key: bytes | None = None):
         if key is None:
             key = secrets.token_bytes(32)
         elif len(key) != 32:
@@ -329,7 +328,7 @@ class XChaCha20Poly1305Cipher(BaseCipher):
             plaintext = decryptor.update(encrypted.ciphertext) + decryptor.finalize()
             return plaintext
         except Exception as e:
-            raise DecryptionError(f"Decryption failed: {e}")
+            raise DecryptionError(f"Decryption failed: {e}") from e
 
     def rotate_key(self) -> None:
         """Generate new random key."""
@@ -341,17 +340,17 @@ class XChaCha20Poly1305Cipher(BaseCipher):
 class AES256CTRStream(BaseCipher):
     """
     AES-256-CTR (Counter Mode).
-    
+
     ⚠️ No authentication (use with HMAC)
     ✅ Stream cipher (encrypt any size)
     ✅ Parallelizable encryption/decryption
     ✅ Random access decryption
     ✅ No padding required
-    
+
     Use case: Stream encryption, performance-critical paths
     """
 
-    def __init__(self, key: Optional[bytes] = None, use_hmac: bool = True):
+    def __init__(self, key: bytes | None = None, use_hmac: bool = True):
         if key is None:
             key = secrets.token_bytes(32)
         elif len(key) != 32:
@@ -430,12 +429,12 @@ class AES256CTRStream(BaseCipher):
 class MTProtoIGECipher(BaseCipher):
     """
     MTProto IGE (Infinite Garble Extension) Mode.
-    
+
     ⚠️ Legacy mode for MTProto compatibility
     ⚠️ Not recommended for new applications
     ✅ Required for Telegram protocol compatibility
     ✅ Encrypts with authentication
-    
+
     Use case: MTProto proxy, Telegram protocol
     """
 
@@ -536,7 +535,7 @@ class MTProtoIGECipher(BaseCipher):
 class CryptoManager:
     """
     High-level cryptographic manager.
-    
+
     Features:
     - Algorithm negotiation
     - Key derivation from passwords
@@ -545,10 +544,10 @@ class CryptoManager:
     - Performance optimization
     """
 
-    def __init__(self, config: Optional[CryptoConfig] = None):
+    def __init__(self, config: CryptoConfig | None = None):
         self.config = config or CryptoConfig()
         self._ciphers: dict[EncryptionType, BaseCipher] = {}
-        self._active_cipher: Optional[BaseCipher] = None
+        self._active_cipher: BaseCipher | None = None
         self._initialize_ciphers()
 
     def _initialize_ciphers(self) -> None:
@@ -595,14 +594,14 @@ class CryptoManager:
     @staticmethod
     def derive_key_from_password(
         password: str,
-        salt: Optional[bytes] = None,
+        salt: bytes | None = None,
         iterations: int = 100_000,
         key_size: int = 32,
         method: str = 'hkdf'
     ) -> tuple[bytes, bytes]:
         """
         Derive encryption key from password.
-        
+
         Returns:
             Tuple of (derived_key, salt)
         """
@@ -673,7 +672,7 @@ class CryptoManager:
 
 
 # Convenience functions for quick encryption
-def encrypt_aes256gcm(plaintext: bytes, key: Optional[bytes] = None) -> EncryptedData:
+def encrypt_aes256gcm(plaintext: bytes, key: bytes | None = None) -> EncryptedData:
     """Quick AES-256-GCM encryption."""
     cipher = AES256GCMCipher(key)
     return cipher.encrypt(plaintext)
@@ -685,7 +684,7 @@ def decrypt_aes256gcm(encrypted: EncryptedData, key: bytes) -> bytes:
     return cipher.decrypt(encrypted)
 
 
-def encrypt_chacha20(plaintext: bytes, key: Optional[bytes] = None) -> EncryptedData:
+def encrypt_chacha20(plaintext: bytes, key: bytes | None = None) -> EncryptedData:
     """Quick ChaCha20-Poly1305 encryption."""
     cipher = ChaCha20Poly1305Cipher(key)
     return cipher.encrypt(plaintext)

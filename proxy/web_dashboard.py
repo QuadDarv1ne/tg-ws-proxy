@@ -267,7 +267,7 @@ DASHBOARD_HTML = """
             left: 0;
             width: 100%;
             height: 100%;
-            background-image: 
+            background-image:
                 radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
                 radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.15) 0%, transparent 50%),
                 radial-gradient(circle at 40% 20%, rgba(16, 185, 129, 0.1) 0%, transparent 40%);
@@ -420,15 +420,15 @@ DASHBOARD_HTML = """
             box-shadow: 0 0 20px currentColor;
         }
 
-        .status-indicator.online { 
+        .status-indicator.online {
             background: var(--success);
             color: var(--success);
         }
-        .status-indicator.degraded { 
+        .status-indicator.degraded {
             background: var(--warning);
             color: var(--warning);
         }
-        .status-indicator.offline { 
+        .status-indicator.offline {
             background: var(--danger);
             color: var(--danger);
         }
@@ -540,40 +540,40 @@ DASHBOARD_HTML = """
             transform: scale(1.1) rotate(-5deg);
         }
 
-        .stat-icon.blue { 
-            background: linear-gradient(135deg, #dbeafe, #bfdbfe); 
+        .stat-icon.blue {
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
             color: #3b82f6;
             box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
         }
-        .stat-icon.green { 
-            background: linear-gradient(135deg, #d1fae5, #a7f3d0); 
+        .stat-icon.green {
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
             color: #10b981;
             box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
         }
-        .stat-icon.purple { 
-            background: linear-gradient(135deg, #e9d5ff, #d8b4fe); 
+        .stat-icon.purple {
+            background: linear-gradient(135deg, #e9d5ff, #d8b4fe);
             color: #a855f7;
             box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
         }
-        .stat-icon.orange { 
-            background: linear-gradient(135deg, #fed7aa, #fdba74); 
+        .stat-icon.orange {
+            background: linear-gradient(135deg, #fed7aa, #fdba74);
             color: #f97316;
             box-shadow: 0 4px 15px rgba(249, 115, 22, 0.3);
         }
 
-        [data-theme="dark"] .stat-icon.blue { 
+        [data-theme="dark"] .stat-icon.blue {
             background: linear-gradient(135deg, #1e3a5f, #0f2744);
             box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
         }
-        [data-theme="dark"] .stat-icon.green { 
+        [data-theme="dark"] .stat-icon.green {
             background: linear-gradient(135deg, #064e3b, #042f2e);
             box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
         }
-        [data-theme="dark"] .stat-icon.purple { 
+        [data-theme="dark"] .stat-icon.purple {
             background: linear-gradient(135deg, #4c1d95, #3b166e);
             box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
         }
-        [data-theme="dark"] .stat-icon.orange { 
+        [data-theme="dark"] .stat-icon.orange {
             background: linear-gradient(135deg, #7c2d12, #5c2310);
             box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
         }
@@ -614,11 +614,11 @@ DASHBOARD_HTML = """
             background: var(--bg-secondary);
         }
 
-        .stat-change.positive { 
+        .stat-change.positive {
             color: var(--success);
             background: rgba(16, 185, 129, 0.1);
         }
-        .stat-change.negative { 
+        .stat-change.negative {
             color: var(--danger);
             background: rgba(239, 68, 68, 0.1);
         }
@@ -730,31 +730,31 @@ DASHBOARD_HTML = """
             letter-spacing: 0.5px;
         }
 
-        .status-badge.ok { 
-            background: linear-gradient(135deg, #d1fae5, #a7f3d0); 
+        .status-badge.ok {
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
             color: #059669;
             box-shadow: 0 2px 10px rgba(16, 185, 129, 0.2);
         }
-        .status-badge.degraded { 
-            background: linear-gradient(135deg, #fef3c7, #fde68a); 
+        .status-badge.degraded {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
             color: #d97706;
             box-shadow: 0 2px 10px rgba(245, 158, 11, 0.2);
         }
-        .status-badge.error { 
-            background: linear-gradient(135deg, #fee2e2, #fecaca); 
+        .status-badge.error {
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
             color: #dc2626;
             box-shadow: 0 2px 10px rgba(239, 68, 68, 0.2);
         }
 
-        [data-theme="dark"] .status-badge.ok { 
+        [data-theme="dark"] .status-badge.ok {
             background: linear-gradient(135deg, #064e3b, #042f2e);
             color: #6ee7b7;
         }
-        [data-theme="dark"] .status-badge.degraded { 
+        [data-theme="dark"] .status-badge.degraded {
             background: linear-gradient(135deg, #7c2d12, #5c2310);
             color: #fcd34d;
         }
-        [data-theme="dark"] .status-badge.error { 
+        [data-theme="dark"] .status-badge.error {
             background: linear-gradient(135deg, #7f1d1d, #5c1818);
             color: #fca5a5;
         }
@@ -997,11 +997,11 @@ DASHBOARD_HTML = """
         }
 
         @keyframes slideDown {
-            from { 
+            from {
                 opacity: 0;
                 transform: translateX(-50%) translateY(-50px);
             }
-            to { 
+            to {
                 opacity: 1;
                 transform: translateX(-50%) translateY(0);
             }
@@ -1406,7 +1406,7 @@ DASHBOARD_HTML = """
         let deferredPrompt = null;
         let previousStats = null;
         let autoRefreshInterval = null;
-        
+
         // Traffic chart state
         let trafficHistory = {
             labels: [],
@@ -1456,17 +1456,17 @@ DASHBOARD_HTML = """
         function animateNumber(element, start, end, duration = 500) {
             const startTime = performance.now();
             const increment = end > start ? Math.ceil((end - start) / (duration / 16)) : 0;
-            
+
             function update(currentTime) {
                 const elapsed = currentTime - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-                
+
                 // Easing function
                 const easeOutQuart = 1 - Math.pow(1 - progress, 4);
                 const current = start + (end - start) * easeOutQuart;
-                
+
                 element.textContent = Math.floor(current).toLocaleString();
-                
+
                 if (progress < 1) {
                     requestAnimationFrame(update);
                 } else {
@@ -1474,7 +1474,7 @@ DASHBOARD_HTML = """
                     element.classList.remove('counting');
                 }
             }
-            
+
             element.classList.add('counting');
             requestAnimationFrame(update);
         }
@@ -1526,13 +1526,13 @@ DASHBOARD_HTML = """
         // Toast notification
         function showToast(message, type = 'info') {
             const toast = document.createElement('div');
-            
+
             const colors = {
                 success: 'linear-gradient(135deg, #10b981, #059669)',
                 error: 'linear-gradient(135deg, #ef4444, #dc2626)',
                 info: 'linear-gradient(135deg, var(--primary), var(--secondary))'
             };
-            
+
             toast.style.cssText = `
                 position: fixed;
                 top: 30px;
@@ -1561,9 +1561,9 @@ DASHBOARD_HTML = """
         function initTrafficChart() {
             const canvas = document.getElementById('traffic-chart');
             if (!canvas) return;
-            
+
             trafficChartCtx = canvas.getContext('2d');
-            
+
             // Handle resize
             const resizeObserver = new ResizeObserver(() => {
                 const rect = canvas.parentElement.getBoundingClientRect();
@@ -1579,7 +1579,7 @@ DASHBOARD_HTML = """
 
         function drawTrafficChart() {
             if (!trafficChartCtx) return;
-            
+
             const canvas = document.getElementById('traffic-chart');
             const ctx = trafficChartCtx;
             const width = canvas.parentElement.getBoundingClientRect().width;
@@ -1587,15 +1587,15 @@ DASHBOARD_HTML = """
             const padding = { top: 20, right: 20, bottom: 40, left: 60 };
             const chartWidth = width - padding.left - padding.right;
             const chartHeight = height - padding.top - padding.bottom;
-            
+
             // Clear canvas
             ctx.clearRect(0, 0, width, height);
-            
+
             // Get theme colors
             const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
             const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
             const textColor = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
-            
+
             // Draw grid
             ctx.strokeStyle = gridColor;
             ctx.lineWidth = 1;
@@ -1606,7 +1606,7 @@ DASHBOARD_HTML = """
                 ctx.lineTo(width - padding.right, y);
                 ctx.stroke();
             }
-            
+
             // Draw Y-axis labels
             ctx.fillStyle = textColor;
             ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
@@ -1617,7 +1617,7 @@ DASHBOARD_HTML = """
                 const value = maxValue - (maxValue / 5) * i;
                 ctx.fillText(humanBytes(value), padding.left - 10, y + 4);
             }
-            
+
             // Draw X-axis labels
             ctx.textAlign = 'center';
             const labelStep = Math.max(1, Math.floor(trafficHistory.labels.length / 10));
@@ -1625,54 +1625,54 @@ DASHBOARD_HTML = """
                 const x = padding.left + (chartWidth / (trafficHistory.labels.length - 1 || 1)) * i;
                 ctx.fillText(trafficHistory.labels[i], x, height - 10);
             }
-            
+
             // Draw gradient areas
             const drawArea = (data, colorStart, colorEnd) => {
                 if (data.length < 2) return;
-                
+
                 const gradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
                 gradient.addColorStop(0, colorStart);
                 gradient.addColorStop(1, colorEnd);
-                
+
                 ctx.beginPath();
                 ctx.moveTo(padding.left, height - padding.bottom);
-                
+
                 data.forEach((value, i) => {
                     const x = padding.left + (chartWidth / (data.length - 1 || 1)) * i;
                     const y = padding.top + chartHeight - (value / maxValue) * chartHeight;
                     ctx.lineTo(x, y);
                 });
-                
+
                 ctx.lineTo(padding.left + chartWidth, height - padding.bottom);
                 ctx.closePath();
                 ctx.fillStyle = gradient;
                 ctx.fill();
             };
-            
+
             // Draw lines
             const drawLine = (data, color, lineWidth = 3) => {
                 if (data.length < 2) return;
-                
+
                 ctx.beginPath();
                 ctx.strokeStyle = color;
                 ctx.lineWidth = lineWidth;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
-                
+
                 data.forEach((value, i) => {
                     const x = padding.left + (chartWidth / (data.length - 1 || 1)) * i;
                     const y = padding.top + chartHeight - (value / maxValue) * chartHeight;
-                    
+
                     if (i === 0) {
                         ctx.moveTo(x, y);
                     } else {
                         ctx.lineTo(x, y);
                     }
                 });
-                
+
                 ctx.stroke();
             };
-            
+
             // Draw upload area and line
             drawArea(
                 trafficHistory.upload,
@@ -1680,7 +1680,7 @@ DASHBOARD_HTML = """
                 'rgba(59, 130, 246, 0.05)'
             );
             drawLine(trafficHistory.upload, '#3b82f6', 3);
-            
+
             // Draw download area and line
             drawArea(
                 trafficHistory.download,
@@ -1692,15 +1692,15 @@ DASHBOARD_HTML = """
 
         function updateTrafficChart(bytesUp, bytesDown) {
             const now = new Date();
-            const timeLabel = now.getHours().toString().padStart(2, '0') + ':' + 
-                             now.getMinutes().toString().padStart(2, '0') + ':' + 
+            const timeLabel = now.getHours().toString().padStart(2, '0') + ':' +
+                             now.getMinutes().toString().padStart(2, '0') + ':' +
                              now.getSeconds().toString().padStart(2, '0');
-            
+
             // Add new data point
             trafficHistory.labels.push(timeLabel);
             trafficHistory.upload.push(bytesUp);
             trafficHistory.download.push(bytesDown);
-            
+
             // Keep only last 30 data points
             const maxPoints = 30;
             if (trafficHistory.labels.length > maxPoints) {
@@ -1708,7 +1708,7 @@ DASHBOARD_HTML = """
                 trafficHistory.upload.shift();
                 trafficHistory.download.shift();
             }
-            
+
             // Animate chart update
             if (animationFrame) {
                 cancelAnimationFrame(animationFrame);
@@ -1722,9 +1722,9 @@ DASHBOARD_HTML = """
         function initPerformanceChart() {
             const canvas = document.getElementById('performance-chart');
             if (!canvas) return;
-            
+
             performanceChartCtx = canvas.getContext('2d');
-            
+
             const resizeObserver = new ResizeObserver(() => {
                 const rect = canvas.parentElement.getBoundingClientRect();
                 canvas.width = rect.width * window.devicePixelRatio;
@@ -1739,7 +1739,7 @@ DASHBOARD_HTML = """
 
         function drawPerformanceChart() {
             if (!performanceChartCtx) return;
-            
+
             const canvas = document.getElementById('performance-chart');
             const ctx = performanceChartCtx;
             const width = canvas.parentElement.getBoundingClientRect().width;
@@ -1747,13 +1747,13 @@ DASHBOARD_HTML = """
             const padding = { top: 20, right: 20, bottom: 40, left: 60 };
             const chartWidth = width - padding.left - padding.right;
             const chartHeight = height - padding.top - padding.bottom;
-            
+
             ctx.clearRect(0, 0, width, height);
-            
+
             const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
             const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
             const textColor = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
-            
+
             // Draw grid
             ctx.strokeStyle = gridColor;
             ctx.lineWidth = 1;
@@ -1764,7 +1764,7 @@ DASHBOARD_HTML = """
                 ctx.lineTo(width - padding.right, y);
                 ctx.stroke();
             }
-            
+
             // Draw Y-axis labels (percentage)
             ctx.fillStyle = textColor;
             ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
@@ -1774,7 +1774,7 @@ DASHBOARD_HTML = """
                 const percent = 100 - (i * 20);
                 ctx.fillText(percent + '%', padding.left - 10, y + 4);
             }
-            
+
             // Draw X-axis labels
             ctx.textAlign = 'center';
             const labelStep = Math.max(1, Math.floor(performanceHistory.labels.length / 10));
@@ -1782,74 +1782,74 @@ DASHBOARD_HTML = """
                 const x = padding.left + (chartWidth / (performanceHistory.labels.length - 1 || 1)) * i;
                 ctx.fillText(performanceHistory.labels[i], x, height - 10);
             }
-            
+
             // Draw CPU area and line
             const drawArea = (data, colorStart, colorEnd) => {
                 if (data.length < 2) return;
-                
+
                 const gradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
                 gradient.addColorStop(0, colorStart);
                 gradient.addColorStop(1, colorEnd);
-                
+
                 ctx.beginPath();
                 ctx.moveTo(padding.left, height - padding.bottom);
-                
+
                 data.forEach((value, i) => {
                     const x = padding.left + (chartWidth / (data.length - 1 || 1)) * i;
                     const y = padding.top + chartHeight - (value / 100) * chartHeight;
                     ctx.lineTo(x, y);
                 });
-                
+
                 ctx.lineTo(padding.left + chartWidth, height - padding.bottom);
                 ctx.closePath();
                 ctx.fillStyle = gradient;
                 ctx.fill();
             };
-            
+
             const drawLine = (data, color, lineWidth = 3) => {
                 if (data.length < 2) return;
-                
+
                 ctx.beginPath();
                 ctx.strokeStyle = color;
                 ctx.lineWidth = lineWidth;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
-                
+
                 data.forEach((value, i) => {
                     const x = padding.left + (chartWidth / (data.length - 1 || 1)) * i;
                     const y = padding.top + chartHeight - (value / 100) * chartHeight;
-                    
+
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 });
-                
+
                 ctx.stroke();
             };
-            
+
             drawArea(performanceHistory.cpu, 'rgba(245, 158, 11, 0.3)', 'rgba(245, 158, 11, 0.05)');
             drawLine(performanceHistory.cpu, '#f59e0b', 3);
-            
+
             drawArea(performanceHistory.memory, 'rgba(59, 130, 246, 0.3)', 'rgba(59, 130, 246, 0.05)');
             drawLine(performanceHistory.memory, '#3b82f6', 3);
         }
 
         function updatePerformanceChart(cpuPercent, memoryMb) {
             const now = new Date();
-            const timeLabel = now.getHours().toString().padStart(2, '0') + ':' + 
-                             now.getMinutes().toString().padStart(2, '0') + ':' + 
+            const timeLabel = now.getHours().toString().padStart(2, '0') + ':' +
+                             now.getMinutes().toString().padStart(2, '0') + ':' +
                              now.getSeconds().toString().padStart(2, '0');
-            
+
             performanceHistory.labels.push(timeLabel);
             performanceHistory.cpu.push(cpuPercent);
             performanceHistory.memory.push(memoryMb);
-            
+
             const maxPoints = 30;
             if (performanceHistory.labels.length > maxPoints) {
                 performanceHistory.labels.shift();
                 performanceHistory.cpu.shift();
                 performanceHistory.memory.shift();
             }
-            
+
             requestAnimationFrame(() => drawPerformanceChart());
         }
 
@@ -1913,10 +1913,10 @@ DASHBOARD_HTML = """
                 const perf = stats.performance || {};
                 const cpuPercent = perf.cpu_percent || 0;
                 const memoryMb = Math.round((perf.memory_bytes || 0) / (1024 * 1024));
-                
+
                 const cpuEl = document.getElementById('cpu-usage');
                 const memEl = document.getElementById('memory-usage');
-                
+
                 if (cpuEl) {
                     cpuEl.textContent = cpuPercent.toFixed(1) + '%';
                     const cpuChange = document.getElementById('cpu-change');
@@ -1933,7 +1933,7 @@ DASHBOARD_HTML = """
                         }
                     }
                 }
-                
+
                 if (memEl) {
                     memEl.textContent = memoryMb + ' MB';
                     const memChange = document.getElementById('memory-change');
@@ -2004,7 +2004,7 @@ DASHBOARD_HTML = """
             const indicator = document.getElementById('status-indicator');
             const text = document.getElementById('status-text');
             const subtext = document.getElementById('status-subtext');
-            
+
             if (wsErrors < 5) {
                 indicator.className = 'status-indicator online';
                 text.textContent = 'Работает нормально';
@@ -2027,21 +2027,21 @@ DASHBOARD_HTML = """
                     method: 'GET',
                     headers: { 'Accept': 'application/json' }
                 });
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                
+
                 const data = await response.json();
-                
+
                 const list = document.getElementById('dc-list');
                 list.innerHTML = '';
-                
+
                 (data.dc_stats || []).forEach(dc => {
                     const connections = dc.connections || 0;
                     const errors = dc.errors || 0;
                     const errorRate = connections > 0 ? (errors / connections * 100) : 0;
-                    
+
                     let statusClass = 'ok';
                     let statusText = 'OK';
                     if (errorRate > 30) {
@@ -2051,7 +2051,7 @@ DASHBOARD_HTML = """
                         statusClass = 'degraded';
                         statusText = 'Проблемы';
                     }
-                    
+
                     const item = document.createElement('div');
                     item.className = 'dc-item';
                     item.innerHTML = `
@@ -2068,7 +2068,7 @@ DASHBOARD_HTML = """
                     `;
                     list.appendChild(item);
                 });
-                
+
             } catch (error) {
                 console.error('Failed to load DC stats:', error);
             }
@@ -2151,10 +2151,10 @@ DASHBOARD_HTML = """
 
             // Initialize traffic chart
             initTrafficChart();
-            
+
             // Initialize performance chart
             initPerformanceChart();
-            
+
             loadStats().then(() => {
                 if (loadTimeout) clearTimeout(loadTimeout);
             });

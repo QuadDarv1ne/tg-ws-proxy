@@ -6,7 +6,6 @@ Author: Dupley Maxim Igorevich
 © 2026 Dupley Maxim Igorevich. All rights reserved.
 """
 
-import os
 import shutil
 from pathlib import Path
 
@@ -26,7 +25,7 @@ def generate_icons():
     # Source icon
     project_root = Path(__file__).parent
     icon_ico = project_root / "icon.ico"
-    
+
     if not icon_ico.exists():
         print(f"icon.ico not found at {icon_ico}")
         return False

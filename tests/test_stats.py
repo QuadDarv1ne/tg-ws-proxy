@@ -363,20 +363,20 @@ class TestStatsHealthStatus:
     def test_get_pool_efficiency(self):
         """Test pool efficiency calculation."""
         stats = Stats()
-        
+
         # Empty pool
         assert stats.get_pool_efficiency() == 1.0
-        
+
         # 100% efficiency
         stats.pool_hits = 100
         stats.pool_misses = 0
         assert stats.get_pool_efficiency() == 1.0
-        
+
         # 80% efficiency
         stats.pool_hits = 80
         stats.pool_misses = 20
         assert stats.get_pool_efficiency() == 0.8
-        
+
         # 50% efficiency
         stats.pool_hits = 50
         stats.pool_misses = 50
@@ -385,20 +385,20 @@ class TestStatsHealthStatus:
     def test_get_error_rate(self):
         """Test error rate calculation."""
         stats = Stats()
-        
+
         # Empty
         assert stats.get_error_rate() == 0.0
-        
+
         # No errors
         stats.connections_total = 100
         stats.ws_errors = 0
         assert stats.get_error_rate() == 0.0
-        
+
         # 5% error rate
         stats.connections_total = 100
         stats.ws_errors = 5
         assert stats.get_error_rate() == 5.0
-        
+
         # 15% error rate
         stats.connections_total = 100
         stats.ws_errors = 15
@@ -411,7 +411,7 @@ class TestStatsHealthStatus:
         stats.pool_misses = 10
         stats.connections_total = 100
         stats.ws_errors = 2
-        
+
         status, message, color = stats.get_health_status()
         assert status == 'healthy'
         assert color == 'green'
@@ -424,7 +424,7 @@ class TestStatsHealthStatus:
         stats.pool_misses = 40
         stats.connections_total = 100
         stats.ws_errors = 8
-        
+
         status, message, color = stats.get_health_status()
         assert status == 'degraded'
         assert color == 'yellow'
@@ -437,7 +437,7 @@ class TestStatsHealthStatus:
         stats.pool_misses = 60
         stats.connections_total = 100
         stats.ws_errors = 20
-        
+
         status, message, color = stats.get_health_status()
         assert status == 'critical'
         assert color == 'red'
@@ -452,9 +452,9 @@ class TestStatsExportCSV:
         stats = Stats()
         stats.add_connection('ws', dc=2)
         stats.add_bytes(up=1024, down=2048)
-        
+
         csv_str = stats.export_to_csv()
-        
+
         assert 'metric,value,unit' in csv_str
         assert 'connections_total' in csv_str
         assert 'bytes_up' in csv_str
@@ -465,8 +465,8 @@ class TestStatsExportCSV:
         stats = Stats()
         stats.add_connection('ws', dc=2)
         stats.record_latency(2, 50.0)
-        
+
         csv_str = stats.export_to_csv()
-        
+
         assert 'dc_2' in csv_str
         assert 'latency' in csv_str

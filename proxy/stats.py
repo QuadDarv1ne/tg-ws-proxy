@@ -415,7 +415,7 @@ class Stats:
     def start_realtime_monitoring(self, check_interval: float = 10.0) -> None:
         """
         Start real-time monitoring with automatic threshold checks.
-        
+
         Args:
             check_interval: How often to check thresholds (seconds)
         """

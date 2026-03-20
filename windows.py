@@ -301,7 +301,7 @@ def start_proxy() -> None:
         "encryption_enabled": cfg.get("encryption_enabled", True),
         "key_rotation_interval": cfg.get("key_rotation_interval", 3600),
     }
-    
+
     # Rate limiting configuration
     rate_limit_config = {
         "requests_per_second": cfg.get("rate_limit_rps", 10.0),
@@ -462,14 +462,14 @@ def _edit_config_dialog():
     # Encryption section
     encryption_frame = ctk.CTkFrame(frame, fg_color=UI_FIELD_BG, corner_radius=10)
     encryption_frame.pack(fill="x", pady=(0, 12))
-    
+
     ctk.CTkLabel(
         encryption_frame,
         text="🔐 Современное шифрование",
         font=(UI_FONT_FAMILY, 13, "bold"),
         text_color=UI_TEXT_PRIMARY
     ).pack(anchor="w", padx=12, pady=(10, 5))
-    
+
     # Encryption type selector
     ctk.CTkLabel(
         encryption_frame,
@@ -477,7 +477,7 @@ def _edit_config_dialog():
         font=(UI_FONT_FAMILY, 11),
         text_color=UI_TEXT_SECONDARY
     ).pack(anchor="w", padx=12, pady=(5, 0))
-    
+
     encryption_types = ["aes-256-gcm", "chacha20-poly1305", "xchacha20-poly1305", "aes-256-ctr", "mtproto-ige"]
     encryption_type_var = ctk.StringVar(value=cfg.get("encryption_type", "aes-256-gcm"))
     encryption_type_menu = ctk.CTkOptionMenu(
@@ -491,7 +491,7 @@ def _edit_config_dialog():
         border_color=UI_FIELD_BORDER,
     )
     encryption_type_menu.pack(anchor="w", padx=12, pady=(0, 10))
-    
+
     # Encryption enabled checkbox
     encryption_enabled_var = ctk.BooleanVar(value=cfg.get("encryption_enabled", True))
     ctk.CTkCheckBox(
@@ -506,7 +506,7 @@ def _edit_config_dialog():
         border_width=2,
         border_color=UI_FIELD_BORDER,
     ).pack(anchor="w", padx=12, pady=(0, 10))
-    
+
     # Key rotation interval
     ctk.CTkLabel(
         encryption_frame,
@@ -514,7 +514,7 @@ def _edit_config_dialog():
         font=(UI_FONT_FAMILY, 11),
         text_color=UI_TEXT_SECONDARY
     ).pack(anchor="w", padx=12, pady=(5, 0))
-    
+
     rotation_var = ctk.StringVar(value=str(cfg.get("key_rotation_interval", 3600)))
     rotation_entry = ctk.CTkEntry(
         encryption_frame,
