@@ -1,4 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
+# TG WS Proxy - macOS Build Specification
+# Author: Dupley Maxim Igorevich
+# © 2026 Dupley Maxim Igorevich. All rights reserved.
 
 import sys
 import os
@@ -13,6 +16,10 @@ ctk_path = os.path.dirname(customtkinter.__file__)
 import rich
 rich_path = os.path.dirname(rich.__file__)
 
+# Flask for web dashboard
+import flask
+flask_path = os.path.dirname(flask.__file__)
+
 # rumps for native macOS menu bar
 try:
     import rumps
@@ -21,9 +28,17 @@ except ImportError:
     rumps = None
     rumps_path = None
 
+# Get project root
+project_root = os.path.join(os.path.dirname(SPEC), os.pardir)
+proxy_dir = os.path.join(project_root, 'proxy')
+static_dir = os.path.join(proxy_dir, 'static')
+
 datas_list = [
     (ctk_path, 'customtkinter/'),
     (rich_path, 'rich/'),
+    (flask_path, 'flask/'),
+    (proxy_dir, 'proxy/'),
+    (static_dir, 'proxy/static/') if os.path.exists(static_dir) else None,
 ]
 
 if rumps_path:
@@ -48,6 +63,10 @@ a = Analysis(
         'rumps',
         'Foundation',
         'AppKit',
+        'flask',
+        'flask_cors',
+        'jinja2',
+        'werkzeug',
     ],
     hookspath=[],
     hooksconfig={},
@@ -63,6 +82,9 @@ a = Analysis(
 icon_path = os.path.join(os.path.dirname(SPEC), os.pardir, 'icon.ico')
 if os.path.exists(icon_path):
     a.datas += [('icon.ico', icon_path, 'DATA')]
+
+# Filter out None from datas
+a.datas = [d for d in a.datas if d is not None]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

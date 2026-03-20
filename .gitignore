@@ -27,3 +27,29 @@ scan_ips.py
 scan.txt
 AyuGramDesktop-dev/
 tweb-master/
+
+# Generated files
+*.qr.png
+*.qr.svg
+qr_code.*
+generate_qr.py
+web_server.log
+
+# Mobile build
+mobile-app/android/
+mobile-app/ios/
+mobile-app/node_modules/
+
+# PWA cache
+*.cache
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Environment
+.env
+.venv/
+venv/
+ENV/

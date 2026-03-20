@@ -5,6 +5,9 @@ macOS native menu bar application for TG WS Proxy.
 Uses rumps for native macOS menu bar integration.
 Supports Universal binary (Apple Silicon + Intel).
 
+Author: Dupley Maxim Igorevich
+© 2026 Dupley Maxim Igorevich. All rights reserved.
+
 Requirements:
     pip install -r requirements.txt
     pip install rumps

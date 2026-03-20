@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TG Proxy">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="author" content="Dupley Maxim Igorevich">
+    <meta name="copyright" content="© 2026 Dupley Maxim Igorevich. All rights reserved.">
+    <meta name="description" content="Local SOCKS5 proxy for Telegram Desktop">
+    <meta name="format-detection" content="telephone=no">
+    <title>TG WS Proxy</title>
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+    <style>
+        :root {
+            --bg-gradient-start: #667eea;
+            --bg-gradient-end: #764ba2;
+            --card-bg: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --text-muted: #888888;
+            --border-color: #e2e8f0;
+            --table-bg: #f8f9fa;
+            --input-bg: #ffffff;
+            --code-bg: #f7fafc;
+            --success: #48bb78;
+            --warning: #ed8936;
+            --error: #f56565;
+        }
+        [data-theme="dark"] {
+            --bg-gradient-start: #2d3748;
+            --bg-gradient-end: #1a202c;
+            --card-bg: #2d3748;
+            --text-primary: #f7fafc;
+            --text-secondary: #cbd5e0;
+            --text-muted: #a0aec0;
+            --border-color: #4a5568;
+            --table-bg: #1a202c;
+            --input-bg: #2d3748;
+            --code-bg: #1a202c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header {
+            text-align: center;
+            padding: 30px 20px;
+            color: white;
+        }
+        .header h1 { font-size: 28px; margin-bottom: 8px; font-weight: 700; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        .stat-item {
+            background: var(--table-bg);
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--bg-gradient-start); }
+        .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-ok { background: var(--success); color: white; }
+        .status-degraded { background: var(--warning); color: white; }
+        .status-unhealthy { background: var(--error); color: white; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 10px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-secondary {
+            background: var(--table-bg);
+            color: var(--text-primary);
+        }
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+        .dc-list { list-style: none; }
+        .dc-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .dc-item:last-child { border-bottom: none; }
+        .dc-name { font-weight: 500; }
+        .dc-stats { font-size: 12px; color: var(--text-secondary); }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .theme-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 100;
+        }
+        .safe-area {
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+    
+    <div class="container safe-area">
+        <div class="header">
+            <h1>🔒 TG WS Proxy</h1>
+            <p>Local SOCKS5 proxy for Telegram Desktop</p>
+        </div>
+        
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p>Загрузка статистики...</p>
+        </div>
+        
+        <div id="app" style="display: none;">
+            <!-- Health Status -->
+            <div class="card">
+                <div class="card-title">📊 Статус системы</div>
+                <div id="health-status"></div>
+            </div>
+            
+            <!-- Connection Stats -->
+            <div class="card">
+                <div class="card-title">🔌 Подключения</div>
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="total-connections">0</div>
+                        <div class="stat-label">Всего</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="ws-connections">0</div>
+                        <div class="stat-label">WebSocket</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="tcp-fallback">0</div>
+                        <div class="stat-label">TCP fallback</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="pool-efficiency">0%</div>
+                        <div class="stat-label">Pool efficiency</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Traffic Stats -->
+            <div class="card">
+                <div class="card-title">📈 Трафик</div>
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="bytes-up">0 B</div>
+                        <div class="stat-label">Входящий</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="bytes-down">0 B</div>
+                        <div class="stat-label">Исходящий</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- DC Stats -->
+            <div class="card">
+                <div class="card-title">🌍 Data Centers</div>
+                <ul class="dc-list" id="dc-list"></ul>
+            </div>
+            
+            <!-- Actions -->
+            <div class="card">
+                <div class="card-title">⚡ Действия</div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="refreshStats()">🔄 Обновить</button>
+                    <a href="tg://socks?server=127.0.0.1&port=1080" class="btn btn-primary">🔓 Открыть в Telegram</a>
+                </div>
+            </div>
+            
+            <!-- Info -->
+            <div class="card">
+                <div class="card-title">ℹ️ Информация</div>
+                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                    <p><strong>Версия:</strong> <span id="version">-</span></p>
+                    <p><strong>Время работы:</strong> <span id="uptime">-</span></p>
+                    <p style="margin-top: 12px; font-size: 12px;">
+                        Приложение работает как PWA (Progressive Web App). 
+                        Вы можете установить его на домашний экран для быстрого доступа.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Theme management
+        function toggleTheme() {
+            const html = document.documentElement;
+            const current = html.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            document.querySelector('.theme-toggle').textContent = next === 'dark' ? '☀️' : '🌙';
+        }
+
+        // Load saved theme
+        (function() {
+            const saved = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', saved);
+            document.querySelector('.theme-toggle').textContent = saved === 'dark' ? '☀️' : '🌙';
+        })();
+
+        // Format bytes
+        function humanBytes(n) {
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let i = 0;
+            while (Math.abs(n) >= 1024 && i < units.length - 1) {
+                n /= 1024;
+                i++;
+            }
+            return n.toFixed(1) + ' ' + units[i];
+        }
+
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/api/stats');
+                const stats = await response.json();
+                
+                // Update connection stats
+                document.getElementById('total-connections').textContent = stats.connections_total || 0;
+                document.getElementById('ws-connections').textContent = stats.connections_ws || 0;
+                document.getElementById('tcp-fallback').textContent = stats.connections_tcp_fallback || 0;
+                
+                const poolTotal = (stats.pool_hits || 0) + (stats.pool_misses || 0);
+                const efficiency = poolTotal > 0 ? Math.round((stats.pool_hits || 0) / poolTotal * 100) : 100;
+                document.getElementById('pool-efficiency').textContent = efficiency + '%';
+                
+                // Update traffic
+                document.getElementById('bytes-up').textContent = humanBytes(stats.bytes_up || 0);
+                document.getElementById('bytes-down').textContent = humanBytes(stats.bytes_down || 0);
+                
+                // Update info
+                document.getElementById('version').textContent = stats.version || '2.5.5';
+                document.getElementById('uptime').textContent = stats.uptime || '-';
+                
+                // Load DC stats
+                loadDcStats();
+                
+                // Show app, hide loading
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+                document.getElementById('loading').innerHTML = 
+                    '<p style="color: #fed7d7;">❌ Не удалось подключиться к прокси.<br>Убедитесь, что прокси запущен.</p>' +
+                    '<button class="btn btn-primary" onclick="loadStats()" style="margin-top: 16px;">Попробовать снова</button>';
+            }
+        }
+
+        // Load DC statistics
+        async function loadDcStats() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/api/dc-stats');
+                const data = await response.json();
+                
+                const list = document.getElementById('dc-list');
+                list.innerHTML = '';
+                
+                (data.dc_stats || []).forEach(dc => {
+                    const li = document.createElement('li');
+                    li.className = 'dc-item';
+                    li.innerHTML = `
+                        <div>
+                            <div class="dc-name">DC ${dc.dc_id}</div>
+                            <div class="dc-stats">
+                                ${dc.connections || 0} подключений, 
+                                ${dc.errors || 0} ошибок
+                                ${dc.avg_latency_ms ? `, ${dc.avg_latency_ms}ms` : ''}
+                            </div>
+                        </div>
+                    `;
+                    list.appendChild(li);
+                });
+                
+                // Load health status
+                loadHealth();
+                
+            } catch (error) {
+                console.error('Failed to load DC stats:', error);
+            }
+        }
+
+        // Load health status
+        async function loadHealth() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/api/health');
+                const health = await response.json();
+                
+                const statusEl = document.getElementById('health-status');
+                const statusClass = health.status === 'ok' ? 'status-ok' : 
+                                   health.status === 'degraded' ? 'status-degraded' : 'status-unhealthy';
+                const statusText = health.status === 'ok' ? 'Работает нормально' :
+                                  health.status === 'degraded' ? 'Работает с проблемами' : 'Не работает';
+                
+                statusEl.innerHTML = `<span class="status-badge ${statusClass}">${statusText}</span>`;
+                
+            } catch (error) {
+                console.error('Failed to load health:', error);
+            }
+        }
+
+        // Refresh stats
+        function refreshStats() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('app').style.display = 'none';
+            loadStats();
+        }
+
+        // Auto-refresh every 5 seconds
+        setInterval(loadStats, 5000);
+        
+        // Initial load
+        loadStats();
+
+        // Service Worker registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((registration) => {
+                        console.log('SW registered:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('SW registration failed:', error);
+                    });
+            });
+        }
+
+        // Check if app is running as standalone (installed)
+        function isStandalone() {
+            return window.matchMedia('(display-mode: standalone)').matches ||
+                   window.navigator.standalone === true;
+        }
+    </script>
+</body>
+</html>

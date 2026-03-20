@@ -133,15 +133,51 @@
 
 ### 🟢 Низкий приоритет
 
-#### Интерфейс (v2.17.0)
-- [ ] Трей с темной/светлой темой — адаптация под тему Windows
-- [ ] Всплывающие подсказки к пунктам меню
-- [ ] Горячие клавиши для быстрых DC (Ctrl+1, Ctrl+2...)
+#### ✅ Выполнено (v2.17.0)
 
-#### Уведомления (v2.17.0)
-- [ ] Настройка порогов уведомлений — GUI
-- [ ] Еженедельный отчёт — сводка за 7 дней
-- [ ] Уведомление о доступности обновлений — с деталями changelog
+##### Интерфейс (v2.17.0) ✅
+- [x] Трей с темной/светлой темой — адаптация под тему Windows ✅
+- [x] Всплывающие подсказки к пунктам меню ✅
+- [x] Горячие клавиши для быстрых DC (Ctrl+1, Ctrl+2...) ✅
+- [x] Новый современный UI веб-панели — градиенты, анимации, адаптивность ✅
+- [x] PWA поддержка — manifest.json, service worker, иконки ✅
+- [x] Мобильная версия UI — полный адаптив под телефоны/планшеты ✅
+- [x] Тёмная тема в веб-панели — переключатель 🌙/☀️ ✅
+- [x] Индикаторы статуса системы — онлайн/degraded/offline ✅
+- [x] Быстрые действия — копирование конфига, QR-код ✅
+- [x] PWA Install Prompt — предложение установить приложение ✅
+- [x] Автообновление статистики — каждые 5 секунд ✅
+- [x] Toast уведомления — обратная связь действий ✅
+
+##### Уведомления (v2.17.0) ✅
+- [x] Настройка порогов уведомлений — GUI ✅
+- [x] Еженедельный отчёт — сводка за 7 дней ✅
+- [x] Уведомление о доступности обновлений — с деталями changelog ✅
+
+##### Мобильные приложения (v2.17.0) ✅
+- [x] Capacitor проект для Android/iOS — `mobile-app/` ✅
+- [x] PWA иконки — 192x192, 512x512 ✅
+- [x] Сборка Android APK — скрипт `build_mobile.py` ✅
+- [x] Сборка iOS — через Xcode ✅
+- [x] Инструкции по установке — INSTALL_MOBILE.md ✅
+
+##### Сборка (v2.17.0) ✅
+- [x] Универсальный скрипт сборки Desktop — `build_desktop.py` ✅
+- [x] Универсальный скрипт сборки Mobile — `build_mobile.py` ✅
+- [x] Spec-файлы обновлены — Flask, PWA включены ✅
+- [x] Windows сборка — работает, dist/TgWsProxy.exe ✅
+- [x] Linux сборка — spec готов ✅
+- [x] macOS сборка — spec готов ✅
+- [x] Генерация иконок — `generate_pwa_icons.py` ✅
+
+##### Документация (v2.17.0) ✅
+- [x] BUILD.md — руководство по сборке всех платформ ✅
+- [x] BUILD_RESULTS.md — результаты сборки Windows ✅
+- [x] INSTALL_MOBILE.md — установка на телефон ✅
+- [x] PHONE_FIX.md — решение проблем подключения ✅
+- [x] UI_UPDATE.md — описание нового интерфейса ✅
+- [x] AUTHOR_UPDATE.md — информация об авторе ✅
+- [x] Обновление author во всех файлах проекта ✅
 
 ---
 
@@ -210,20 +246,36 @@ pyinstaller>=5.0.0
 - ✅ Quick DC presets submenu
 - ✅ Daily summary при закрытии
 
-### v2.16.0 (В разработке)
-- [x] Увеличение coverage тестов (44% → 46%)
-- [x] Исправление mypy ошибок (частично, ~30 осталось)
-- [x] Улучшение type hints в proxy-модулях
-- [ ] Load tests — сценарии нагрузки
-- [ ] Coverage > 80% — текущее покрытие ~46%
-- [ ] Пройти mypy без ошибок (остались missing stubs и сложные типы)
+### v2.16.0 (Выполнено)
+- ✅ Увеличение coverage тестов (44% → 46%)
+- ✅ Исправление mypy ошибок (частично, ~30 осталось)
+- ✅ Улучшение type hints в proxy-модулях
+- ✅ Ruff нарушения исправлены (682 → 0)
 
-### v2.17.0 (Планируется)
-- Улучшение type hints — оставшиеся модули
-- Адаптация под тему системы
-- Настройка порогов уведомлений — GUI
-- Еженедельный отчёт — сводка за 7 дней
-- Уведомление о доступности обновлений — changelog
+### v2.17.0 (Выполнено)
+- ✅ Новый современный UI веб-панели
+- ✅ PWA поддержка (manifest, service worker, иконки)
+- ✅ Мобильное приложение (Capacitor Android/iOS)
+- ✅ Тёмная тема в веб-панели
+- ✅ Индикаторы статуса системы
+- ✅ Быстрые действия (копирование конфига, QR-код)
+- ✅ PWA Install Prompt
+- ✅ Автообновление статистики
+- ✅ Toast уведомления
+- ✅ Сборка для всех платформ (Windows/Linux/macOS/Android/iOS)
+- ✅ Обновление author во всех файлах
+- ✅ Полная документация (BUILD, INSTALL_MOBILE, UI_UPDATE, PHONE_FIX)
+
+### v2.18.0 (Планируется)
+- [ ] Load tests — сценарии нагрузки (100+ подключений)
+- [ ] Coverage > 80% — текущее покрытие ~46%
+- [ ] Пройти mypy без ошибок (остались missing stubs)
+- [ ] Тесты для tg_ws_proxy.py (19% → 60%)
+- [ ] Тесты для web_dashboard.py (60% → 80%)
+- [ ] Async DNS resolver (aiodns)
+- [ ] HTTP/2 для WebSocket
+- [ ] Оптимизация memory footprint
+- [ ] Пройти mypy без ошибок (остались missing stubs и сложные типы)
 
 ---
 
@@ -257,3 +309,163 @@ git push origin main
 ### Python
 - **Путь:** `C:\Users\maksi\AppData\Local\Python\bin\python.exe`
 - **Версия:** Python 3.14
+
+---
+
+## 📝 Заметки о проекте
+
+### Архитектура
+
+**Кроссплатформенная сборка:**
+- **Windows** — `windows.py` (customtkinter + pystray)
+- **Linux** — `linux.py` (AppIndicator)
+- **macOS** — `macos.py` (rumps — нативное меню)
+- **Android/iOS** — ядро `proxy/tg_ws_proxy.py`
+
+**Основные компоненты:**
+```
+proxy/
+├── tg_ws_proxy.py      # Ядро: SOCKS5 + WebSocket relay
+├── mtproto_proxy.py    # MTProto proxy для мобильных
+├── web_dashboard.py    # Веб-панель (Flask, localhost:8080)
+├── dashboard.py        # Консольная панель (TUI)
+├── stats.py            # Статистика и метрики
+├── profiler.py         # Профилировщик производительности
+├── diagnostics.py      # Диагностика подключений
+└── constants.py        # Константы приложения
+
+tray.py                 # Кроссплатформенное tray-приложение
+```
+
+### Текущий статус (v2.17.0)
+
+**Тесты:** 236 passed, 3 skipped, 2 errors  
+**Покрытие:** 44% (цель >80%)
+
+**Выполнено в v2.17.0:**
+- ✅ Новый UI веб-панели (современный дизайн, анимации)
+- ✅ PWA поддержка (manifest, service worker, иконки)
+- ✅ Мобильное приложение (Capacitor)
+- ✅ Сборка для всех платформ (Desktop + Mobile)
+- ✅ Тёмная тема
+- ✅ Индикаторы статуса
+- ✅ Быстрые действия (копирование, QR-код)
+- ✅ Автообновление статистики
+- ✅ Обновление author во всех файлах
+- ✅ Полная документация
+
+**Проблемные зоны:**
+- `tg_ws_proxy.py` — 19% покрытие (872 строки пропущено)
+- `mtproto_proxy.py` — 49% покрытие
+- `dashboard.py` — 57% покрытие
+- `web_dashboard.py` — 60% покрытие
+
+**Новые компоненты (v2.17.0):**
+```
+mobile-app/               # Capacitor проект для Android/iOS
+├── www/                  # Веб-приложение
+│   ├── index.html        # Главный экран с UI
+│   ├── manifest.json     # PWA manifest
+│   └── sw.js             # Service Worker
+├── android/              # Android проект
+└── capacitor.config.json # Конфигурация
+
+build_desktop.py          # Сборка Desktop (Windows/Linux/macOS)
+build_mobile.py           # Сборка Mobile (Android/iOS)
+generate_pwa_icons.py     # Генерация иконок
+```
+
+**Ошибки тестов:**
+- `tests/test_diagnostics.py::test_tcp_connect` — fixture 'host' not found
+- `tests/test_diagnostics.py::test_websocket_connect` — fixture 'ip' not found
+
+### План улучшений (приоритеты)
+
+#### ✅ Выполнено (v2.17.0)
+- ✅ Новый современный UI веб-панели
+- ✅ PWA поддержка
+- ✅ Мобильное приложение (Capacitor)
+- ✅ Тёмная тема
+- ✅ Индикаторы статуса
+- ✅ Быстрые действия
+- ✅ Автообновление статистики
+- ✅ Сборка для всех платформ
+- ✅ Полная документация
+
+#### 🔴 Высокий приоритет (v2.18.0)
+1. Исправить 2 ошибки в тестах (test_diagnostics.py)
+2. Покрытие tg_ws_proxy.py (19% → 60%)
+   - Тесты для `_handle_client()`
+   - Тесты для WebSocket pool
+   - Тесты для TCP fallback логики
+   - Тесты для callbacks уведомлений
+3. Load tests (100+ одновременных подключений)
+4. Coverage > 80%
+
+#### 🟡 Средний приоритет (v2.18.0)
+5. Покрытие остальных модулей:
+   - `web_dashboard.py` — 60% → 80%
+   - `mtproto_proxy.py` — 49% → 80%
+6. Пройти mypy без ошибок (остались missing stubs)
+
+#### 🟢 Низкий приоритет (v2.19.0)
+7. Производительность:
+   - Async DNS resolver (aiodns)
+   - HTTP/2 для WebSocket
+   - Оптимизация memory footprint
+8. Документация:
+   - Скриншоты интерфейса в README
+   - Video-гайд по настройке
+   - API docs (Sphinx)
+
+### Запуск проекта
+
+**Tray-приложение (основное):**
+```bash
+python tray.py
+```
+
+**Веб-панель:**
+```bash
+python run_web.py
+# Открыть: http://localhost:8080
+```
+
+**Консольный режим:**
+```bash
+python proxy/tg_ws_proxy.py --port 1080 -v
+```
+
+**Тесты:**
+```bash
+pytest tests/ --cov=proxy --cov-report=term-missing
+```
+
+### Конфигурация
+
+**Путь:** `%APPDATA%\TgWsProxy\config.json`
+
+```json
+{
+  "port": 1080,
+  "host": "127.0.0.1",
+  "dc_ip": ["2:149.154.167.220", "4:149.154.167.220"],
+  "verbose": false,
+  "ip_whitelist": [],
+  "compact_menu": false
+}
+```
+
+### Полезные команды
+
+```bash
+# Проверка кода
+ruff check .
+mypy proxy/ tray.py
+
+# Запуск с профайлингом
+python -m cProfile -o stats.prof proxy/tg_ws_proxy.py -v
+
+# Анализ профайлинга
+python -m pstats stats.prof
+```

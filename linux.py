@@ -2,6 +2,9 @@
 """
 Linux launcher for TG WS Proxy tray application.
 
+Author: Dupley Maxim Igorevich
+© 2026 Dupley Maxim Igorevich. All rights reserved.
+
 Requirements:
     pip install -r requirements.txt
     sudo apt install python3-pil python3-pil.imagetk libappindicator3-1

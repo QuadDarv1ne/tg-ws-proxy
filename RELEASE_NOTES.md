@@ -1,5 +1,8 @@
 # TG WS Proxy — Release Notes
 
+**Автор:** Dupley Maxim Igorevich  
+**© 2026 Dupley Maxim Igorevich. Все права защищены.**
+
 ## v2.5.5
 
 **Улучшения:**

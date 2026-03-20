@@ -26,923 +26,1303 @@ except ImportError:
 
 log = logging.getLogger('tg-web-dashboard')
 
+# PWA Manifest template
+PWA_MANIFEST = """
+{
+    "name": "TG WS Proxy",
+    "short_name": "TG Proxy",
+    "description": "Local SOCKS5 proxy for Telegram Desktop",
+    "author": "Dupley Maxim Igorevich",
+    "copyright": "© 2026 Dupley Maxim Igorevich. All rights reserved.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#667eea",
+    "theme_color": "#667eea",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/static/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/static/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": ["utilities", "productivity"],
+    "shortcuts": [
+        {
+            "name": "Статистика",
+            "url": "/?tab=stats",
+            "description": "Просмотр статистики прокси"
+        },
+        {
+            "name": "Настройки",
+            "url": "/?tab=settings",
+            "description": "Настройка прокси"
+        }
+    ]
+}
+"""
+
+# Service Worker template
+SERVICE_WORKER = """
+const CACHE_NAME = 'tg-ws-proxy-v1';
+const ASSETS_TO_CACHE = [
+    '/',
+    '/manifest.json',
+    '/api/stats',
+    '/api/dc-stats',
+    '/api/health',
+    '/api/config'
+];
+
+// Install event - cache assets
+self.addEventListener('install', (event) => {
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => {
+            return cache.addAll(ASSETS_TO_CACHE);
+        })
+    );
+    self.skipWaiting();
+});
+
+// Activate event - clean old caches
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
+            );
+        })
+    );
+    self.clients.claim();
+});
+
+// Fetch event - serve from cache, fallback to network
+self.addEventListener('fetch', (event) => {
+    // Skip non-GET requests
+    if (event.request.method !== 'GET') {
+        return;
+    }
+
+    // Skip API calls that modify data
+    if (event.request.url.includes('/api/config') && event.request.method === 'POST') {
+        return;
+    }
+
+    event.respondWith(
+        caches.match(event.request).then((cachedResponse) => {
+            const fetchPromise = fetch(event.request).then((networkResponse) => {
+                // Cache successful GET responses
+                if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
+                    const responseClone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseClone);
+                    });
+                }
+                return networkResponse;
+            }).catch(() => {
+                // Return cached response if network fails
+                return cachedResponse;
+            });
+
+            return cachedResponse || fetchPromise;
+        })
+    );
+});
+
+// Push notification event (for future use)
+self.addEventListener('push', (event) => {
+    const data = event.data ? event.data.json() : {};
+    const title = data.title || 'TG WS Proxy';
+    const options = {
+        body: data.body || 'Уведомление от прокси',
+        icon: '/static/icon-192.png',
+        badge: '/static/icon-192.png',
+        vibrate: [100, 50, 100],
+        data: {
+            dateOfArrival: Date.now(),
+            primaryKey: 1
+        }
+    };
+    event.waitUntil(
+        self.registration.showNotification(title, options)
+    );
+});
+"""
+
 # HTML template for the dashboard
 DASHBOARD_HTML = """
 <!DOCTYPE html>
 <html lang="ru" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TG WS Proxy - Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TG Proxy">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="author" content="Dupley Maxim Igorevich">
+    <meta name="copyright" content="© 2026 Dupley Maxim Igorevich. Все права защищены.">
+    <meta name="description" content="Local SOCKS5 proxy for Telegram Desktop">
+    <meta name="format-detection" content="telephone=no">
+    <!-- Allow HTTP connections for local network -->
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; block-all-mixed-content; default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; connect-src 'self' http: https:;">
+    <title>TG WS Proxy — Панель управления</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/static/icon-512.png">
     <style>
         :root {
-            --bg-gradient-start: #667eea;
-            --bg-gradient-end: #764ba2;
-            --card-bg: #ffffff;
-            --text-primary: #333333;
-            --text-secondary: #666666;
-            --text-muted: #888888;
-            --border-color: #e2e8f0;
-            --table-bg: #f8f9fa;
-            --input-bg: #ffffff;
-            --code-bg: #f7fafc;
+            --primary: #667eea;
+            --primary-dark: #5568d3;
+            --primary-light: #7c8cf0;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --success-bg: #d1fae5;
+            --warning: #f59e0b;
+            --warning-bg: #fef3c7;
+            --danger: #ef4444;
+            --danger-bg: #fee2e2;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-card: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --radius: 16px;
+            --radius-sm: 8px;
+            --radius-lg: 24px;
         }
+
         [data-theme="dark"] {
-            --bg-gradient-start: #2d3748;
-            --bg-gradient-end: #1a202c;
-            --card-bg: #2d3748;
-            --text-primary: #f7fafc;
-            --text-secondary: #cbd5e0;
-            --text-muted: #a0aec0;
-            --border-color: #4a5568;
-            --table-bg: #1a202c;
-            --input-bg: #2d3748;
-            --code-bg: #1a202c;
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #334155;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             min-height: 100vh;
-            padding: 20px;
-            transition: background 0.3s ease;
+            color: var(--text-primary);
+            padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+            transition: all 0.3s ease;
         }
-        .container {
-            max-width: 1400px;
+
+        .app-container {
+            max-width: 1200px;
             margin: 0 auto;
+            padding: 20px;
         }
-        h1 {
-            color: white;
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2.5rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            background: var(--card-bg);
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
-        }
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
-        }
-        .stat-card h3 {
-            color: var(--bg-gradient-start);
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
-        }
-        .stat-card .value {
-            font-size: 2.5rem;
-            font-weight: bold;
-            color: var(--text-primary);
-        }
-        .stat-card .unit {
-            font-size: 1rem;
-            color: var(--text-muted);
-            margin-left: 5px;
-        }
-        .section {
-            background: var(--card-bg);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: background 0.3s ease;
-        }
-        .section h2 {
-            color: var(--bg-gradient-start);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--border-color);
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-            color: var(--text-primary);
-        }
-        th {
-            background: var(--table-bg);
-            color: var(--bg-gradient-start);
-            font-weight: 600;
-        }
-        tr:hover {
-            background: var(--table-bg);
-        }
-        .status-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: pulse 2s infinite;
-        }
-        .status-online { background: #48bb78; }
-        .status-degraded { background: #ed8936; }
-        .status-offline { background: #f56565; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .btn {
-            background: var(--bg-gradient-start);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: background 0.3s, transform 0.2s;
-            text-decoration: none;
-            display: inline-block;
-            margin-left: 10px;
-        }
-        .btn:hover {
-            background: #5568d3;
-            transform: translateY(-2px);
-        }
-        .btn-secondary {
-            background: #718096;
-        }
-        .btn-secondary:hover { background: #4a5568; }
-        .btn-success { background: #48bb78; }
-        .btn-success:hover { background: #38a169; }
+
+        /* Header */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 20px 0;
+            margin-bottom: 30px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            box-shadow: var(--shadow);
+        }
+
+        .header-title h1 {
+            color: white;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .header-title p {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow);
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+
+        .theme-toggle:active {
+            transform: scale(0.95);
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 20px;
             margin-bottom: 20px;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             flex-wrap: wrap;
             gap: 15px;
         }
-        .header-actions {
+
+        .status-left {
             display: flex;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
+            gap: 12px;
         }
-        .last-update {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
         }
-        .nav-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
+
+        .status-indicator.online { background: var(--success); }
+        .status-indicator.degraded { background: var(--warning); }
+        .status-indicator.offline { background: var(--danger); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
         }
-        .nav-tab {
-            background: rgba(255,255,255,0.2);
+
+        .status-text {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .status-subtext {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .refresh-btn {
+            background: var(--primary);
             color: white;
             border: none;
             padding: 10px 20px;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
+            font-weight: 600;
             cursor: pointer;
-            font-size: 1rem;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        .nav-tab:hover { background: rgba(255,255,255,0.3); }
-        .nav-tab.active {
-            background: white;
-            color: var(--bg-gradient-start);
+
+        .refresh-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
         }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .form-group { margin-bottom: 20px; }
-        .form-group label {
-            display: block;
+
+        .refresh-btn:active {
+            transform: translateY(0);
+        }
+
+        .refresh-btn.spinning svg {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-xl);
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        .stat-icon.blue { background: #dbeafe; color: #3b82f6; }
+        .stat-icon.green { background: #d1fae5; color: #10b981; }
+        .stat-icon.purple { background: #e9d5ff; color: #8b5cf6; }
+        .stat-icon.orange { background: #fed7aa; color: #f97316; }
+
+        [data-theme="dark"] .stat-icon.blue { background: #1e3a5f; }
+        [data-theme="dark"] .stat-icon.green { background: #064e3b; }
+        [data-theme="dark"] .stat-icon.purple { background: #4c1d95; }
+        [data-theme="dark"] .stat-icon.orange { background: #7c2d12; }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
             margin-bottom: 8px;
-            color: var(--bg-gradient-start);
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1;
+        }
+
+        .stat-unit {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-left: 4px;
+        }
+
+        .stat-change {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 12px;
+            font-size: 13px;
             font-weight: 600;
         }
-        .form-group input, .form-group textarea {
-            width: 100%;
-            padding: 12px;
-            background: var(--input-bg);
+
+        .stat-change.positive { color: var(--success); }
+        .stat-change.negative { color: var(--danger); }
+
+        /* Section */
+        .section {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
             color: var(--text-primary);
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s, background 0.3s;
-        }
-        .form-group input:focus, .form-group textarea:focus {
-            outline: none;
-            border-color: var(--bg-gradient-start);
-        }
-        .form-group textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-        .checkbox-group {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        .checkbox-group input[type="checkbox"] { width: auto; }
-        .alert {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+
+        /* DC List */
+        .dc-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
-        .alert-success {
-            background: #c6f6d5;
-            color: #22543d;
-            border: 1px solid #9ae6b4;
-        }
-        .alert-error {
-            background: #fed7d7;
-            color: #742a2a;
-            border: 1px solid #f56565;
-        }
-        .health-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .health-ok { background: #c6f6d5; color: #22543d; }
-        .health-degraded { background: #feebc8; color: #7c2d12; }
-        .theme-toggle {
-            background: rgba(255,255,255,0.2);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1.2rem;
-            transition: background 0.3s;
-            margin-left: 10px;
-        }
-        .theme-toggle:hover { background: rgba(255,255,255,0.3); }
-        code {
-            background: var(--code-bg);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            color: #e53e3e;
-        }
-        @media (max-width: 768px) {
-            .stats-grid { grid-template-columns: 1fr; }
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .header-actions {
-                width: 100%;
-                justify-content: flex-start;
-            }
-            .nav-tabs { justify-content: flex-start; }
-            .btn { margin: 5px 0; }
-            h1 { font-size: 1.8rem; }
-            .stat-card .value { font-size: 2rem; }
-        }
-        @media (max-width: 480px) {
-            body { padding: 10px; }
-            .section { padding: 15px; }
-            .stat-card { padding: 15px; }
-        }
-        .chart-container {
-            background: var(--card-bg);
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: background 0.3s ease;
-        }
-        .chart-container h3 {
-            color: var(--bg-gradient-start);
-            margin-bottom: 15px;
-            font-size: 1.1rem;
-        }
-        .chart {
-            width: 100%;
-            height: 200px;
-            position: relative;
-            overflow: hidden;
-        }
-        .chart-line {
-            fill: none;
-            stroke-width: 2.5;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            transition: d 0.5s ease;
-        }
-        .chart-line-up {
-            stroke: #48bb78;
-        }
-        .chart-line-down {
-            stroke: #3182ce;
-        }
-        .chart-area {
-            transition: d 0.5s ease;
-        }
-        .chart-labels {
+
+        .dc-item {
             display: flex;
             justify-content: space-between;
-            margin-top: 10px;
-            font-size: 0.85rem;
-            color: var(--text-muted);
+            align-items: center;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+            transition: all 0.3s ease;
         }
-        .chart-legend {
+
+        .dc-item:hover {
+            background: var(--bg-primary);
+            transform: translateX(4px);
+        }
+
+        .dc-left {
             display: flex;
-            gap: 20px;
-            margin-bottom: 15px;
+            align-items: center;
+            gap: 12px;
         }
-        .legend-item {
+
+        .dc-id {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .dc-info h4 {
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .dc-info p {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .dc-status {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 0.9rem;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-badge.ok { background: var(--success-bg); color: var(--success); }
+        .status-badge.degraded { background: var(--warning-bg); color: var(--warning); }
+        .status-badge.error { background: var(--danger-bg); color: var(--danger); }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 16px 24px;
+            border-radius: var(--radius-sm);
+            border: none;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .action-btn.primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+        }
+
+        .action-btn.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .action-btn.secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 2px solid var(--border);
+        }
+
+        .action-btn.secondary:hover {
+            background: var(--bg-primary);
+            border-color: var(--primary);
+        }
+
+        /* Install Prompt */
+        .install-prompt {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--bg-card);
+            padding: 20px 24px;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            z-index: 1000;
+            animation: slideUp 0.3s ease forwards;
+            max-width: calc(100vw - 40px);
+        }
+
+        @keyframes slideUp {
+            to { transform: translateX(-50%) translateY(0); }
+        }
+
+        .install-prompt-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+        }
+
+        .install-prompt-text {
+            flex: 1;
+        }
+
+        .install-prompt-text h4 {
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .install-prompt-text p {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .install-prompt-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .install-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: var(--radius-sm);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .install-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .install-dismiss {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 8px;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .install-dismiss:hover {
             color: var(--text-primary);
         }
-        .legend-color {
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: white;
+        }
+
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        .loading-text {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        /* Error State */
+        .error-state {
+            background: var(--danger-bg);
+            border: 1px solid var(--danger);
+            border-radius: var(--radius);
+            padding: 24px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .error-state h3 {
+            color: var(--danger);
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+
+        .error-state p {
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .app-container {
+                padding: 16px;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .header-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .refresh-btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .install-prompt {
+                flex-direction: column;
+                text-align: center;
+                bottom: 10px;
+            }
+
+            .install-prompt-actions {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Safe area for notched devices */
+        @supports (padding: max(0px)) {
+            body {
+                padding-left: max(0px, env(safe-area-inset-left));
+                padding-right: max(0px, env(safe-area-inset-right));
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🚀 TG WS Proxy Dashboard <button class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">🌓</button></h1>
-
-        <div class="header">
-            <div class="last-update">
-                <span class="status-indicator status-online" id="statusIndicator"></span>
-                Обновлено: <span id="lastUpdate">-</span>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">🔒</div>
+                <div class="header-title">
+                    <h1>TG WS Proxy</h1>
+                    <p>Панель управления</p>
+                </div>
             </div>
             <div class="header-actions">
-                <button class="btn" onclick="loadStats()">🔄 Обновить</button>
-                <button class="btn btn-secondary" onclick="exportStats('json')">📥 JSON</button>
-                <button class="btn btn-secondary" onclick="exportStats('csv')">📊 CSV</button>
-                <button class="btn btn-success" onclick="checkHealth()">❤️ Health</button>
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Переключить тему">
+                    🌙
+                </button>
             </div>
+        </header>
+
+        <!-- Loading State -->
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p class="loading-text">Загрузка статистики...</p>
         </div>
 
-        <div class="nav-tabs">
-            <button class="nav-tab active" onclick="switchTab('stats')">📊 Статистика</button>
-            <button class="nav-tab" onclick="switchTab('dc')">🌐 DC Stats</button>
-            <button class="nav-tab" onclick="switchTab('logs')">📜 Live Логи</button>
-            <button class="nav-tab" onclick="switchTab('settings')">⚙️ Настройки</button>
-        </div>
+        <!-- Main Content -->
+        <div id="app" style="display: none;">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <div class="status-left">
+                    <span class="status-indicator" id="status-indicator"></span>
+                    <div>
+                        <div class="status-text" id="status-text">Работает нормально</div>
+                        <div class="status-subtext" id="status-subtext">Все системы в норме</div>
+                    </div>
+                </div>
+                <button class="refresh-btn" onclick="refreshStats()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                    Обновить
+                </button>
+            </div>
 
-        <!-- Statistics Tab -->
-        <div id="stats-tab" class="tab-content active">
+            <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
-                    <h3>📡 Всего подключений</h3>
-                    <div class="value" id="totalConnections">0</div>
+                    <div class="stat-icon blue">📡</div>
+                    <div class="stat-label">Всего подключений</div>
+                    <div class="stat-value" id="total-connections">0</div>
+                    <div class="stat-change positive" id="connections-change">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 15l-6-6-6 6"/>
+                        </svg>
+                        <span>+0%</span>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <h3>🟢 Активных сейчас</h3>
-                    <div class="value" id="activeConnections">0</div>
+                    <div class="stat-icon green">⚡</div>
+                    <div class="stat-label">WebSocket</div>
+                    <div class="stat-value" id="ws-connections">0</div>
+                    <div class="stat-change positive">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                        </svg>
+                        <span>Активно</span>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <h3>📤 Трафик вверх</h3>
-                    <div class="value" id="bytesUp">0<span class="unit">MB</span></div>
+                    <div class="stat-icon purple">📊</div>
+                    <div class="stat-label">Pool Efficiency</div>
+                    <div class="stat-value" id="pool-efficiency">0%</div>
+                    <div class="stat-change" id="pool-change">
+                        <span>—</span>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <h3>📥 Трафик вниз</h3>
-                    <div class="value" id="bytesDown">0<span class="unit">MB</span></div>
-                </div>
-            </div>
-
-            <div class="chart-container">
-                <h3>📈 Трафик в реальном времени</h3>
-                <div class="chart-legend">
-                    <div class="legend-item">
-                        <div class="legend-color" style="background:#48bb78"></div>
-                        <span>Вверх</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background:#3182ce"></div>
-                        <span>Вниз</span>
+                    <div class="stat-icon orange">📈</div>
+                    <div class="stat-label">Трафик</div>
+                    <div class="stat-value" id="traffic-total">0 B</div>
+                    <div class="stat-change" id="traffic-change">
+                        <span>Обновляется</span>
                     </div>
                 </div>
-                <svg class="chart" id="trafficChart" viewBox="0 0 600 200" preserveAspectRatio="none">
-                </svg>
-                <div class="chart-labels">
-                    <span>60с назад</span>
-                    <span>Сейчас</span>
+            </div>
+
+            <!-- Traffic Section -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title">
+                        📶 Трафик
+                    </h2>
+                </div>
+                <div class="stats-grid" style="margin-bottom: 0;">
+                    <div class="stat-card" style="box-shadow: none; border: 1px solid var(--border);">
+                        <div class="stat-label">Входящий</div>
+                        <div class="stat-value" id="bytes-up">0 <span class="stat-unit">B</span></div>
+                    </div>
+                    <div class="stat-card" style="box-shadow: none; border: 1px solid var(--border);">
+                        <div class="stat-label">Исходящий</div>
+                        <div class="stat-value" id="bytes-down">0 <span class="stat-unit">B</span></div>
+                    </div>
                 </div>
             </div>
 
+            <!-- Data Centers Section -->
             <div class="section">
-                <h2>📊 Статистика по секретам (MTProto)</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Секрет</th>
-                            <th>Подключений всего</th>
-                            <th>Активных</th>
-                            <th>Получено</th>
-                            <th>Отправлено</th>
-                        </tr>
-                    </thead>
-                    <tbody id="secretsTable">
-                        <tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- DC Stats Tab -->
-        <div id="dc-tab" class="tab-content">
-            <div class="section">
-                <h2>🌐 Статистика по Data Center</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>DC ID</th>
-                            <th>Подключений</th>
-                            <th>Ошибок</th>
-                            <th>Задержка (ms)</th>
-                            <th>Средняя задержка (ms)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="dcTable">
-                        <tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Live Logs Tab -->
-        <div id="logs-tab" class="tab-content">
-            <div class="section">
-                <h2>📜 Live Логи подключений</h2>
-                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
-                    <button onclick="clearLogs()" class="btn btn-secondary">🗑️ Очистить</button>
-                    <button onclick="toggleAutoRefresh()" class="btn btn-secondary" id="autoRefreshBtn">⏸️ Пауза</button>
-                    <span id="logCount" style="color: var(--text-muted); margin-left: auto;">Записей: 0</span>
+                <div class="section-header">
+                    <h2 class="section-title">
+                        🌍 Data Centers
+                    </h2>
                 </div>
-                <div id="liveLogs" style="
-                    background: var(--table-bg);
-                    border: 1px solid var(--border-color);
-                    border-radius: 8px;
-                    padding: 15px;
-                    max-height: 500px;
-                    overflow-y: auto;
-                    font-family: 'Courier New', monospace;
-                    font-size: 0.85rem;
-                ">
-                    <div style="color: var(--text-muted); text-align: center; padding: 20px;">
-                        Загрузка логов...
+                <div class="dc-list" id="dc-list">
+                    <!-- DC items will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Actions Section -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title">
+                        ⚡ Быстрые действия
+                    </h2>
+                </div>
+                <div class="action-buttons">
+                    <a href="tg://socks?server=127.0.0.1&port=1080" class="action-btn primary">
+                        🔓 Открыть в Telegram
+                    </a>
+                    <button class="action-btn secondary" onclick="copyProxyConfig()">
+                        📋 Копировать конфиг
+                    </button>
+                    <button class="action-btn secondary" onclick="showQRCode()">
+                        📱 QR-код
+                    </button>
+                </div>
+            </div>
+
+            <!-- Info Section -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title">
+                        ℹ️ Информация
+                    </h2>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                    <div>
+                        <div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">Версия</div>
+                        <div style="font-weight: 600;" id="version">2.10.0</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">Время работы</div>
+                        <div style="font-weight: 600;" id="uptime">—</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">Сервер</div>
+                        <div style="font-weight: 600;" id="server-info">127.0.0.1:8080</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Settings Tab -->
-        <div id="settings-tab" class="tab-content">
-            <div class="section">
-                <h2>⚙️ Настройки прокси</h2>
-                <div id="configAlert"></div>
-                <form id="configForm" onsubmit="saveConfig(event)">
-                    <div class="form-group">
-                        <label for="proxyHost">Хост:</label>
-                        <input type="text" id="proxyHost" name="host" value="127.0.0.1" placeholder="127.0.0.1">
-                    </div>
-                    <div class="form-group">
-                        <label for="proxyPort">Порт:</label>
-                        <input type="number" id="proxyPort" name="port" value="1080" min="1" max="65535">
-                    </div>
-                    <div class="form-group">
-                        <label for="dcIp">DC IP (каждый с новой строки, формат: ID:IP):</label>
-                        <textarea id="dcIp" name="dc_ip" placeholder="2:149.154.167.220&#10;4:149.154.167.220"></textarea>
-                    </div>
-                    <div class="form-group checkbox-group">
-                        <input type="checkbox" id="verbose" name="verbose">
-                        <label for="verbose">Подробное логирование (verbose)</label>
-                    </div>
-                    <button type="submit" class="btn btn-success">💾 Сохранить</button>
-                </form>
-            </div>
+        <!-- Footer -->
+        <footer class="footer">
+            <p>© 2026 Dupley Maxim Igorevich. Все права защищены.</p>
+        </footer>
+    </div>
 
-            <div class="section">
-                <h2>📱 QR-код для Telegram Mobile</h2>
-                <p style="margin-bottom: 15px; color: var(--text-secondary);">
-                    Отсканируйте QR-код через Telegram Mobile для автоматической настройки прокси:
-                </p>
-                <div style="text-align: center; padding: 20px;">
-                    <img id="qrCode" src="/api/qr" alt="QR Code" style="max-width: 256px; border: 2px solid var(--border-color); border-radius: 12px; padding: 10px; background: white;">
-                    <br>
-                    <button onclick="downloadQR()" class="btn btn-primary" style="margin-top: 15px;">⬇️ Скачать QR-код</button>
-                    <button onclick="refreshQR()" class="btn btn-secondary" style="margin-top: 15px; margin-left: 10px;">🔄 Обновить</button>
-                </div>
-            </div>
+    <!-- Install Prompt -->
+    <div id="install-prompt" class="install-prompt" style="display: none;">
+        <div class="install-prompt-icon">📲</div>
+        <div class="install-prompt-text">
+            <h4>Установить приложение</h4>
+            <p>Добавьте TG WS Proxy на главный экран</p>
         </div>
-
-        <div class="section">
-            <h2>ℹ️ Информация о сервере</h2>
-            <table>
-                <tbody>
-                    <tr><th>Версия</th><td id="version">-</td></tr>
-                    <tr><th>Хост</th><td id="host">-</td></tr>
-                    <tr><th>Порт</th><td id="port">-</td></tr>
-                    <tr><th>Время работы</th><td id="uptime">-</td></tr>
-                    <tr><th>Health Status</th><td id="healthStatus"><span class="health-badge health-ok">Unknown</span></td></tr>
-                </tbody>
-            </table>
+        <div class="install-prompt-actions">
+            <button class="install-btn" onclick="installApp()">Установить</button>
+            <button class="install-dismiss" onclick="dismissInstallPrompt()">✕</button>
         </div>
     </div>
 
     <script>
-        let currentConfig = {};
+        // State
+        let deferredPrompt = null;
+        let previousStats = null;
+        let autoRefreshInterval = null;
 
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 MB';
-            const mb = bytes / (1024 * 1024);
-            return mb.toFixed(2) + ' MB';
-        }
-
-        function truncateSecret(secret) {
-            return secret.substring(0, 8) + '...' + secret.substring(secret.length - 4);
-        }
-
-        function switchTab(tabName) {
-            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-            event.target.classList.add('active');
-            document.getElementById(tabName + '-tab').classList.add('active');
-
-            if (tabName === 'settings') {
-                loadConfig();
-            } else if (tabName === 'dc') {
-                loadDCStats();
-            } else if (tabName === 'logs') {
-                loadLiveLogs();
-            }
-        }
-
-        async function loadStats() {
-            try {
-                const response = await fetch('/api/stats');
-                const data = await response.json();
-
-                document.getElementById('totalConnections').textContent = data.connections_total || 0;
-                document.getElementById('activeConnections').textContent = data.connections_active || 0;
-                document.getElementById('bytesUp').innerHTML = formatBytes(data.bytes_received || 0).replace(' MB', '<span class="unit"> MB</span>');
-                document.getElementById('bytesDown').innerHTML = formatBytes(data.bytes_sent || 0).replace(' MB', '<span class="unit"> MB</span>');
-
-                // Update secrets table
-                const secretsTable = document.getElementById('secretsTable');
-                if (data.per_secret && Object.keys(data.per_secret).length > 0) {
-                    secretsTable.innerHTML = Object.entries(data.per_secret).map(([secret, stats]) => `
-                        <tr>
-                            <td><code>${truncateSecret(secret)}</code></td>
-                            <td>${stats.connections_total || 0}</td>
-                            <td>${stats.connections_active || 0}</td>
-                            <td>${formatBytes(stats.bytes_received || 0)}</td>
-                            <td>${formatBytes(stats.bytes_sent || 0)}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    secretsTable.innerHTML = '<tr><td colspan="5" style="text-align:center;">Нет данных</td></tr>';
-                }
-
-                document.getElementById('version').textContent = data.version || '2.5.5';
-                document.getElementById('host').textContent = data.host || '-';
-                document.getElementById('port').textContent = data.port || '-';
-                document.getElementById('uptime').textContent = data.uptime || '-';
-
-                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ru-RU');
-
-                // Update status indicator
-                const statusIndicator = document.getElementById('statusIndicator');
-                if (data.ws_errors && data.ws_errors > 10) {
-                    statusIndicator.className = 'status-indicator status-degraded';
-                } else {
-                    statusIndicator.className = 'status-indicator status-online';
-                }
-
-                // Render traffic chart
-                if (data.traffic_history) {
-                    renderTrafficChart(data.traffic_history);
-                }
-            } catch (error) {
-                console.error('Failed to load stats:', error);
-                document.getElementById('statusIndicator').className = 'status-indicator status-offline';
-            }
-        }
-
-        async function loadDCStats() {
-            try {
-                const response = await fetch('/api/dc-stats');
-                const data = await response.json();
-
-                const dcTable = document.getElementById('dcTable');
-                if (data.dc_stats && data.dc_stats.length > 0) {
-                    dcTable.innerHTML = data.dc_stats.map(dc => `
-                        <tr>
-                            <td><strong>DC ${dc.dc_id}</strong></td>
-                            <td>${dc.connections}</td>
-                            <td>${dc.errors}</td>
-                            <td>${dc.latency_ms !== null ? dc.latency_ms.toFixed(2) : 'N/A'}</td>
-                            <td>${dc.avg_latency_ms !== null ? dc.avg_latency_ms.toFixed(2) : 'N/A'}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    dcTable.innerHTML = '<tr><td colspan="5" style="text-align:center;">Нет данных</td></tr>';
-                }
-            } catch (error) {
-                console.error('Failed to load DC stats:', error);
-                document.getElementById('dcTable').innerHTML = '<tr><td colspan="5" style="text-align:center;">Ошибка загрузки</td></tr>';
-            }
-        }
-
-        async function loadConfig() {
-            try {
-                const response = await fetch('/api/config');
-                if (response.ok) {
-                    currentConfig = await response.json();
-                    document.getElementById('proxyHost').value = currentConfig.host || '127.0.0.1';
-                    document.getElementById('proxyPort').value = currentConfig.port || 1080;
-                    document.getElementById('dc_ip').value = (currentConfig.dc_ip || []).join('\\n');
-                    document.getElementById('verbose').checked = currentConfig.verbose || false;
-                }
-            } catch (error) {
-                console.log('Config not available or not editable');
-            }
-        }
-
-        async function saveConfig(event) {
-            event.preventDefault();
-
-            const config = {
-                host: document.getElementById('proxyHost').value,
-                port: parseInt(document.getElementById('proxyPort').value),
-                dc_ip: document.getElementById('dc_ip').value.split('\\n').filter(line => line.trim()),
-                verbose: document.getElementById('verbose').checked,
-            };
-
-            try {
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(config),
-                });
-
-                const result = await response.json();
-                const alertDiv = document.getElementById('configAlert');
-
-                if (response.ok && result.status === 'success') {
-                    alertDiv.innerHTML = '<div class="alert alert-success">✅ Настройки успешно сохранены!</div>';
-                    setTimeout(() => alertDiv.innerHTML = '', 5000);
-                } else {
-                    alertDiv.innerHTML = '<div class="alert alert-error">❌ Ошибка: ' + (result.error || 'Неизвестная ошибка') + '</div>';
-                }
-            } catch (error) {
-                document.getElementById('configAlert').innerHTML = '<div class="alert alert-error">❌ Ошибка соединения: ' + error + '</div>';
-            }
-        }
-
-        async function exportStats(format) {
-            window.location.href = '/api/stats/export?format=' + format;
-        }
-
-        function downloadQR() {
-            const link = document.createElement('a');
-            link.href = '/api/qr';
-            link.download = 'tg-ws-proxy-qr.png';
-            link.click();
-        }
-
-        function refreshQR() {
-            const qrImg = document.getElementById('qrCode');
-            qrImg.src = '/api/qr?t=' + Date.now();
-        }
-
-        async function checkHealth() {
-            try {
-                const response = await fetch('/api/health');
-                const data = await response.json();
-
-                const healthBadge = document.getElementById('healthStatus');
-                if (data.status === 'ok') {
-                    healthBadge.innerHTML = '<span class="health-badge health-ok">✓ OK</span>';
-                } else if (data.status === 'degraded') {
-                    healthBadge.innerHTML = '<span class="health-badge health-degraded">⚠ Degraded</span>';
-                } else {
-                    healthBadge.innerHTML = '<span class="health-badge" style="background:#fed7d7;color:#742a2a">✗ Unhealthy</span>';
-                }
-
-                let wsStatus = 'OK';
-                if (data.websocket?.status === 'degraded') wsStatus = '⚠ Degraded';
-                else if (data.websocket?.status === 'unhealthy') wsStatus = '✗ Unhealthy';
-
-                let dcStatus = '';
-                if (data.dc_health && data.dc_health.length > 0) {
-                    dcStatus = '\\n\\nDC Status:\\n' + data.dc_health.map(dc =>
-                        `  DC${dc.dc_id}: ${dc.status === 'ok' ? '✓' : dc.status === 'degraded' ? '⚠' : '✗'} (${dc.error_rate_percent}% errors)`
-                    ).join('\\n');
-                }
-
-                alert('Health Check:\\n' +
-                      'Status: ' + data.status.toUpperCase() + '\\n' +
-                      'WebSocket: ' + wsStatus + '\\n' +
-                      'Pool Efficiency: ' + (data.websocket?.pool_efficiency_percent || 0) + '%\\n' +
-                      'WS Errors: ' + (data.websocket?.ws_errors || 0) + '\\n' +
-                      'Pool Hits/Misses: ' + (data.websocket?.pool_hits || 0) + '/' + (data.websocket?.pool_misses || 0) +
-                      dcStatus);
-            } catch (error) {
-                alert('Health check failed: ' + error);
-            }
-        }
-
+        // Theme management
         function toggleTheme() {
             const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
+            const current = html.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            document.querySelector('.theme-toggle').textContent = next === 'dark' ? '☀️' : '🌙';
         }
 
-        // Live Logs functionality
-        let logsAutoRefresh = true;
-        let logsInterval = null;
-        let lastLogTime = 0;
-
-        function clearLogs() {
-            document.getElementById('liveLogs').innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Логи очищены</div>';
-            updateLogCount(0);
-        }
-
-        function toggleAutoRefresh() {
-            logsAutoRefresh = !logsAutoRefresh;
-            const btn = document.getElementById('autoRefreshBtn');
-            btn.textContent = logsAutoRefresh ? '⏸️ Пауза' : '▶️ Старт';
-            if (logsAutoRefresh) {
-                startLogsRefresh();
-            } else {
-                stopLogsRefresh();
-            }
-        }
-
-        function startLogsRefresh() {
-            if (logsInterval) clearInterval(logsInterval);
-            logsInterval = setInterval(loadLiveLogs, 2000);
-        }
-
-        function stopLogsRefresh() {
-            if (logsInterval) clearInterval(logsInterval);
-            logsInterval = null;
-        }
-
-        function updateLogCount(count) {
-            document.getElementById('logCount').textContent = 'Записей: ' + count;
-        }
-
-        async function loadLiveLogs() {
-            if (!logsAutoRefresh) return;
-
-            try {
-                const response = await fetch('/api/stats');
-                const data = await response.json();
-                const logsContainer = document.getElementById('liveLogs');
-
-                // Get connection history from stats
-                const history = data.connection_history || [];
-                const newLogs = history.filter(log => log.time > lastLogTime);
-
-                if (newLogs.length > 0) {
-                    newLogs.sort((a, b) => a.time - b.time);
-
-                    for (const log of newLogs) {
-                        const time = new Date((log.time % 3600) * 1000).toISOString().substr(14, 8);
-                        const type = log.type || 'unknown';
-                        const dc = log.dc ? `DC${log.dc}` : '-';
-
-                        let icon = '🔌';
-                        let color = 'var(--text-primary)';
-
-                        if (type === 'ws') { icon = '🟢'; color = '#48bb78'; }
-                        else if (type === 'tcp_fallback') { icon = '🟡'; color = '#ed8936'; }
-                        else if (type === 'http_rejected') { icon = '🔴'; color = '#f56565'; }
-                        else if (type === 'passthrough') { icon = '🔵'; color = '#4299e1'; }
-
-                        const logEntry = `[${time}] ${icon} ${type.toUpperCase().padEnd(15)} ${dc.padEnd(6)}`;
-
-                        const div = document.createElement('div');
-                        div.textContent = logEntry;
-                        div.style.color = color;
-                        div.style.padding = '4px 0';
-                        div.style.borderBottom = '1px solid var(--border-color)';
-                        logsContainer.appendChild(div);
-
-                        lastLogTime = log.time;
-                    }
-
-                    // Auto-scroll to bottom
-                    logsContainer.scrollTop = logsContainer.scrollHeight;
-                    updateLogCount(logsContainer.children.length);
-                } else if (logsContainer.children.length === 0 ||
-                          (logsContainer.children.length === 1 && logsContainer.children[0].textContent.includes('Загрузка'))) {
-                    logsContainer.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">Нет новых подключений</div>';
-                    updateLogCount(0);
-                }
-            } catch (error) {
-                console.error('Failed to load live logs:', error);
-            }
-        }
-
-        function renderTrafficChart(trafficHistory) {
-            const svg = document.getElementById('trafficChart');
-            if (!trafficHistory || trafficHistory.length < 2) {
-                svg.innerHTML = '<text x=\"300\" y=\"100\" text-anchor=\"middle\" fill=\"#888\" font-size=\"14\">Нет данных для отображения</text>';
-                return;
-            }
-
-            const width = 600;
-            const height = 200;
-            const padding = 20;
-            const chartHeight = height - padding * 2;
-
-            // Find max value for scaling
-            let maxValue = 0;
-            trafficHistory.forEach(point => {
-                if (point.bytes_up > maxValue) maxValue = point.bytes_up;
-                if (point.bytes_down > maxValue) maxValue = point.bytes_down;
-            });
-
-            if (maxValue === 0) maxValue = 1;
-
-            // Generate smooth path using bezier curves
-            const generateSmoothPath = (key) => {
-                if (trafficHistory.length < 2) return '';
-                const points = trafficHistory.map((point, i) => {
-                    const x = (i / (trafficHistory.length - 1)) * (width - padding * 2) + padding;
-                    const y = height - padding - (point[key] / maxValue) * chartHeight;
-                    return {x, y};
-                });
-
-                let path = `M ${points[0].x} ${points[0].y}`;
-                for (let i = 1; i < points.length; i++) {
-                    const prev = points[i - 1];
-                    const curr = points[i];
-                    const cpx = (prev.x + curr.x) / 2;
-                    path += ` C ${cpx} ${prev.y}, ${cpx} ${curr.y}, ${curr.x} ${curr.y}`;
-                }
-                return path;
-            };
-
-            const generateArea = (key) => {
-                const path = generateSmoothPath(key);
-                const lastX = width - padding;
-                const firstX = padding;
-                const baseY = height - padding;
-                return `${path} L ${lastX} ${baseY} L ${firstX} ${baseY} Z`;
-            };
-
-            const pathUp = generateSmoothPath('bytes_up');
-            const pathDown = generateSmoothPath('bytes_down');
-
-            svg.innerHTML = `
-                <defs>
-                    <linearGradient id=\"gradUp\" x1=\"0%\" y1=\"0%\" x2=\"0%\" y2=\"100%\">
-                        <stop offset=\"0%\" style=\"stop-color:#48bb78;stop-opacity:0.4\" />
-                        <stop offset=\"100%\" style=\"stop-color:#48bb78;stop-opacity:0.05\" />
-                    </linearGradient>
-                    <linearGradient id=\"gradDown\" x1=\"0%\" y1=\"0%\" x2=\"0%\" y2=\"100%\">
-                        <stop offset=\"0%\" style=\"stop-color:#3182ce;stop-opacity:0.4\" />
-                        <stop offset=\"100%\" style=\"stop-color:#3182ce;stop-opacity:0.05\" />
-                    </linearGradient>
-                </defs>
-                <path class=\"chart-area\" fill=\"url(#gradUp)\" d=\"${generateArea('bytes_up')}\" />
-                <path class=\"chart-area\" fill=\"url(#gradDown)\" d=\"${generateArea('bytes_down')}\" />
-                <path class=\"chart-line chart-line-up\" d=\"${pathUp}\" />
-                <path class=\"chart-line chart-line-down\" d=\"${pathDown}\" />
-            `;
-        }
-
-        // Load saved theme on page load
+        // Load saved theme
         (function() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
+            const saved = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', saved);
+            document.querySelector('.theme-toggle').textContent = saved === 'dark' ? '☀️' : '🌙';
         })();
 
-        // Auto-refresh every 5 seconds
-        setInterval(loadStats, 5000);
-        loadStats();
+        // Format bytes
+        function humanBytes(n) {
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let i = 0;
+            while (Math.abs(n) >= 1024 && i < units.length - 1) {
+                n /= 1024;
+                i++;
+            }
+            return n.toFixed(1) + ' ' + units[i];
+        }
+
+        // Copy proxy config
+        function copyProxyConfig() {
+            const config = 'SOCKS5 127.0.0.1 1080';
+            navigator.clipboard.writeText(config).then(() => {
+                showToast('✅ Конфигурация скопирована!');
+            }).catch(() => {
+                showToast('❌ Не удалось скопировать');
+            });
+        }
+
+        // Show QR code
+        function showQRCode() {
+            const url = window.location.origin;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
+            
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 2000;
+                animation: fadeIn 0.3s ease;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 24px; text-align: center; max-width: 400px; margin: 20px;">
+                    <h3 style="margin-bottom: 20px; color: #1e293b;">📱 QR-код для подключения</h3>
+                    <img src="${qrUrl}" alt="QR Code" style="width: 100%; max-width: 300px; border-radius: 12px;">
+                    <p style="margin-top: 20px; color: #64748b; font-size: 14px;">Отсканируйте для быстрого доступа</p>
+                    <button onclick="this.closest('div[style*=fixed]').remove()" style="margin-top: 20px; padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">Закрыть</button>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+        }
+
+        // Toast notification
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%) translateY(-100px);
+                background: var(--bg-card);
+                padding: 16px 24px;
+                border-radius: 12px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                z-index: 3000;
+                animation: slideDown 0.3s ease forwards;
+                font-weight: 600;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Load statistics
+        async function loadStats() {
+            const refreshBtn = document.querySelector('.refresh-btn');
+            refreshBtn?.classList.add('spinning');
+
+            try {
+                const response = await fetch('/api/stats', { 
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const stats = await response.json();
+                
+                // Update connection stats
+                const totalConn = stats.connections_total || 0;
+                document.getElementById('total-connections').textContent = totalConn.toLocaleString();
+                
+                const wsConn = stats.connections_ws || 0;
+                document.getElementById('ws-connections').textContent = wsConn.toLocaleString();
+                
+                // Pool efficiency
+                const poolTotal = (stats.pool_hits || 0) + (stats.pool_misses || 0);
+                const efficiency = poolTotal > 0 ? Math.round((stats.pool_hits || 0) / poolTotal * 100) : 100;
+                document.getElementById('pool-efficiency').textContent = efficiency + '%';
+                
+                // Traffic
+                const totalTraffic = (stats.bytes_up || 0) + (stats.bytes_down || 0);
+                document.getElementById('traffic-total').textContent = humanBytes(totalTraffic);
+                document.getElementById('bytes-up').innerHTML = `${humanBytes(stats.bytes_up || 0)} <span class="stat-unit">↑</span>`;
+                document.getElementById('bytes-down').innerHTML = `${humanBytes(stats.bytes_down || 0)} <span class="stat-unit">↓</span>`;
+                
+                // Update info
+                document.getElementById('version').textContent = stats.version || '2.10.0';
+                document.getElementById('uptime').textContent = stats.uptime || '—';
+                document.getElementById('server-info').textContent = `${stats.host || '127.0.0.1'}:${stats.port || '8080'}`;
+                
+                // Calculate changes
+                if (previousStats) {
+                    const connChange = totalConn - (previousStats.connections_total || 0);
+                    const connPercent = previousStats.connections_total > 0 ? 
+                        Math.round((connChange / previousStats.connections_total) * 100) : 0;
+                    
+                    const changeEl = document.getElementById('connections-change');
+                    if (changeEl) {
+                        changeEl.className = `stat-change ${connChange >= 0 ? 'positive' : 'negative'}`;
+                        changeEl.querySelector('span').textContent = `${connChange >= 0 ? '+' : ''}${connPercent}%`;
+                    }
+                }
+                
+                previousStats = stats;
+                
+                // Load DC stats
+                await loadDcStats();
+                
+                // Update status
+                updateHealthStatus(stats);
+                
+                // Show app, hide loading
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+                document.getElementById('loading').innerHTML = `
+                    <div class="error-state">
+                        <h3>❌ Ошибка подключения</h3>
+                        <p>Не удалось подключиться к прокси.<br>Убедитесь, что прокси запущен.</p>
+                        <button onclick="location.reload()" class="action-btn primary" style="margin: 0 auto;">Попробовать снова</button>
+                    </div>
+                `;
+            } finally {
+                refreshBtn?.classList.remove('spinning');
+            }
+        }
+
+        // Update health status
+        function updateHealthStatus(stats) {
+            const wsErrors = stats.ws_errors || 0;
+            const indicator = document.getElementById('status-indicator');
+            const text = document.getElementById('status-text');
+            const subtext = document.getElementById('status-subtext');
+            
+            if (wsErrors < 5) {
+                indicator.className = 'status-indicator online';
+                text.textContent = 'Работает нормально';
+                subtext.textContent = 'Все системы в норме';
+            } else if (wsErrors < 15) {
+                indicator.className = 'status-indicator degraded';
+                text.textContent = 'Работает с проблемами';
+                subtext.textContent = `${wsErrors} ошибок WebSocket`;
+            } else {
+                indicator.className = 'status-indicator offline';
+                text.textContent = 'Проблемы с подключением';
+                subtext.textContent = `${wsErrors} ошибок WebSocket`;
+            }
+        }
+
+        // Load DC statistics
+        async function loadDcStats() {
+            try {
+                const response = await fetch('/api/dc-stats', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                const list = document.getElementById('dc-list');
+                list.innerHTML = '';
+                
+                (data.dc_stats || []).forEach(dc => {
+                    const connections = dc.connections || 0;
+                    const errors = dc.errors || 0;
+                    const errorRate = connections > 0 ? (errors / connections * 100) : 0;
+                    
+                    let statusClass = 'ok';
+                    let statusText = 'OK';
+                    if (errorRate > 30) {
+                        statusClass = 'error';
+                        statusText = 'Ошибка';
+                    } else if (errorRate > 10) {
+                        statusClass = 'degraded';
+                        statusText = 'Проблемы';
+                    }
+                    
+                    const item = document.createElement('div');
+                    item.className = 'dc-item';
+                    item.innerHTML = `
+                        <div class="dc-left">
+                            <div class="dc-id">${dc.dc_id}</div>
+                            <div class="dc-info">
+                                <h4>DC ${dc.dc_id}</h4>
+                                <p>${connections} подключений, ${errors} ошибок</p>
+                            </div>
+                        </div>
+                        <div class="dc-status">
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                        </div>
+                    `;
+                    list.appendChild(item);
+                });
+                
+            } catch (error) {
+                console.error('Failed to load DC stats:', error);
+            }
+        }
+
+        // Refresh stats
+        function refreshStats() {
+            const refreshBtn = document.querySelector('.refresh-btn');
+            refreshBtn?.classList.add('spinning');
+            setTimeout(() => {
+                loadStats();
+                setTimeout(() => refreshBtn?.classList.remove('spinning'), 1000);
+            }, 500);
+        }
+
+        // Install prompt
+        function showInstallPrompt() {
+            const prompt = document.getElementById('install-prompt');
+            if (prompt && !isStandalone()) {
+                prompt.style.display = 'flex';
+                setTimeout(() => {
+                    prompt.style.animation = 'slideUp 0.3s ease forwards';
+                }, 10000);
+            }
+        }
+
+        function dismissInstallPrompt() {
+            const prompt = document.getElementById('install-prompt');
+            if (prompt) {
+                prompt.style.animation = 'slideUp 0.3s ease reverse';
+                setTimeout(() => prompt.style.display = 'none', 300);
+            }
+            localStorage.setItem('install-prompt-dismissed', 'true');
+        }
+
+        async function installApp() {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            await deferredPrompt.userChoice;
+            dismissInstallPrompt();
+            deferredPrompt = null;
+        }
+
+        // Check if standalone
+        function isStandalone() {
+            return window.matchMedia('(display-mode: standalone)').matches ||
+                   window.navigator.standalone === true;
+        }
+
+        // Auto-refresh
+        function startAutoRefresh() {
+            autoRefreshInterval = setInterval(loadStats, 5000);
+        }
+
+        // PWA Install event
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (!localStorage.getItem('install-prompt-dismissed')) {
+                showInstallPrompt();
+            }
+        });
+
+        // Initialize
+        let loadTimeout = null;
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set timeout for initial load
+            loadTimeout = setTimeout(() => {
+                const loading = document.getElementById('loading');
+                if (loading && document.getElementById('app').style.display === 'none') {
+                    loading.innerHTML = `
+                        <div class="error-state">
+                            <h3>⚠️ Превышено время ожидания</h3>
+                            <p>Сервер не отвечает. Проверьте:<br>1. Подключение к интернету<br>2. URL адрес<br>3. Брандмауэр</p>
+                            <button onclick="location.reload()" class="action-btn primary" style="margin: 0 auto;">Обновить страницу</button>
+                        </div>
+                    `;
+                }
+            }, 15000); // 15 seconds timeout
+            
+            loadStats().then(() => {
+                if (loadTimeout) clearTimeout(loadTimeout);
+            });
+            startAutoRefresh();
+        });
     </script>
 </body>
 </html>
@@ -971,7 +1351,11 @@ class WebDashboard:
         self.debug = debug
         self.start_time = datetime.now()
 
-        self.app = Flask(__name__)
+        # Get the directory where web_dashboard.py is located
+        self.static_folder = os.path.join(os.path.dirname(__file__), 'static')
+        os.makedirs(self.static_folder, exist_ok=True)
+
+        self.app = Flask(__name__, static_folder=self.static_folder)
         self.app.config['SECRET_KEY'] = os.urandom(24).hex()
         CORS(self.app)
 
@@ -1168,6 +1552,16 @@ class WebDashboard:
                 })
 
             return jsonify({'dc_stats': formatted})
+
+        @self.app.route('/manifest.json')
+        def manifest() -> Response:
+            """Serve PWA manifest."""
+            return Response(PWA_MANIFEST, mimetype='application/json')
+
+        @self.app.route('/sw.js')
+        def service_worker() -> Response:
+            """Serve Service Worker."""
+            return Response(SERVICE_WORKER, mimetype='application/javascript')
 
     def start(self) -> None:
         """Start the web dashboard in a background thread."""

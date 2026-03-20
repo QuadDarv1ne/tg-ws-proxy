@@ -1,3 +1,10 @@
+"""
+TG WS Proxy - Windows Tray Application.
+
+Author: Dupley Maxim Igorevich
+© 2026 Dupley Maxim Igorevich. All rights reserved.
+"""
+
 from __future__ import annotations
 
 import asyncio as _asyncio
