@@ -970,28 +970,38 @@ def _show_daily_summary() -> None:
 
         # Format summary
         from proxy.stats import _human_bytes
-        session_hours = (daily_stats["session_end"] - daily_stats["session_start"]) / 3600
+        session_end: float = daily_stats["session_end"]
+        session_start: float = daily_stats["session_start"]
+        session_hours = (session_end - session_start) / 3600
+
+        connections_total: int = int(daily_stats["connections_total"])
+        connections_ws: int = int(daily_stats["connections_ws"])
+        connections_tcp: int = int(daily_stats["connections_tcp_fallback"])
+        bytes_up: float = float(daily_stats["bytes_up"])
+        bytes_down: float = float(daily_stats["bytes_down"])
+        ws_errors: int = int(daily_stats["ws_errors"])
 
         summary = (
             f"Статистика за {daily_stats['date']}:\n\n"
-            f"Всего подключений: {int(daily_stats['connections_total'])}\n"
-            f"  WebSocket: {int(daily_stats['connections_ws'])}\n"
-            f"  TCP fallback: {int(daily_stats['connections_tcp_fallback'])}\n"
+            f"Всего подключений: {connections_total}\n"
+            f"  WebSocket: {connections_ws}\n"
+            f"  TCP fallback: {connections_tcp}\n"
             f"\n"
-            f"Трафик вверх: {_human_bytes(float(daily_stats['bytes_up']))}\n"
-            f"Трафик вниз: {_human_bytes(float(daily_stats['bytes_down']))}\n"
+            f"Трафик вверх: {_human_bytes(bytes_up)}\n"
+            f"Трафик вниз: {_human_bytes(bytes_down)}\n"
             f"\n"
-            f"Ошибки WS: {int(daily_stats['ws_errors'])}\n"
+            f"Ошибки WS: {ws_errors}\n"
             f"Время работы: {session_hours:.1f}ч"
         )
 
         log.info("Daily summary:\n%s", summary)
 
         # Format info dialog
+        total_bytes = bytes_up + bytes_down
         _show_notification(
             f"Статистика сохранена в лог.\n\n"
-            f"Подключений: {int(daily_stats['connections_total'])}\n"
-            f"Трафик: {_human_bytes(float(daily_stats['bytes_up']) + float(daily_stats['bytes_down']))}",
+            f"Подключений: {connections_total}\n"
+            f"Трафик: {_human_bytes(total_bytes)}",
             "TG WS Proxy — Статистика за день")
 
     except Exception as exc:
@@ -1782,17 +1792,18 @@ def run_tray() -> None:
     log.info("Platform: %s", sys.platform)
 
     # Set up client connection notification callback
-    def on_client_connect(dc, dst, port):
+    def on_client_connect(dc: int, dst: str, port: int) -> None:
         if NOTIFICATIONS_MARKER.exists():
             log.info("Client connected to DC%d %s:%d", dc, dst, port)
             # Show notification every 10 connections to avoid spam
-            if tg_ws_proxy.get_stats().get('connections_total', 0) % 10 == 1:
+            stats = tg_ws_proxy.get_stats()
+            if stats.get('connections_total', 0) % 10 == 1:
                 _show_notification(
                     f"Клиент подключился\nDC{dc} {dst}:{port}",
                     "TG WS Proxy — Подключение")
 
     # Set up client error notification callback
-    def on_client_error(dc, dst, port, error_type, error_msg):
+    def on_client_error(dc: int, dst: str, port: int, error_type: str, error_msg: str) -> None:
         if NOTIFICATIONS_MARKER.exists():
             log.warning("Client error DC%d %s:%d - %s: %s", dc, dst, port, error_type, error_msg)
             # Show notification for errors

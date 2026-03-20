@@ -267,6 +267,7 @@ class ProxyServer:
         auth_credentials: dict[str, str] | None = None,
         ip_whitelist: list[str] | None = None,
         encryption_config: dict | None = None,
+        rate_limit_config: dict | None = None,
     ):
         self.dc_opt = dc_opt
         self.host = host
@@ -274,6 +275,13 @@ class ProxyServer:
         self.auth_required = auth_required
         self.auth_credentials = auth_credentials
         self.ip_whitelist = set(ip_whitelist) if ip_whitelist else None
+
+        # Rate limiting support
+        self.rate_limiter = None
+        self._rate_limit_task: asyncio.Task | None = None
+        
+        if rate_limit_config:
+            self._setup_rate_limiter(rate_limit_config)
 
         # Modern encryption support
         self.encryption_enabled = False
@@ -368,6 +376,43 @@ class ProxyServer:
             self._key_rotation_task.cancel()
             self._key_rotation_task = None
             log.debug("Key rotation task stopped")
+
+    def _setup_rate_limiter(self, config: dict) -> None:
+        """Setup rate limiter based on configuration."""
+        try:
+            from proxy.rate_limiter import RateLimiter, RateLimitConfig
+            
+            self.rate_limiter = RateLimiter(
+                RateLimitConfig(
+                    requests_per_second=config.get("requests_per_second", 10.0),
+                    requests_per_minute=config.get("requests_per_minute", 100),
+                    requests_per_hour=config.get("requests_per_hour", 1000),
+                    max_concurrent_connections=config.get("max_concurrent_connections", 500),
+                    max_connections_per_ip=config.get("max_connections_per_ip", 10),
+                    ban_threshold=config.get("ban_threshold", 5),
+                    ban_duration_seconds=config.get("ban_duration_seconds", 300.0),
+                )
+            )
+            log.info(
+                "Rate limiter configured: %d req/min, %d max connections",
+                config.get("requests_per_minute", 100),
+                config.get("max_concurrent_connections", 500),
+            )
+        except Exception as e:
+            log.warning("Failed to setup rate limiter: %s. Running without rate limiting.", e)
+            self.rate_limiter = None
+
+    async def _start_rate_limiter(self) -> None:
+        """Start rate limiter background tasks."""
+        if self.rate_limiter:
+            await self.rate_limiter.start()
+            log.info("Rate limiter started")
+
+    async def _stop_rate_limiter(self) -> None:
+        """Stop rate limiter."""
+        if self.rate_limiter:
+            await self.rate_limiter.stop()
+            log.info("Rate limiter stopped")
 
     @property
     def ws_pool(self) -> _WsPool:
@@ -1297,13 +1342,20 @@ async def _tcp_fallback(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     return True
 
 
-async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, stats: Stats, dc_opt: dict[int, str | None],
-                         ws_pool: _WsPool, ws_blacklist: set[tuple[int, bool]],
-                         dc_fail_until: dict[tuple[int, bool], float],
-                         auth_required: bool = False,
-                         auth_credentials: dict[str, str] | None = None,
-                         ip_whitelist: set[str] | None = None,
-                         dc_error_count: dict[tuple[int, bool], int] | None = None) -> None:
+async def _handle_client(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    stats: Stats,
+    dc_opt: dict[int, str | None],
+    ws_pool: _WsPool,
+    ws_blacklist: set[tuple[int, bool]],
+    dc_fail_until: dict[tuple[int, bool], float],
+    auth_required: bool = False,
+    auth_credentials: dict[str, str] | None = None,
+    ip_whitelist: set[str] | None = None,
+    dc_error_count: dict[tuple[int, bool], int] | None = None,
+    rate_limiter: object | None = None,  # RateLimiter instance
+) -> None:
     peer = writer.get_extra_info('peername')
     client_ip = peer[0] if peer else "unknown"
     client_port = peer[1] if peer else 0
@@ -1311,6 +1363,27 @@ async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
     import random
     client_id = f"{client_ip}:{client_port}-{random.randint(1000, 9999)}"
     label = f"[C{client_id}]"
+
+    # Check rate limiting first
+    if rate_limiter is not None:
+        from proxy.rate_limiter import RateLimitAction
+        action, delay = rate_limiter.check_rate_limit(client_ip)
+        
+        if action == RateLimitAction.BAN:
+            log.warning("%s client banned (IP: %s)", label, client_ip)
+            stats.add_connection('http_rejected', dc=None)
+            writer.close()
+            return
+        elif action == RateLimitAction.REJECT:
+            log.warning("%s rate limit exceeded - rejected", label)
+            stats.add_connection('http_rejected', dc=None)
+            writer.write(b'\x05\x01')  # Connection refused
+            await writer.drain()
+            writer.close()
+            return
+        elif action == RateLimitAction.DELAY:
+            log.debug("%s rate limited - delaying %.1fs", label, delay)
+            await asyncio.sleep(delay)
 
     # Check IP whitelist
     if ip_whitelist is not None and client_ip not in ip_whitelist:
@@ -1668,6 +1741,7 @@ async def _run(
     auth_credentials: dict[str, str] | None = None,
     ip_whitelist: list[str] | None = None,
     encryption_config: dict | None = None,
+    rate_limit_config: dict | None = None,
 ) -> None:
     global _server_instance
 
@@ -1680,11 +1754,15 @@ async def _run(
         auth_credentials,
         ip_whitelist,
         encryption_config,
+        rate_limit_config,
     )
     _server_instance = server_instance
 
     # Start automatic key rotation if encryption is enabled
     await server_instance._start_key_rotation()
+    
+    # Start rate limiter if configured
+    await server_instance._start_rate_limiter()
 
     # Create a wrapper for _handle_client that passes server state
     async def handle_client_wrapper(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -1698,7 +1776,8 @@ async def _run(
             auth_required=server_instance.auth_required,
             auth_credentials=server_instance.auth_credentials,
             ip_whitelist=server_instance.ip_whitelist,
-            dc_error_count=server_instance.dc_error_count
+            dc_error_count=server_instance.dc_error_count,
+            rate_limiter=server_instance.rate_limiter,
         )
 
     server = await asyncio.start_server(
@@ -1849,6 +1928,10 @@ async def _run(
             # Stop real-time monitoring
             server_instance.stats.stop_realtime_monitoring()
             log.info("Real-time monitoring stopped")
+            
+            # Stop rate limiter
+            await server_instance._stop_rate_limiter()
+            log.info("Rate limiter stopped")
 
             # Close server socket first (stop accepting new connections)
             server.close()
