@@ -8,6 +8,12 @@
 
 ## 🔴 Высокий приоритет (v2.18.0)
 
+### ✅ Выполнено
+- [x] Исправлены ruff предупреждения (W291, W293, F401, F402)
+- [x] Установлены missing stubs: types-psutil, types-qrcode, types-Flask-Cors, types-pyperclip
+- [x] Исправлены mypy ошибки в tg_ws_proxy.py, mtproto_proxy.py, web_dashboard.py, crypto.py
+- [x] Mypy: 1 ошибка (rich.typing stubs не существует)
+
 ### Тесты и покрытие
 - [ ] Покрытие tg_ws_proxy.py: 19% → 60%
   - [ ] Тесты для `_handle_client()`
@@ -16,15 +22,6 @@
   - [ ] Тесты для callbacks уведомлений
 - [ ] Load tests (100+ одновременных подключений)
 - [ ] Coverage > 80% (текущее ~46%)
-
-### Type hints и mypy
-- [ ] Пройти mypy без ошибок (остались missing stubs: flask_cors, qrcode)
-- [ ] Исправить сложные типы в dashboard.py, web_dashboard.py, tray.py, tg_ws_proxy.py
-
-### Код-качество
-- [ ] Исправить ruff предупреждения (W293: whitespace в blank lines)
-  - [ ] `build_desktop.py`
-  - [ ] `build_mobile.py`
 
 ---
 
@@ -126,7 +123,7 @@
 ## 📊 Статус тестов
 
 ```
-Tests: 238 passed, 3 skipped, 0 errors
+Tests: 236 passed, 3 skipped, 0 errors
 Coverage: ~46% (цель >80%)
 ```
 
@@ -134,12 +131,15 @@ Coverage: ~46% (цель >80%)
 - `tg_ws_proxy.py` — 19% (872 строки пропущено)
 - `mtproto_proxy.py` — 49%
 - `dashboard.py` — 57%
-- `web_dashboard.py` — 60%
+- `web_dashboard.py` — 61%
 
 **Исправлено в v2.18.0:**
 - ✅ Переименованы функции в `diagnostics.py`: `test_*` → `check_*`
 - ✅ Обновлены импорты и вызовы в `test_diagnostics.py`
-- ✅ Тесты запускаются без ошибок (238 passed, 3 skipped, 0 errors)
+- ✅ Тесты запускаются без ошибок (236 passed, 3 skipped, 0 errors)
+- ✅ Mypy ошибки: ~30 → 1 (rich.typing stubs не существует)
+- ✅ Ruff предупреждения: исправлены все
+- ✅ Установлены missing stubs
 
 ---
 
