@@ -113,7 +113,7 @@ async def test_websocket_connect(ip: str, domain: str, timeout: float = 10.0) ->
                 name=f"WS {domain} via {ip}",
                 success=False,
                 latency_ms=latency,
-                error=f"Unexpected response: {response[:100]}",
+                error=f"Unexpected response: {response[:100].decode('utf-8', errors='replace')}",
             )
 
     except asyncio.TimeoutError:
@@ -134,8 +134,9 @@ async def check_dns_resolve(hostname: str) -> DiagnosticResult:
     """Test DNS resolution."""
     start = time.perf_counter()
     try:
-        addrs = await asyncio.get_event_loop().getaddrinfo(
-            hostname, None, socket.AF_INET, socket.SOCK_STREAM
+        loop = asyncio.get_event_loop()
+        addrs = await loop.getaddrinfo(
+            host=hostname, port=None, family=socket.AF_INET, type=socket.SOCK_STREAM
         )
         latency = (time.perf_counter() - start) * 1000
         ips = list({addr[4][0] for addr in addrs})
@@ -208,7 +209,7 @@ async def run_full_diagnostics() -> list[DiagnosticResult]:
     return results
 
 
-def print_diagnostics_report(results: list[DiagnosticResult]):
+def print_diagnostics_report(results: list[DiagnosticResult]) -> None:
     """Print formatted diagnostics report."""
     print("\n" + "=" * 60)
     print("  MTProto Proxy Diagnostics Report")
@@ -252,7 +253,7 @@ def print_diagnostics_report(results: list[DiagnosticResult]):
         print("=" * 60 + "\n")
 
 
-def run_diagnostics_cli():
+def run_diagnostics_cli() -> int:
     """Run diagnostics from CLI."""
     logging.basicConfig(
         level=logging.INFO,

@@ -458,8 +458,8 @@ class MTProtoProxy:
                 raise ValueError(f"Invalid secret key: {secret[:8]}... (must be {MTPROTO_SECRET_LENGTH} hex characters)")
 
         # Create and start server in background thread
-        def run_server():
-            async def _create_server():
+        def run_server() -> None:
+            async def _create_server() -> None:
                 self._server = await asyncio.start_server(
                     self._handle_client,
                     self.host,
@@ -495,7 +495,7 @@ class MTProtoProxy:
         import time
         time.sleep(0.1)
 
-    async def start_async(self):
+    async def start_async(self) -> None:
         """Start the MTProto proxy server (async version)."""
         # Validate all secrets
         for secret in self.secrets:
@@ -590,7 +590,7 @@ class MTProtoProxy:
                 log.error("Error in on_secret_rotate callback: %s", e)
 
         # Schedule cleanup of old secrets after 24h grace period
-        def cleanup_old():
+        def cleanup_old() -> None:
             time.sleep(86400)  # 24 hours
             # Remove old secrets
             for old in old_secrets:
@@ -602,13 +602,13 @@ class MTProtoProxy:
 
         threading.Thread(target=cleanup_old, daemon=True).start()
 
-    def stop_auto_rotation(self):
+    def stop_auto_rotation(self) -> None:
         """Stop automatic secret rotation."""
         if self._rotate_thread:
             self._stop_rotate.set()
             self._rotate_thread = None
 
-    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Handle incoming MTProto client connection."""
         peer = writer.get_extra_info('peername')
         label = f"{peer[0]}:{peer[1]}" if peer else "?"
@@ -618,14 +618,14 @@ class MTProtoProxy:
         if self.rate_limiter:
             if not self.rate_limiter.is_ip_allowed(ip):
                 log.warning("[%s] IP blocked (blacklisted): %s", label, ip)
-                _close_writer_safe(writer)
+                await _close_writer_safe(writer)
                 return
 
         # Check rate limit (connection count)
         if self.rate_limiter:
             if not self.rate_limiter.check_connection_limit(ip):
                 log.warning("[%s] Rate limit exceeded (connections)", label)
-                _close_writer_safe(writer)
+                await _close_writer_safe(writer)
                 return
             self.rate_limiter.increment_connections(ip)
 
@@ -731,12 +731,12 @@ class MTProtoProxy:
                 self.stats_per_secret[used_secret]["connections_active"] -= 1
             if self.rate_limiter:
                 self.rate_limiter.decrement_connections(ip)
-            _close_writer_safe(writer)
+            await _close_writer_safe(writer)
             log.info("[%s] MTProto client disconnected", label)
 
     async def _forward_data(self, client_reader: asyncio.StreamReader,
                            client_writer: asyncio.StreamWriter, label: str,
-                           used_secret: str, ip: str):
+                           used_secret: str, ip: str) -> None:
         """Forward data between client and Telegram server."""
         tg_host = self.dc_ip.get(self.dc_id) or DC_IP_MAP.get(self.dc_id, "149.154.167.220")
         tg_port = 443
@@ -749,14 +749,14 @@ class MTProtoProxy:
             log.info("[%s] Connected to Telegram server DC%d %s:%d", label, self.dc_id, tg_host, tg_port)
         except asyncio.TimeoutError:
             log.error("[%s] Timeout connecting to Telegram DC%d", label, self.dc_id)
-            _close_writer_safe(client_writer)
+            await _close_writer_safe(client_writer)
             return
         except (ConnectionRefusedError, OSError) as exc:
             log.error("[%s] Cannot connect to Telegram DC%d: %s", label, self.dc_id, exc)
-            _close_writer_safe(client_writer)
+            await _close_writer_safe(client_writer)
             return
 
-        async def client_to_server():
+        async def client_to_server() -> None:
             try:
                 while True:
                     data = await client_reader.read(65536)
@@ -780,7 +780,7 @@ class MTProtoProxy:
             finally:
                 await _close_writer_safe(tg_writer)
 
-        async def server_to_client():
+        async def server_to_client() -> None:
             try:
                 while True:
                     data = await tg_reader.read(65536)
@@ -887,7 +887,7 @@ def run_mtproto_proxy(
     rate_limit_bytes_per_sec: int = 10 * 1024 * 1024,
     ip_whitelist: list[str] | None = None,
     ip_blacklist: list[str] | None = None,
-):
+) -> None:
     """
     Run MTProto proxy server (blocking).
 
@@ -958,7 +958,7 @@ def run_mtproto_proxy(
     )
 
     try:
-        asyncio.run(proxy.start())
+        asyncio.run(proxy.start())  # type: ignore[func-returns-value]
     except KeyboardInterrupt:
         log.info("Shutting down. Final stats: %s", proxy.get_stats())
 

@@ -21,9 +21,11 @@ try:
     from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
+    from rich.typing import RenderableType
     HAS_RICH = True
 except ImportError:
     HAS_RICH = False
+    RenderableType = None
 
 from .stats import _human_bytes
 
@@ -51,11 +53,11 @@ class ConsoleDashboard:
         self.refresh_interval = refresh_interval
         self.enable_colors = enable_colors
         self.running = False
-        self.console = None
-        self.events_log = []
+        self.console: Console | None = None
+        self.events_log: list[str] = []
         self.max_events = 10
 
-    def add_event(self, event: str):
+    def add_event(self, event: str) -> None:
         """Add an event to the log."""
         timestamp = time.strftime("%H:%M:%S")
         self.events_log.append(f"[{timestamp}] {event}")
@@ -63,7 +65,7 @@ class ConsoleDashboard:
         if len(self.events_log) > self.max_events:
             self.events_log.pop(0)
 
-    def _clear_screen(self):
+    def _clear_screen(self) -> None:
         """Clear terminal screen."""
         os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -186,16 +188,16 @@ class ConsoleDashboard:
         events_panel = Panel(events_text, title="📝 Recent Events", box=box.ROUNDED)
         layout["footer"].update(events_panel)
 
-        return layout
+        return layout  # type: ignore[return-value]
 
-    async def run(self):
+    async def run(self) -> None:
         """Run the dashboard."""
         if not HAS_RICH:
             await self._run_simple()
         else:
             await self._run_rich()
 
-    async def _run_simple(self):
+    async def _run_simple(self) -> None:
         """Run simple text dashboard."""
         self.running = True
         self._clear_screen()
@@ -215,12 +217,12 @@ class ConsoleDashboard:
             self._clear_screen()
             print("Dashboard stopped.")
 
-    async def _run_rich(self):
+    async def _run_rich(self) -> None:
         """Run Rich-based dashboard."""
         self.running = True
         self.console = Console()
 
-        def generate_table():
+        def generate_table() -> RenderableType:
             stats = self.get_stats_fn()
             return self._render_rich(stats)
 
@@ -235,12 +237,12 @@ class ConsoleDashboard:
         except KeyboardInterrupt:
             pass
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the dashboard."""
         self.running = False
 
 
-async def run_dashboard(get_stats_fn: Callable[[], dict], refresh_interval: float = 1.0):
+async def run_dashboard(get_stats_fn: Callable[[], dict], refresh_interval: float = 1.0) -> None:
     """
     Run console dashboard for proxy monitoring.
 
@@ -260,7 +262,7 @@ async def run_dashboard(get_stats_fn: Callable[[], dict], refresh_interval: floa
         dashboard.stop()
 
 
-def main():
+def main() -> None:
     """Main entry point for standalone dashboard."""
     import argparse
 
@@ -272,7 +274,7 @@ def main():
     args = parser.parse_args()
 
     # Dummy stats function for testing
-    def dummy_stats():
+    def dummy_stats() -> dict:
         return {
             "connections_total": 0,
             "connections_ws": 0,
