@@ -297,7 +297,10 @@ class ProxyServer:
         self.dc_error_count: dict[tuple[int, bool], int] = {}
 
         # Statistics
-        self.stats = Stats()
+        self.stats = Stats(enable_alerts=True)
+        
+        # Start real-time monitoring
+        self.stats.start_realtime_monitoring(check_interval=30.0)  # Check every 30 seconds
 
         # WebSocket connection pool (lazy initialized)
         self._ws_pool: _WsPool | None = None
@@ -1843,6 +1846,10 @@ async def _run(
         async def wait_stop() -> None:
             await stop_event.wait()
             log.info("Graceful shutdown initiated...")
+
+            # Stop real-time monitoring
+            server_instance.stats.stop_realtime_monitoring()
+            log.info("Real-time monitoring stopped")
 
             # Close server socket first (stop accepting new connections)
             server.close()
