@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 
@@ -20,6 +21,8 @@ try:
 except ImportError:
     ALERTS_AVAILABLE = False
     alerts_module = None  # type: ignore
+
+log = logging.getLogger('tg-ws-stats')
 
 
 def _human_bytes(n: float) -> str:
@@ -152,6 +155,19 @@ class Stats:
         self.ws_errors += 1
         if dc is not None and dc in self.dc_stats:
             self.dc_stats[dc]['errors'] += 1
+        
+        # Track error rate for monitoring
+        if self.enable_alerts:
+            now = time.monotonic()
+            self._error_rate_window.append((now, 1))
+            # Keep only last minute
+            cutoff = now - 60
+            self._error_rate_window = [(t, e) for t, e in self._error_rate_window if t > cutoff]
+            
+            # Check error rate threshold
+            errors_per_minute = sum(e for t, e in self._error_rate_window)
+            if errors_per_minute >= 10:
+                alerts_module.alert_ws_errors(errors_per_minute)
 
     def record_latency(self, dc: int, latency_ms: float) -> None:
         """Record latency measurement for a DC."""
@@ -392,4 +408,108 @@ class Stats:
             "session_duration_seconds": self.get_session_duration(),
             "best_dc": self.get_best_dc(),
             "performance": perf_stats,
+            "health": self.get_health_status(),
+            "alerts_enabled": self.enable_alerts,
+        }
+
+    def start_realtime_monitoring(self, check_interval: float = 10.0) -> None:
+        """
+        Start real-time monitoring with automatic threshold checks.
+        
+        Args:
+            check_interval: How often to check thresholds (seconds)
+        """
+        if not self.enable_alerts:
+            log.debug("Alerts disabled, skipping monitoring")
+            return
+        
+        async def monitor_loop():
+            """Monitor metrics and generate alerts."""
+            log.info("Real-time monitoring started (interval: %.1fs)", check_interval)
+            self._monitoring_enabled = True
+            
+            while self._monitoring_enabled:
+                try:
+                    await asyncio.sleep(check_interval)
+                    self._check_all_thresholds()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    log.error("Monitoring error: %s", e)
+            
+            log.info("Real-time monitoring stopped")
+        
+        # Start monitoring task
+        try:
+            self._monitor_task = asyncio.create_task(monitor_loop())
+        except Exception as e:
+            log.warning("Failed to start monitoring task: %s", e)
+    
+    def stop_realtime_monitoring(self) -> None:
+        """Stop real-time monitoring."""
+        self._monitoring_enabled = False
+        if self._monitor_task:
+            self._monitor_task.cancel()
+            self._monitor_task = None
+    
+    def _check_all_thresholds(self) -> None:
+        """Check all metric thresholds and generate alerts."""
+        if not self._alert_manager:
+            return
+        
+        # Get current metrics
+        conn_per_min = self.get_connections_per_minute()
+        error_rate = self._calculate_error_rate()
+        cpu = self.cpu_percent
+        memory_percent = (self.memory_bytes / (psutil.virtual_memory().total * 1024 * 1024)) * 100 if self.memory_bytes else 0
+        traffic_gb_hour = self._calculate_traffic_per_hour() / (1024 ** 3)
+        
+        # Check thresholds
+        self._alert_manager.check_threshold("connections_per_minute", conn_per_min)
+        self._alert_manager.check_threshold("error_rate_percent", error_rate)
+        self._alert_manager.check_threshold("cpu_percent", cpu)
+        self._alert_manager.check_threshold("memory_percent", memory_percent)
+        self._alert_manager.check_threshold("traffic_gb_per_hour", traffic_gb_hour)
+        
+        # Check for connection spikes
+        if conn_per_min > 100 and conn_per_min > self.peak_connections_per_minute * 1.5:
+            alerts_module.alert_connection_spike(int(conn_per_min))
+        
+        # Check for high traffic
+        if traffic_gb_hour > 50:
+            alerts_module.alert_traffic_limit(traffic_gb_hour)
+    
+    def _calculate_error_rate(self) -> float:
+        """Calculate current error rate percentage."""
+        total = self.connections_total
+        if total == 0:
+            return 0.0
+        return (self.ws_errors / total) * 100
+    
+    def _calculate_traffic_per_hour(self) -> int:
+        """Calculate traffic per hour in bytes."""
+        if not self.traffic_history:
+            return 0
+        
+        now = time.monotonic()
+        hour_ago = now - 3600
+        
+        # Find traffic from an hour ago
+        for entry in self.traffic_history:
+            if entry['time'] < hour_ago:
+                continue
+            current_total = entry['bytes_up'] + entry['bytes_down']
+            return current_total
+        
+        # If no history from an hour ago, return current total
+        return self.bytes_up + self.bytes_down
+    
+    def get_monitoring_status(self) -> dict:
+        """Get current monitoring status."""
+        return {
+            "enabled": self._monitoring_enabled,
+            "alerts_enabled": self.enable_alerts,
+            "alert_manager": self._alert_manager is not None,
+            "monitor_task": self._monitor_task is not None,
+            "error_rate_window": len(self._error_rate_window),
         }
