@@ -17,19 +17,17 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-import os
 import secrets
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Optional
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, padding
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.backends import default_backend
 
 log = logging.getLogger('tg-ws-crypto')
 
@@ -109,7 +107,7 @@ class AES256GCMCipher(BaseCipher):
             key = secrets.token_bytes(32)
         elif len(key) != 32:
             raise CryptoError("AES-256 requires 32-byte key")
-        
+
         self.key = key
         self.nonce_size = 12  # 96 bits recommended for GCM
         self.tag_size = 16
@@ -118,24 +116,24 @@ class AES256GCMCipher(BaseCipher):
     def encrypt(self, plaintext: bytes, associated_data: bytes = b'') -> EncryptedData:
         """Encrypt with AES-256-GCM."""
         nonce = secrets.token_bytes(self.nonce_size)
-        
+
         cipher = Cipher(
             algorithms.AES(self.key),
             modes.GCM(nonce),
             backend=default_backend()
         )
         encryptor = cipher.encryptor()
-        
+
         if associated_data:
             encryptor.authenticate_additional_data(associated_data)
-        
+
         ciphertext = encryptor.update(plaintext) + encryptor.finalize()
         self._encrypt_count += 1
-        
+
         # Rotate nonce after 2^32 encryptions (GCM security limit)
         if self._encrypt_count >= 0xFFFFFFFF:
             self.rotate_key()
-        
+
         return EncryptedData(
             ciphertext=ciphertext,
             nonce=nonce,
@@ -147,17 +145,17 @@ class AES256GCMCipher(BaseCipher):
         """Decrypt with AES-256-GCM."""
         if encrypted.tag is None:
             raise DecryptionError("Missing authentication tag")
-        
+
         cipher = Cipher(
             algorithms.AES(self.key),
             modes.GCM(encrypted.nonce, encrypted.tag),
             backend=default_backend()
         )
         decryptor = cipher.decryptor()
-        
+
         if associated_data:
             decryptor.authenticate_additional_data(associated_data)
-        
+
         try:
             plaintext = decryptor.update(encrypted.ciphertext) + decryptor.finalize()
             return plaintext
@@ -189,7 +187,7 @@ class ChaCha20Poly1305Cipher(BaseCipher):
             key = secrets.token_bytes(32)
         elif len(key) != 32:
             raise CryptoError("ChaCha20 requires 32-byte key")
-        
+
         self.key = key
         self.nonce_size = 12  # 96 bits for ChaCha20
         self.tag_size = 16
@@ -198,22 +196,22 @@ class ChaCha20Poly1305Cipher(BaseCipher):
     def encrypt(self, plaintext: bytes, associated_data: bytes = b'') -> EncryptedData:
         """Encrypt with ChaCha20-Poly1305."""
         nonce = secrets.token_bytes(self.nonce_size)
-        
+
         cipher = Cipher(
             algorithms.ChaCha20(self.key, nonce),
             mode=None,
             backend=default_backend()
         )
         encryptor = cipher.encryptor()
-        
+
         # For Poly1305 authentication, we need to use AEAD interface
         # cryptography library handles this internally
         ciphertext = encryptor.update(plaintext) + encryptor.finalize()
         self._encrypt_count += 1
-        
+
         # Note: Full AEAD requires additional Poly1305 implementation
         # This is simplified version - production should use cryptography's AEAD
-        
+
         return EncryptedData(
             ciphertext=ciphertext,
             nonce=nonce,
@@ -228,7 +226,7 @@ class ChaCha20Poly1305Cipher(BaseCipher):
             backend=default_backend()
         )
         decryptor = cipher.decryptor()
-        
+
         try:
             plaintext = decryptor.update(encrypted.ciphertext) + decryptor.finalize()
             return plaintext
@@ -260,7 +258,7 @@ class XChaCha20Poly1305Cipher(BaseCipher):
             key = secrets.token_bytes(32)
         elif len(key) != 32:
             raise CryptoError("XChaCha20 requires 32-byte key")
-        
+
         self.key = key
         self.nonce_size = 24  # 192 bits for XChaCha20
         self._encrypt_count = 0
@@ -268,12 +266,12 @@ class XChaCha20Poly1305Cipher(BaseCipher):
     def encrypt(self, plaintext: bytes, associated_data: bytes = b'') -> EncryptedData:
         """Encrypt with XChaCha20-Poly1305."""
         nonce = secrets.token_bytes(self.nonce_size)
-        
+
         # XChaCha20 uses first 16 bytes of nonce to derive subkey
         # then uses remaining 8 bytes + standard counter
-        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
         from cryptography.hazmat.primitives import hashes
-        
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
         # Derive subkey using HChaCha20
         hkdf = HKDF(
             algorithm=hashes.SHA256(),
@@ -283,20 +281,20 @@ class XChaCha20Poly1305Cipher(BaseCipher):
             backend=default_backend()
         )
         subkey = hkdf.derive(nonce[:16] + self.key)
-        
+
         # Use remaining 8 bytes + counter for actual encryption
         cipher_nonce = nonce[16:] + b'\x00\x00\x00\x00'
-        
+
         cipher = Cipher(
             algorithms.ChaCha20(subkey, cipher_nonce),
             mode=None,
             backend=default_backend()
         )
         encryptor = cipher.encryptor()
-        
+
         ciphertext = encryptor.update(plaintext) + encryptor.finalize()
         self._encrypt_count += 1
-        
+
         return EncryptedData(
             ciphertext=ciphertext,
             nonce=nonce,
@@ -306,9 +304,9 @@ class XChaCha20Poly1305Cipher(BaseCipher):
     def decrypt(self, encrypted: EncryptedData, associated_data: bytes = b'') -> bytes:
         """Decrypt with XChaCha20."""
         # Derive subkey same as encryption
-        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
         from cryptography.hazmat.primitives import hashes
-        
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
         hkdf = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
@@ -317,16 +315,16 @@ class XChaCha20Poly1305Cipher(BaseCipher):
             backend=default_backend()
         )
         subkey = hkdf.derive(encrypted.nonce[:16] + self.key)
-        
+
         cipher_nonce = encrypted.nonce[16:] + b'\x00\x00\x00\x00'
-        
+
         cipher = Cipher(
             algorithms.ChaCha20(subkey, cipher_nonce),
             mode=None,
             backend=default_backend()
         )
         decryptor = cipher.decryptor()
-        
+
         try:
             plaintext = decryptor.update(encrypted.ciphertext) + decryptor.finalize()
             return plaintext
@@ -358,12 +356,12 @@ class AES256CTRStream(BaseCipher):
             key = secrets.token_bytes(32)
         elif len(key) != 32:
             raise CryptoError("AES-256 requires 32-byte key")
-        
+
         self.key = key
         self.nonce_size = 16  # 128 bits counter
         self.use_hmac = use_hmac
         self._counter = 0
-        
+
         # HMAC key for authentication
         if use_hmac:
             self.hmac_key = secrets.token_bytes(32)
@@ -379,19 +377,19 @@ class AES256CTRStream(BaseCipher):
     def encrypt(self, plaintext: bytes, associated_data: bytes = b'') -> EncryptedData:
         """Encrypt with AES-256-CTR."""
         nonce = secrets.token_bytes(self.nonce_size)
-        
+
         cipher = Cipher(
             algorithms.AES(self.key),
             modes.CTR(nonce),
             backend=default_backend()
         )
         encryptor = cipher.encryptor()
-        
+
         ciphertext = encryptor.update(plaintext) + encryptor.finalize()
-        
+
         # Add HMAC for authentication
         tag = self._compute_hmac(ciphertext, nonce) if self.use_hmac else None
-        
+
         return EncryptedData(
             ciphertext=ciphertext,
             nonce=nonce,
@@ -406,14 +404,14 @@ class AES256CTRStream(BaseCipher):
             expected_tag = self._compute_hmac(encrypted.ciphertext, encrypted.nonce)
             if not hmac.compare_digest(expected_tag, encrypted.tag):
                 raise DecryptionError("HMAC verification failed")
-        
+
         cipher = Cipher(
             algorithms.AES(self.key),
             modes.CTR(encrypted.nonce),
             backend=default_backend()
         )
         decryptor = cipher.decryptor()
-        
+
         try:
             plaintext = decryptor.update(encrypted.ciphertext) + decryptor.finalize()
             return plaintext
@@ -446,7 +444,7 @@ class MTProtoIGECipher(BaseCipher):
             raise CryptoError("MTProto requires 32-byte key")
         if len(iv) != 32:
             raise CryptoError("MTProto requires 32-byte IV")
-        
+
         self.key = key
         self.iv = iv
         self.block_size = 16
@@ -457,12 +455,12 @@ class MTProtoIGECipher(BaseCipher):
         """Encrypt single block using IGE mode."""
         # XOR with previous ciphertext
         xor_input = bytes(a ^ b for a, b in zip(block, iv_prev))
-        
+
         # AES encrypt
         cipher = Cipher(algorithms.AES(self.key), modes.ECB(), backend=default_backend())
         encryptor = cipher.encryptor()
         encrypted = encryptor.update(xor_input) + encryptor.finalize()
-        
+
         # XOR with previous plaintext (IV for first block)
         return bytes(a ^ b for a, b in zip(encrypted, iv_curr))
 
@@ -470,12 +468,12 @@ class MTProtoIGECipher(BaseCipher):
         """Decrypt single block using IGE mode."""
         # XOR with previous plaintext
         xor_input = bytes(a ^ b for a, b in zip(block, iv_curr))
-        
+
         # AES decrypt
         cipher = Cipher(algorithms.AES(self.key), modes.ECB(), backend=default_backend())
         decryptor = cipher.decryptor()
         decrypted = decryptor.update(xor_input) + decryptor.finalize()
-        
+
         # XOR with previous ciphertext (IV for first block)
         return bytes(a ^ b for a, b in zip(decrypted, iv_prev))
 
@@ -484,21 +482,21 @@ class MTProtoIGECipher(BaseCipher):
         # Pad to block size
         pad_len = self.block_size - (len(plaintext) % self.block_size)
         padded = plaintext + bytes([pad_len] * pad_len)
-        
+
         result = b''
         iv_prev = self._iv_prev
         iv_curr = self._iv_curr
-        
+
         for i in range(0, len(padded), self.block_size):
             block = padded[i:i + self.block_size]
             encrypted_block = self._ige_encrypt_block(block, iv_prev, iv_curr)
             result += encrypted_block
             iv_prev = block
             iv_curr = encrypted_block
-        
+
         self._iv_prev = iv_prev
         self._iv_curr = iv_curr
-        
+
         return EncryptedData(
             ciphertext=result,
             nonce=b'',  # IGE doesn't use nonce
@@ -511,17 +509,17 @@ class MTProtoIGECipher(BaseCipher):
         result = b''
         iv_prev = self._iv_prev
         iv_curr = self._iv_curr
-        
+
         for i in range(0, len(ciphertext), self.block_size):
             block = ciphertext[i:i + self.block_size]
             decrypted_block = self._ige_decrypt_block(block, iv_prev, iv_curr)
             result += decrypted_block
             iv_prev = decrypted_block
             iv_curr = block
-        
+
         self._iv_prev = iv_prev
         self._iv_curr = iv_curr
-        
+
         # Remove padding
         pad_len = result[-1]
         return result[:-pad_len]
@@ -557,14 +555,14 @@ class CryptoManager:
         """Initialize all supported ciphers."""
         # Generate master key
         master_key = secrets.token_bytes(self.config.key_size)
-        
+
         self._ciphers = {
             EncryptionType.AES_256_GCM: AES256GCMCipher(master_key),
             EncryptionType.CHACHA20_POLY1305: ChaCha20Poly1305Cipher(master_key),
             EncryptionType.XCHACHA20_POLY1305: XChaCha20Poly1305Cipher(master_key),
             EncryptionType.AES_256_CTR: AES256CTRStream(master_key, use_hmac=True),
         }
-        
+
         self._active_cipher = self._ciphers[self.config.algorithm]
 
     def set_algorithm(self, algorithm: EncryptionType) -> None:
@@ -610,9 +608,9 @@ class CryptoManager:
         """
         if salt is None:
             salt = secrets.token_bytes(16)
-        
+
         password_bytes = password.encode('utf-8')
-        
+
         if method == 'pbkdf2':
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
@@ -631,7 +629,7 @@ class CryptoManager:
                 backend=default_backend()
             )
             key = hkdf.derive(password_bytes)
-        
+
         return key, salt
 
     def get_supported_algorithms(self) -> list[EncryptionType]:

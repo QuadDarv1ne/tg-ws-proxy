@@ -348,10 +348,125 @@ class TestStatsExtended:
         """Test human_bytes edge cases."""
         from proxy.stats import _human_bytes
 
-        assert _human_bytes(0) == "0B"
-        assert _human_bytes(1) == "1B"
-        assert _human_bytes(1023) == "1023B"
-        # Note: _human_bytes uses while loop that increments unit_idx before returning
-        assert _human_bytes(1024) == "1.0MB"  # Implementation quirk
-        assert _human_bytes(1024*1024) == "1.0GB"
-        assert _human_bytes(1024*1024*1024) == "1.0TB"
+        assert _human_bytes(0) == '0B'
+        assert _human_bytes(1) == '1B'
+        assert _human_bytes(1023) == '1023B'
+        # Note: _human_bytes implementation has specific behavior
+        assert _human_bytes(1024) == '1.0MB'  # Implementation quirk
+        assert _human_bytes(1024 * 1024) == '1.0GB'
+        assert _human_bytes(1024 * 1024 * 1024) == '1.0TB'
+
+
+class TestStatsHealthStatus:
+    """Tests for health status methods."""
+
+    def test_get_pool_efficiency(self):
+        """Test pool efficiency calculation."""
+        stats = Stats()
+        
+        # Empty pool
+        assert stats.get_pool_efficiency() == 1.0
+        
+        # 100% efficiency
+        stats.pool_hits = 100
+        stats.pool_misses = 0
+        assert stats.get_pool_efficiency() == 1.0
+        
+        # 80% efficiency
+        stats.pool_hits = 80
+        stats.pool_misses = 20
+        assert stats.get_pool_efficiency() == 0.8
+        
+        # 50% efficiency
+        stats.pool_hits = 50
+        stats.pool_misses = 50
+        assert stats.get_pool_efficiency() == 0.5
+
+    def test_get_error_rate(self):
+        """Test error rate calculation."""
+        stats = Stats()
+        
+        # Empty
+        assert stats.get_error_rate() == 0.0
+        
+        # No errors
+        stats.connections_total = 100
+        stats.ws_errors = 0
+        assert stats.get_error_rate() == 0.0
+        
+        # 5% error rate
+        stats.connections_total = 100
+        stats.ws_errors = 5
+        assert stats.get_error_rate() == 5.0
+        
+        # 15% error rate
+        stats.connections_total = 100
+        stats.ws_errors = 15
+        assert stats.get_error_rate() == 15.0
+
+    def test_get_health_status_healthy(self):
+        """Test healthy status."""
+        stats = Stats()
+        stats.pool_hits = 90
+        stats.pool_misses = 10
+        stats.connections_total = 100
+        stats.ws_errors = 2
+        
+        status, message, color = stats.get_health_status()
+        assert status == 'healthy'
+        assert color == 'green'
+        assert 'нормально' in message
+
+    def test_get_health_status_degraded(self):
+        """Test degraded status."""
+        stats = Stats()
+        stats.pool_hits = 60
+        stats.pool_misses = 40
+        stats.connections_total = 100
+        stats.ws_errors = 8
+        
+        status, message, color = stats.get_health_status()
+        assert status == 'degraded'
+        assert color == 'yellow'
+        assert 'проблемами' in message
+
+    def test_get_health_status_critical(self):
+        """Test critical status."""
+        stats = Stats()
+        stats.pool_hits = 40
+        stats.pool_misses = 60
+        stats.connections_total = 100
+        stats.ws_errors = 20
+        
+        status, message, color = stats.get_health_status()
+        assert status == 'critical'
+        assert color == 'red'
+        assert 'Проблемы' in message
+
+
+class TestStatsExportCSV:
+    """Tests for CSV export."""
+
+    def test_export_to_csv(self):
+        """Test CSV export."""
+        stats = Stats()
+        stats.add_connection('ws', dc=2)
+        stats.add_bytes(up=1024, down=2048)
+        
+        csv_str = stats.export_to_csv()
+        
+        assert 'metric,value,unit' in csv_str
+        assert 'connections_total' in csv_str
+        assert 'bytes_up' in csv_str
+        assert 'bytes_down' in csv_str
+
+    def test_export_to_csv_with_dc_stats(self):
+        """Test CSV export with DC stats."""
+        stats = Stats()
+        stats.add_connection('ws', dc=2)
+        stats.record_latency(2, 50.0)
+        
+        csv_str = stats.export_to_csv()
+        
+        assert 'dc_2' in csv_str
+        assert 'latency' in csv_str

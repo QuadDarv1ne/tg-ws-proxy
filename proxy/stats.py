@@ -6,11 +6,20 @@ Provides Stats class for tracking proxy connections, traffic, and performance me
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
 
 import psutil
+
+# Import alerts module
+try:
+    from . import alerts as alerts_module
+    ALERTS_AVAILABLE = True
+except ImportError:
+    ALERTS_AVAILABLE = False
+    alerts_module = None  # type: ignore
 
 
 def _human_bytes(n: float) -> str:
@@ -42,7 +51,7 @@ def _human_time(seconds: float) -> str:
 class Stats:
     """Proxy statistics tracker."""
 
-    def __init__(self, history_size: int = 100) -> None:
+    def __init__(self, history_size: int = 100, enable_alerts: bool = True) -> None:
         self.connections_total = 0
         self.connections_ws = 0
         self.connections_tcp_fallback = 0
@@ -81,6 +90,14 @@ class Stats:
         self.traffic_history: list[dict] = []
         self._last_traffic_snapshot = (0, 0)
         self._traffic_snapshot_time = time.monotonic()
+        
+        # Real-time monitoring
+        self.enable_alerts = enable_alerts and ALERTS_AVAILABLE
+        self._alert_manager = alerts_module.get_alert_manager() if self.enable_alerts else None
+        self._last_error_count = 0
+        self._error_rate_window: List[tuple[float, int]] = []  # (timestamp, errors)
+        self._monitoring_enabled = False
+        self._monitor_task: Optional[asyncio.Task] = None  # type: ignore[name-defined]
 
     def add_connection(self, conn_type: str, dc: int | None = None) -> None:
         """Record a new connection in history."""
@@ -247,13 +264,93 @@ class Stats:
             }
         return result
 
-    def export_to_json(self) -> str:
+    def export_to_json(self, include_history: bool = False) -> str:
         """Export statistics to JSON format."""
         data = self.to_dict()
         data['session_duration_seconds'] = self.get_session_duration()
         data['peak_connections_per_minute'] = self.peak_connections_per_minute
         data['dc_stats'] = self.get_dc_stats()
+        if include_history:
+            data['connection_history'] = self.connection_history[-100:]
+            data['traffic_history'] = self.traffic_history[-100:]
         return json.dumps(data, indent=2, default=str)
+
+    def export_to_csv(self) -> str:
+        """Export statistics to CSV format."""
+        import csv
+        import io
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Header
+        writer.writerow([
+            'metric', 'value', 'unit'
+        ])
+
+        # Basic stats
+        data = self.to_dict()
+        for key, value in data.items():
+            if isinstance(value, (int, float)):
+                writer.writerow([key, value, ''])
+
+        # DC stats
+        for dc_id, dc_data in self.get_dc_stats().items():
+            writer.writerow([f'dc_{dc_id}_connections', dc_data['connections'], ''])
+            writer.writerow([f'dc_{dc_id}_errors', dc_data['errors'], ''])
+            if dc_data.get('latency_ms'):
+                writer.writerow([f'dc_{dc_id}_latency', dc_data['latency_ms'], 'ms'])
+
+        return output.getvalue()
+
+    def get_pool_efficiency(self) -> float:
+        """Calculate WebSocket pool efficiency (0.0-1.0)."""
+        total = self.pool_hits + self.pool_misses
+        if total == 0:
+            return 1.0
+        return self.pool_hits / total
+
+    def get_error_rate(self) -> float:
+        """Calculate error rate (errors per 100 connections)."""
+        if self.connections_total == 0:
+            return 0.0
+        return (self.ws_errors / self.connections_total) * 100
+
+    def get_health_status(self) -> tuple[str, str, str]:
+        """
+        Get system health status.
+
+        Returns:
+            Tuple of (status, message, color)
+            - status: 'healthy', 'degraded', 'critical'
+            - message: Human-readable status
+            - color: 'green', 'yellow', 'red'
+        """
+        error_rate = self.get_error_rate()
+        pool_efficiency = self.get_pool_efficiency()
+
+        # Critical: High error rate or low pool efficiency
+        if error_rate > 15 or pool_efficiency < 0.5:
+            return (
+                'critical',
+                f'Проблемы с подключением (ошибки: {error_rate:.1f}%, пул: {pool_efficiency:.0%})',
+                'red'
+            )
+
+        # Degraded: Moderate issues
+        if error_rate > 5 or pool_efficiency < 0.7:
+            return (
+                'degraded',
+                f'Работает с проблемами (ошибки: {error_rate:.1f}%, пул: {pool_efficiency:.0%})',
+                'yellow'
+            )
+
+        # Healthy
+        return (
+            'healthy',
+            'Работает нормально',
+            'green'
+        )
 
     def summary(self) -> str:
         """Return human-readable stats summary."""
