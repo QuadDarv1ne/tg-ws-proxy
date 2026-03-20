@@ -16,11 +16,11 @@ import psutil
 
 # Import alerts module
 try:
-    from . import alerts as alerts_module
+    from . import alerts as alerts_module  # type: ignore[attr-defined]
     ALERTS_AVAILABLE = True
 except ImportError:
     ALERTS_AVAILABLE = False
-    alerts_module = None  # type: ignore
+    alerts_module = None
 
 log = logging.getLogger('tg-ws-stats')
 
@@ -98,9 +98,9 @@ class Stats:
         self.enable_alerts = enable_alerts and ALERTS_AVAILABLE
         self._alert_manager = alerts_module.get_alert_manager() if self.enable_alerts else None
         self._last_error_count = 0
-        self._error_rate_window: List[tuple[float, int]] = []  # (timestamp, errors)
+        self._error_rate_window: list[tuple[float, int]] = []  # (timestamp, errors)
         self._monitoring_enabled = False
-        self._monitor_task: Optional[asyncio.Task] = None  # type: ignore[name-defined]
+        self._monitor_task: asyncio.Task | None = None
 
     def add_connection(self, conn_type: str, dc: int | None = None) -> None:
         """Record a new connection in history."""
@@ -423,7 +423,7 @@ class Stats:
             log.debug("Alerts disabled, skipping monitoring")
             return
         
-        async def monitor_loop():
+        async def monitor_loop() -> None:
             """Monitor metrics and generate alerts."""
             log.info("Real-time monitoring started (interval: %.1fs)", check_interval)
             self._monitoring_enabled = True
@@ -490,19 +490,19 @@ class Stats:
         """Calculate traffic per hour in bytes."""
         if not self.traffic_history:
             return 0
-        
+
         now = time.monotonic()
         hour_ago = now - 3600
-        
+
         # Find traffic from an hour ago
         for entry in self.traffic_history:
             if entry['time'] < hour_ago:
                 continue
-            current_total = entry['bytes_up'] + entry['bytes_down']
+            current_total: int = entry['bytes_up'] + entry['bytes_down']
             return current_total
-        
+
         # If no history from an hour ago, return current total
-        return self.bytes_up + self.bytes_down
+        return int(self.bytes_up + self.bytes_down)
     
     def get_monitoring_status(self) -> dict:
         """Get current monitoring status."""
