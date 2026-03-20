@@ -35,13 +35,12 @@ from .constants import (
     WS_POOL_MAX_SIZE,
     WS_POOL_SIZE,
 )
-from .stats import Stats, _human_bytes
 from .crypto import (
+    CryptoConfig,
     CryptoManager,
     EncryptionType,
-    CryptoConfig,
-    EncryptedData,
 )
+from .stats import Stats, _human_bytes
 
 log = logging.getLogger('tg-ws-proxy')
 
@@ -281,7 +280,7 @@ class ProxyServer:
         self.crypto_manager: CryptoManager | None = None
         self._key_rotation_task: asyncio.Task | None = None
         self._key_rotation_interval = 3600  # Default 1 hour
-        
+
         if encryption_config:
             self._setup_encryption(encryption_config)
 
@@ -298,7 +297,7 @@ class ProxyServer:
 
         # Statistics
         self.stats = Stats(enable_alerts=True)
-        
+
         # Start real-time monitoring
         self.stats.start_realtime_monitoring(check_interval=30.0)  # Check every 30 seconds
 
@@ -320,10 +319,10 @@ class ProxyServer:
                 "aes-256-ctr": EncryptionType.AES_256_CTR,
                 "mtproto-ige": EncryptionType.MTROTO_IGE,
             }
-            
+
             algo_name = config.get("encryption_type", "aes-256-gcm")
             algo = encryption_map.get(algo_name, EncryptionType.AES_256_GCM)
-            
+
             # Create crypto configuration
             crypto_config = CryptoConfig(
                 algorithm=algo,
@@ -332,18 +331,18 @@ class ProxyServer:
                 tag_size=16,
                 kdf_iterations=100_000,
             )
-            
+
             # Initialize crypto manager
             self.crypto_manager = CryptoManager(crypto_config)
             self.encryption_enabled = config.get("encryption_enabled", True)
             self._key_rotation_interval = config.get("key_rotation_interval", 3600)
-            
+
             log.info(
                 "Modern encryption enabled: %s (key rotation: %ds)",
                 algo_name.upper(),
                 self._key_rotation_interval
             )
-            
+
         except Exception as e:
             log.warning("Failed to setup encryption: %s. Running without encryption.", e)
             self.encryption_enabled = False
@@ -381,7 +380,7 @@ class ProxyServer:
     def get_stats(self) -> dict:
         """Get current proxy statistics."""
         stats = self.stats.to_dict()
-        
+
         # Add encryption statistics
         if self.encryption_enabled and self.crypto_manager:
             stats["encryption"] = {
@@ -396,17 +395,17 @@ class ProxyServer:
             stats["encryption"] = {
                 "enabled": False,
             }
-        
+
         return stats
 
     def get_stats_summary(self) -> str:
         """Get current stats as a human-readable summary."""
         base_summary = self.stats.summary()
-        
+
         if self.encryption_enabled and self.crypto_manager:
             algo = self.crypto_manager.config.algorithm.name
             return f"{base_summary} | encrypt={algo}"
-        
+
         return base_summary
 
 

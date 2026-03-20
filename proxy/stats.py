@@ -93,7 +93,7 @@ class Stats:
         self.traffic_history: list[dict] = []
         self._last_traffic_snapshot = (0, 0)
         self._traffic_snapshot_time = time.monotonic()
-        
+
         # Real-time monitoring
         self.enable_alerts = enable_alerts and ALERTS_AVAILABLE
         self._alert_manager = alerts_module.get_alert_manager() if self.enable_alerts else None
@@ -155,7 +155,7 @@ class Stats:
         self.ws_errors += 1
         if dc is not None and dc in self.dc_stats:
             self.dc_stats[dc]['errors'] += 1
-        
+
         # Track error rate for monitoring
         if self.enable_alerts:
             now = time.monotonic()
@@ -163,7 +163,7 @@ class Stats:
             # Keep only last minute
             cutoff = now - 60
             self._error_rate_window = [(t, e) for t, e in self._error_rate_window if t > cutoff]
-            
+
             # Check error rate threshold
             errors_per_minute = sum(e for t, e in self._error_rate_window)
             if errors_per_minute >= 10:
@@ -422,12 +422,12 @@ class Stats:
         if not self.enable_alerts:
             log.debug("Alerts disabled, skipping monitoring")
             return
-        
+
         async def monitor_loop() -> None:
             """Monitor metrics and generate alerts."""
             log.info("Real-time monitoring started (interval: %.1fs)", check_interval)
             self._monitoring_enabled = True
-            
+
             while self._monitoring_enabled:
                 try:
                     await asyncio.sleep(check_interval)
@@ -436,56 +436,56 @@ class Stats:
                     break
                 except Exception as e:
                     log.error("Monitoring error: %s", e)
-            
+
             log.info("Real-time monitoring stopped")
-        
+
         # Start monitoring task
         try:
             self._monitor_task = asyncio.create_task(monitor_loop())
         except Exception as e:
             log.warning("Failed to start monitoring task: %s", e)
-    
+
     def stop_realtime_monitoring(self) -> None:
         """Stop real-time monitoring."""
         self._monitoring_enabled = False
         if self._monitor_task:
             self._monitor_task.cancel()
             self._monitor_task = None
-    
+
     def _check_all_thresholds(self) -> None:
         """Check all metric thresholds and generate alerts."""
         if not self._alert_manager:
             return
-        
+
         # Get current metrics
         conn_per_min = self.get_connections_per_minute()
         error_rate = self._calculate_error_rate()
         cpu = self.cpu_percent
         memory_percent = (self.memory_bytes / (psutil.virtual_memory().total * 1024 * 1024)) * 100 if self.memory_bytes else 0
         traffic_gb_hour = self._calculate_traffic_per_hour() / (1024 ** 3)
-        
+
         # Check thresholds
         self._alert_manager.check_threshold("connections_per_minute", conn_per_min)
         self._alert_manager.check_threshold("error_rate_percent", error_rate)
         self._alert_manager.check_threshold("cpu_percent", cpu)
         self._alert_manager.check_threshold("memory_percent", memory_percent)
         self._alert_manager.check_threshold("traffic_gb_per_hour", traffic_gb_hour)
-        
+
         # Check for connection spikes
         if conn_per_min > 100 and conn_per_min > self.peak_connections_per_minute * 1.5:
             alerts_module.alert_connection_spike(int(conn_per_min))
-        
+
         # Check for high traffic
         if traffic_gb_hour > 50:
             alerts_module.alert_traffic_limit(traffic_gb_hour)
-    
+
     def _calculate_error_rate(self) -> float:
         """Calculate current error rate percentage."""
         total = self.connections_total
         if total == 0:
             return 0.0
         return (self.ws_errors / total) * 100
-    
+
     def _calculate_traffic_per_hour(self) -> int:
         """Calculate traffic per hour in bytes."""
         if not self.traffic_history:
@@ -503,7 +503,7 @@ class Stats:
 
         # If no history from an hour ago, return current total
         return int(self.bytes_up + self.bytes_down)
-    
+
     def get_monitoring_status(self) -> dict:
         """Get current monitoring status."""
         return {

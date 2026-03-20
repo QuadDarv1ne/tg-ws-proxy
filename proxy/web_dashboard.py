@@ -1239,6 +1239,28 @@ DASHBOARD_HTML = """
                         <span>Обновляется</span>
                     </div>
                 </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3);">
+                        💻
+                    </div>
+                    <div class="stat-label">CPU Usage</div>
+                    <div class="stat-value" id="cpu-usage">0%</div>
+                    <div class="stat-change" id="cpu-change">
+                        <span>Норма</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);">
+                        🧠
+                    </div>
+                    <div class="stat-label">Memory</div>
+                    <div class="stat-value" id="memory-usage">0 MB</div>
+                    <div class="stat-change" id="memory-change">
+                        <span>Норма</span>
+                    </div>
+                </div>
             </div>
 
             <!-- Traffic Section -->
@@ -1279,6 +1301,28 @@ DASHBOARD_HTML = """
                 </div>
                 <div style="background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 20px; border: 1px solid var(--border);">
                     <canvas id="traffic-chart" width="800" height="300" style="width: 100%; height: 300px;"></canvas>
+                </div>
+            </div>
+
+            <!-- Performance Chart Section -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title">
+                        💻 Производительность
+                    </h2>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary);">
+                            <span style="width: 12px; height: 12px; border-radius: 3px; background: linear-gradient(135deg, #f59e0b, #d97706);"></span>
+                            CPU
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary);">
+                            <span style="width: 12px; height: 12px; border-radius: 3px; background: linear-gradient(135deg, #3b82f6, #1d4ed8);"></span>
+                            RAM
+                        </span>
+                    </div>
+                </div>
+                <div style="background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 20px; border: 1px solid var(--border);">
+                    <canvas id="performance-chart" width="800" height="250" style="width: 100%; height: 250px;"></canvas>
                 </div>
             </div>
 
@@ -1371,6 +1415,14 @@ DASHBOARD_HTML = """
         };
         let trafficChartCtx = null;
         let animationFrame = null;
+
+        // Performance chart state
+        let performanceHistory = {
+            labels: [],
+            cpu: [],
+            memory: []
+        };
+        let performanceChartCtx = null;
 
         // Theme management - default to dark theme
         function toggleTheme() {
@@ -1666,6 +1718,141 @@ DASHBOARD_HTML = """
             });
         }
 
+        // Performance Chart
+        function initPerformanceChart() {
+            const canvas = document.getElementById('performance-chart');
+            if (!canvas) return;
+            
+            performanceChartCtx = canvas.getContext('2d');
+            
+            const resizeObserver = new ResizeObserver(() => {
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width * window.devicePixelRatio;
+                canvas.height = 250 * window.devicePixelRatio;
+                canvas.style.width = rect.width + 'px';
+                canvas.style.height = '250px';
+                performanceChartCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                drawPerformanceChart();
+            });
+            resizeObserver.observe(canvas.parentElement);
+        }
+
+        function drawPerformanceChart() {
+            if (!performanceChartCtx) return;
+            
+            const canvas = document.getElementById('performance-chart');
+            const ctx = performanceChartCtx;
+            const width = canvas.parentElement.getBoundingClientRect().width;
+            const height = 250;
+            const padding = { top: 20, right: 20, bottom: 40, left: 60 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+            const textColor = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
+            
+            // Draw grid
+            ctx.strokeStyle = gridColor;
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 5; i++) {
+                const y = padding.top + (chartHeight / 5) * i;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+            }
+            
+            // Draw Y-axis labels (percentage)
+            ctx.fillStyle = textColor;
+            ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'right';
+            for (let i = 0; i <= 5; i++) {
+                const y = padding.top + (chartHeight / 5) * i;
+                const percent = 100 - (i * 20);
+                ctx.fillText(percent + '%', padding.left - 10, y + 4);
+            }
+            
+            // Draw X-axis labels
+            ctx.textAlign = 'center';
+            const labelStep = Math.max(1, Math.floor(performanceHistory.labels.length / 10));
+            for (let i = 0; i < performanceHistory.labels.length; i += labelStep) {
+                const x = padding.left + (chartWidth / (performanceHistory.labels.length - 1 || 1)) * i;
+                ctx.fillText(performanceHistory.labels[i], x, height - 10);
+            }
+            
+            // Draw CPU area and line
+            const drawArea = (data, colorStart, colorEnd) => {
+                if (data.length < 2) return;
+                
+                const gradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
+                gradient.addColorStop(0, colorStart);
+                gradient.addColorStop(1, colorEnd);
+                
+                ctx.beginPath();
+                ctx.moveTo(padding.left, height - padding.bottom);
+                
+                data.forEach((value, i) => {
+                    const x = padding.left + (chartWidth / (data.length - 1 || 1)) * i;
+                    const y = padding.top + chartHeight - (value / 100) * chartHeight;
+                    ctx.lineTo(x, y);
+                });
+                
+                ctx.lineTo(padding.left + chartWidth, height - padding.bottom);
+                ctx.closePath();
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            };
+            
+            const drawLine = (data, color, lineWidth = 3) => {
+                if (data.length < 2) return;
+                
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lineWidth;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                data.forEach((value, i) => {
+                    const x = padding.left + (chartWidth / (data.length - 1 || 1)) * i;
+                    const y = padding.top + chartHeight - (value / 100) * chartHeight;
+                    
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                
+                ctx.stroke();
+            };
+            
+            drawArea(performanceHistory.cpu, 'rgba(245, 158, 11, 0.3)', 'rgba(245, 158, 11, 0.05)');
+            drawLine(performanceHistory.cpu, '#f59e0b', 3);
+            
+            drawArea(performanceHistory.memory, 'rgba(59, 130, 246, 0.3)', 'rgba(59, 130, 246, 0.05)');
+            drawLine(performanceHistory.memory, '#3b82f6', 3);
+        }
+
+        function updatePerformanceChart(cpuPercent, memoryMb) {
+            const now = new Date();
+            const timeLabel = now.getHours().toString().padStart(2, '0') + ':' + 
+                             now.getMinutes().toString().padStart(2, '0') + ':' + 
+                             now.getSeconds().toString().padStart(2, '0');
+            
+            performanceHistory.labels.push(timeLabel);
+            performanceHistory.cpu.push(cpuPercent);
+            performanceHistory.memory.push(memoryMb);
+            
+            const maxPoints = 30;
+            if (performanceHistory.labels.length > maxPoints) {
+                performanceHistory.labels.shift();
+                performanceHistory.cpu.shift();
+                performanceHistory.memory.shift();
+            }
+            
+            requestAnimationFrame(() => drawPerformanceChart());
+        }
+
         // Load statistics
         async function loadStats() {
             const refreshBtn = document.querySelector('.refresh-btn');
@@ -1718,9 +1905,54 @@ DASHBOARD_HTML = """
                 document.getElementById('traffic-total').textContent = humanBytes(totalTraffic);
                 document.getElementById('bytes-up').innerHTML = `${humanBytes(stats.bytes_up || 0)} <span class="stat-unit">↑</span>`;
                 document.getElementById('bytes-down').innerHTML = `${humanBytes(stats.bytes_down || 0)} <span class="stat-unit">↓</span>`;
-                
+
                 // Update traffic chart
                 updateTrafficChart(stats.bytes_up || 0, stats.bytes_down || 0);
+
+                // Update performance metrics
+                const perf = stats.performance || {};
+                const cpuPercent = perf.cpu_percent || 0;
+                const memoryMb = Math.round((perf.memory_bytes || 0) / (1024 * 1024));
+                
+                const cpuEl = document.getElementById('cpu-usage');
+                const memEl = document.getElementById('memory-usage');
+                
+                if (cpuEl) {
+                    cpuEl.textContent = cpuPercent.toFixed(1) + '%';
+                    const cpuChange = document.getElementById('cpu-change');
+                    if (cpuChange) {
+                        if (cpuPercent < 50) {
+                            cpuChange.innerHTML = '<span>Норма</span>';
+                            cpuChange.className = 'stat-change positive';
+                        } else if (cpuPercent < 80) {
+                            cpuChange.innerHTML = '<span>Средняя</span>';
+                            cpuChange.className = 'stat-change';
+                        } else {
+                            cpuChange.innerHTML = '<span>Высокая</span>';
+                            cpuChange.className = 'stat-change negative';
+                        }
+                    }
+                }
+                
+                if (memEl) {
+                    memEl.textContent = memoryMb + ' MB';
+                    const memChange = document.getElementById('memory-change');
+                    if (memChange) {
+                        if (memoryMb < 200) {
+                            memChange.innerHTML = '<span>Норма</span>';
+                            memChange.className = 'stat-change positive';
+                        } else if (memoryMb < 500) {
+                            memChange.innerHTML = '<span>Средняя</span>';
+                            memChange.className = 'stat-change';
+                        } else {
+                            memChange.innerHTML = '<span>Высокая</span>';
+                            memChange.className = 'stat-change negative';
+                        }
+                    }
+                }
+
+                // Update performance chart
+                updatePerformanceChart(cpuPercent, memoryMb);
 
                 // Update info
                 document.getElementById('version').textContent = stats.version || '2.10.0';
@@ -1919,6 +2151,9 @@ DASHBOARD_HTML = """
 
             // Initialize traffic chart
             initTrafficChart();
+            
+            // Initialize performance chart
+            initPerformanceChart();
             
             loadStats().then(() => {
                 if (loadTimeout) clearTimeout(loadTimeout);

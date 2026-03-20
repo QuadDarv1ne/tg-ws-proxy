@@ -212,7 +212,7 @@ def load_config() -> dict:
                 data = json.load(f)
             for k, v in DEFAULT_CONFIG.items():
                 data.setdefault(k, v)
-            return data
+            return dict(data)
         except Exception as exc:
             log.warning("Failed to load config: %s", exc)
     return dict(DEFAULT_CONFIG)
@@ -272,7 +272,7 @@ def _has_ipv6_enabled() -> bool:
         addrs = _sock.getaddrinfo(_sock.gethostname(), None, _sock.AF_INET6)
         for addr in addrs:
             ip = addr[4][0]
-            if ip and not ip.startswith('::1') and not ip.startswith('fe80::1'):
+            if ip and isinstance(ip, str) and not ip.startswith('::1') and not ip.startswith('fe80::1'):
                 return True
     except Exception:
         pass
@@ -321,6 +321,7 @@ def _make_icon_image(size: int = 64, status: str = "ok") -> Image.Image:
     )
 
     try:
+        font: ImageFont.FreeTypeFont | ImageFont.ImageFont
         if IS_WINDOWS:
             font = ImageFont.truetype("arial.ttf", size=int(size * 0.55))
         elif IS_MACOS:
@@ -356,13 +357,13 @@ def _set_proxy_status(status: str) -> None:
         new_icon = _load_icon(status)
         if new_icon:
             try:
-                _tray_icon.icon = new_icon
+                _tray_icon.icon = new_icon  # type: ignore[attr-defined]
             except Exception as exc:
                 log.debug("Failed to update tray icon: %s", exc)
 
         # Update menu to reflect new status text
         try:
-            _tray_icon.update_menu()
+            _tray_icon.update_menu()  # type: ignore[attr-defined]
         except Exception as exc:
             log.debug("Failed to update tray menu: %s", exc)
 
@@ -493,7 +494,7 @@ def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
         # Proxy started - set status to running
         _set_proxy_status("running")
         loop.run_until_complete(
-            tg_ws_proxy._run(port, dc_opt, stop_event=stop_ev, host=host))
+            tg_ws_proxy._run(port, dc_opt, stop_event=stop_ev, host=host))  # type: ignore[arg-type]
     except Exception as exc:
         log.error("Proxy thread crashed: %s", exc)
         _set_proxy_status("error")
@@ -576,7 +577,7 @@ def _on_open_in_telegram(icon=None, item=None) -> None:
             if IS_WINDOWS and HAS_CLIPBOARD:
                 pyperclip.copy(url)
             elif HAS_TRAY and _tray_icon:
-                _tray_icon.copy_to_clipboard(url)
+                _tray_icon.copy_to_clipboard(url)  # type: ignore[attr-defined]
             _show_info(
                 f"Не удалось открыть Telegram автоматически.\n\n"
                 f"Ссылка скопирована в буфер обмена:\n{url}")
@@ -904,7 +905,7 @@ def _on_exit(icon=None, item=None) -> None:
         icon.stop()
 
 
-def _load_daily_stats() -> dict:
+def _load_daily_stats() -> dict[str, int | str | float]:
     """Load daily statistics from file."""
     if DAILY_STATS_FILE.exists():
         try:
@@ -912,7 +913,17 @@ def _load_daily_stats() -> dict:
             # Check if it's from today
             today = time.strftime("%Y-%m-%d")
             if data.get("date") == today:
-                return data
+                # Ensure types are correct
+                return {
+                    "date": str(data.get("date", today)),
+                    "connections_total": int(data.get("connections_total", 0)),
+                    "connections_ws": int(data.get("connections_ws", 0)),
+                    "connections_tcp_fallback": int(data.get("connections_tcp_fallback", 0)),
+                    "bytes_up": int(data.get("bytes_up", 0)),
+                    "bytes_down": int(data.get("bytes_down", 0)),
+                    "ws_errors": int(data.get("ws_errors", 0)),
+                    "session_start": float(data.get("session_start", time.time())),
+                }
         except Exception:
             pass
     # Return fresh stats for today
@@ -928,7 +939,7 @@ def _load_daily_stats() -> dict:
     }
 
 
-def _save_daily_stats(stats: dict) -> None:
+def _save_daily_stats(stats: dict[str, int | str | float]) -> None:
     """Save daily statistics to file."""
     try:
         DAILY_STATS_FILE.write_text(json.dumps(stats, indent=2), encoding="utf-8")
@@ -951,7 +962,7 @@ def _show_daily_summary() -> None:
         daily_stats["connections_tcp_fallback"] = current_stats.get("connections_tcp_fallback", 0)
         daily_stats["bytes_up"] = current_stats.get("bytes_up", 0)
         daily_stats["bytes_down"] = current_stats.get("bytes_down", 0)
-        daily_stats["ws_errors"] = current_stats.get("ws_errors", 0)
+        daily_stats["ws_errors"] = int(current_stats.get("ws_errors", 0))
         daily_stats["session_end"] = time.time()
 
         # Save updated stats
@@ -963,25 +974,24 @@ def _show_daily_summary() -> None:
 
         summary = (
             f"Статистика за {daily_stats['date']}:\n\n"
-            f"Всего подключений: {daily_stats['connections_total']}\n"
-            f"  WebSocket: {daily_stats['connections_ws']}\n"
-            f"  TCP fallback: {daily_stats['connections_tcp_fallback']}\n"
+            f"Всего подключений: {int(daily_stats['connections_total'])}\n"
+            f"  WebSocket: {int(daily_stats['connections_ws'])}\n"
+            f"  TCP fallback: {int(daily_stats['connections_tcp_fallback'])}\n"
             f"\n"
-            f"Трафик вверх: {_human_bytes(daily_stats['bytes_up'])}\n"
-            f"Трафик вниз: {_human_bytes(daily_stats['bytes_down'])}\n"
+            f"Трафик вверх: {_human_bytes(float(daily_stats['bytes_up']))}\n"
+            f"Трафик вниз: {_human_bytes(float(daily_stats['bytes_down']))}\n"
             f"\n"
-            f"Ошибки WS: {daily_stats['ws_errors']}\n"
+            f"Ошибки WS: {int(daily_stats['ws_errors'])}\n"
             f"Время работы: {session_hours:.1f}ч"
         )
 
         log.info("Daily summary:\n%s", summary)
 
-        # Show as info dialog (non-blocking, just log)
-        # Dialog can be annoying on exit, so just log it
+        # Format info dialog
         _show_notification(
             f"Статистика сохранена в лог.\n\n"
-            f"Подключений: {daily_stats['connections_total']}\n"
-            f"Трафик: {_human_bytes(daily_stats['bytes_up'] + daily_stats['bytes_down'])}",
+            f"Подключений: {int(daily_stats['connections_total'])}\n"
+            f"Трафик: {_human_bytes(float(daily_stats['bytes_up']) + float(daily_stats['bytes_down']))}",
             "TG WS Proxy — Статистика за день")
 
     except Exception as exc:
@@ -1070,7 +1080,7 @@ def _build_config_frame(root: ctk.CTk) -> ctk.CTkFrame:
 def _build_config_fields(
     frame: ctk.CTkFrame,
     cfg: dict
-) -> tuple[ctk.StringVar, ctk.StringVar, ctk.CTkTextbox, ctk.BooleanVar]:
+) -> tuple[ctk.StringVar, ctk.StringVar, ctk.CTkTextbox, ctk.BooleanVar, ctk.CTkTextbox]:
     """Build configuration input fields."""
     # Theme-aware colors
     field_bg = UI_FIELD_BG_DARK if _dark_theme else UI_FIELD_BG
@@ -1796,7 +1806,7 @@ def run_tray() -> None:
                 f"TG WS Proxy — {error_titles.get(error_type, 'Ошибка')}")
 
     # Set up high latency notification callback
-    def on_high_latency(dc, latency_ms):
+    def on_high_latency(dc: int, latency_ms: float) -> None:
         if NOTIFICATIONS_MARKER.exists():
             log.warning("High latency detected: DC%d - %.1fms", dc, latency_ms)
             _show_notification(
@@ -1836,7 +1846,7 @@ def run_tray() -> None:
     threading.Thread(target=_check_ipv6_warning, daemon=True).start()
     _check_for_updates()
 
-    _tray_icon.run()
+    _tray_icon.run()  # type: ignore[union-attr]
 
     stop_proxy()
     log.info("Tray app exited")
