@@ -98,9 +98,9 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
     if not _OPTIMIZATION_CONFIG.get('enable_dns_cache', True):
         # DNS cache disabled - resolve directly
         return await _resolve_domain_direct(domain, port, timeout)
-    
+
     now = time.monotonic()
-    
+
     async with _dns_cache_lock:
         # Check cache
         if domain in _dns_cache:
@@ -112,7 +112,7 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
             else:
                 log.debug("DNS cache expired for %s", domain)
                 del _dns_cache[domain]
-    
+
     # Resolve from scratch using aiodns if available
     ips = []
     try:
@@ -168,7 +168,7 @@ async def _resolve_domain_direct(domain: str, port: int = 443, timeout: float = 
             loop = asyncio.get_event_loop()
             results = await loop.getaddrinfo(domain, port, family=_socket.AF_INET, type=_socket.SOCK_STREAM)
             ips = list({r[4][0] for r in results})
-        
+
         return [(ip, port) for ip in ips]
     except Exception as e:
         log.debug("Direct DNS resolution failed for %s: %s", domain, e)
@@ -189,7 +189,7 @@ def update_optimization_config(config: dict) -> None:
         config: Dictionary with optimization settings
     """
     global _dns_cache_ttl, _OPTIMIZATION_CONFIG
-    
+
     for key, value in config.items():
         if key in _OPTIMIZATION_CONFIG:
             _OPTIMIZATION_CONFIG[key] = value
@@ -197,7 +197,7 @@ def update_optimization_config(config: dict) -> None:
         elif key == 'dns_cache_ttl':
             _dns_cache_ttl = float(value)
             log.info("DNS cache TTL updated: %s seconds", _dns_cache_ttl)
-    
+
     log.debug("Current optimization config: %s", _OPTIMIZATION_CONFIG)
 
 
@@ -430,7 +430,7 @@ class ProxyServer:
         # Server instance for graceful shutdown
         self._server_instance: asyncio.Server | None = None
         self._server_stop_event: asyncio.Event | None = None
-        
+
         # Optimization metrics
         self._optimization_metrics = {
             'total_dns_resolutions': 0,
@@ -446,18 +446,18 @@ class ProxyServer:
             **self._optimization_metrics,
             'config': get_optimization_config(),
         }
-    
+
     def update_optimization_metrics(self, **kwargs) -> None:
         """Update optimization metrics."""
         for key, value in kwargs.items():
             if key in self._optimization_metrics:
                 self._optimization_metrics[key] = value
-    
+
     def record_dns_cache_hit(self) -> None:
         """Record DNS cache hit."""
         self._optimization_metrics['total_dns_resolutions'] += 1
         self._optimization_metrics['dns_cache_hits'] += 1
-    
+
     def record_dns_cache_miss(self) -> None:
         """Record DNS cache miss."""
         self._optimization_metrics['total_dns_resolutions'] += 1
