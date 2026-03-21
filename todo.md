@@ -30,7 +30,7 @@
 - ✅ diagnostics_advanced.py — расширенная диагностика
 
 ### Тесты
-- ✅ Tests: 472 passed, 7 skipped, 0 errors (было 255 passed)
+- ✅ Tests: 463 passed, 7 skipped, 9 errors (было 255 passed)
 - ✅ Добавлены тесты для i18n, updater, whitelist
 - ✅ Покрытие web_dashboard.py: 61% → 74%
 - ✅ Исправлены тесты config_backup (Windows permissions)
@@ -98,7 +98,8 @@
 
 ### Тесты
 - ✅ test_optimizer.py: 17 тестов (100% покрытие)
-- ✅ Итого: **472 passed, 7 skipped, 0 errors**
+- ✅ test_autotune.py: добавлены тесты
+- ✅ Итого: **463 passed, 7 skipped, 9 errors**
 
 ---
 
@@ -111,7 +112,7 @@
   - [ ] Тесты для TCP fallback логики
 - [ ] Load tests (100+ одновременных подключений)
 - [ ] Coverage > 80% (текущее ~35%)
-- [ ] Fix failed tests (9 errors → 0)
+- [ ] Fix logger.py tests (9 errors: Windows PermissionError)
 
 ### Покрытие тестами
 - [ ] rate_limiter.py: 14 тестов → 80% coverage
@@ -119,6 +120,7 @@
 - [ ] alerts.py: 40% → 80%
 - [ ] logger.py: 9 тестов (fix Windows PermissionError) → 80%
 - [ ] diagnostics_advanced.py: новый модуль → 80%
+- [ ] autotune.py: новый модуль → 80%
 
 ### Производительность
 - [ ] HTTP/2 для WebSocket
@@ -154,7 +156,7 @@
 ## 📊 Статус
 
 ```
-Tests: 472 passed, 7 skipped, 0 errors
+Tests: 463 passed, 7 skipped, 9 errors
 Coverage: ~35% (цель >80%)
 Ruff: 0 ошибок
 Mypy: missing stubs (внешние зависимости)
