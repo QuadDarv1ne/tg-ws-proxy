@@ -22,7 +22,6 @@ public class MainActivity extends BridgeActivity {
     private final ActivityResultLauncher<String> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
-                    // Permission granted, start service
                     startProxyService();
                 } else {
                     Toast.makeText(this, "Разрешение на уведомления необходимо для работы прокси в фоне", Toast.LENGTH_LONG).show();
@@ -44,6 +43,9 @@ public class MainActivity extends BridgeActivity {
 
         // Проверка и запрос на отключение оптимизации батареи
         checkBatteryOptimization();
+
+        // Запрос разрешения на автозапуск (для китайских прошивок)
+        AutoStartHelper.requestAutoStart(this);
 
         // Запуск фонового сервиса для стабильной работы прокси
         startProxyService();

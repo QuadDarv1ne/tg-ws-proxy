@@ -5,7 +5,9 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -23,6 +25,10 @@ public class ProxyForegroundService extends Service {
     public static final String ACTION_STOP_SERVICE = "STOP_PROXY_SERVICE";
     private static final int NOTIFICATION_ID = 1;
     
+    private static final String PREFS_NAME = "proxy_settings";
+    private static final String KEY_PORT = "proxy_port";
+    private static final String KEY_AUTO_PORT = "auto_port";
+
     private boolean isPythonRunning = false;
     private Handler statsHandler = new Handler(Looper.getMainLooper());
     private Runnable statsRunnable;
@@ -60,11 +66,24 @@ public class ProxyForegroundService extends Service {
         
         new Thread(() -> {
             try {
+                SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                int savedPort = prefs.getInt(KEY_PORT, 1080);
+                boolean autoPort = prefs.getBoolean(KEY_AUTO_PORT, true);
+
                 Python py = Python.getInstance();
                 PyObject proxyModule = py.getModule("android_entry");
-                proxyModule.callAttr("start_proxy", "127.0.0.1", 1080);
+                
+                // Вызываем start_proxy с сохраненными параметрами
+                PyObject result = proxyModule.callAttr("start_proxy", "127.0.0.1", savedPort, autoPort);
+                int actualPort = result.asMap().get(py.getBuiltins().get("str").call("port")).toInt();
+                
+                // Если порт изменился (был авто-выбор), сохраним его
+                if (actualPort != savedPort) {
+                    prefs.edit().putInt(KEY_PORT, actualPort).apply();
+                }
+
                 isPythonRunning = true;
-                Log.i(TAG, "Python Proxy started successfully");
+                Log.i(TAG, "Python Proxy started on port: " + actualPort);
             } catch (Exception e) {
                 Log.e(TAG, "Error starting Python Proxy: " + e.getMessage());
             }
@@ -78,7 +97,7 @@ public class ProxyForegroundService extends Service {
                 if (isPythonRunning) {
                     updateNotificationWithStats();
                 }
-                statsHandler.postDelayed(this, 5000); // Обновляем каждые 5 секунд
+                statsHandler.postDelayed(this, 5000);
             }
         };
         statsHandler.post(statsRunnable);
@@ -94,11 +113,12 @@ public class ProxyForegroundService extends Service {
             int connections = stats.get(py.getBuiltins().get("str").call("connections_ws")).toInt();
             long bytesUp = stats.get(py.getBuiltins().get("str").call("bytes_up")).toLong();
             long bytesDown = stats.get(py.getBuiltins().get("str").call("bytes_down")).toLong();
+            int port = stats.get(py.getBuiltins().get("str").call("port")).toInt();
 
-            String content = String.format("Активных соединений: %d", connections);
+            String content = String.format("Прокси на порту %d | Соединений: %d", port, connections);
             String subContent = String.format("↑ %s  ↓ %s", formatBytes(bytesUp), formatBytes(bytesDown));
 
-            NotificationManager manager = getSystemService(NotificationManager.class);
+            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
                 manager.notify(NOTIFICATION_ID, createNotification(content, subContent));
             }
@@ -133,7 +153,7 @@ public class ProxyForegroundService extends Service {
                 .setOngoing(true)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Остановить", stopPendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOnlyAlertOnce(true) // Чтобы телефон не вибрировал при каждом обновлении статы
+                .setOnlyAlertOnce(true)
                 .build();
     }
 
@@ -167,7 +187,7 @@ public class ProxyForegroundService extends Service {
                     "TG WS Proxy Service Channel",
                     NotificationManager.IMPORTANCE_DEFAULT
             );
-            NotificationManager manager = getSystemService(NotificationManager.class);
+            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
                 manager.createNotificationChannel(serviceChannel);
             }
