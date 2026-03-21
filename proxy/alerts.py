@@ -19,11 +19,11 @@ import logging
 import smtplib
 import time
 from dataclasses import dataclass, field
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from enum import Enum, auto
-from typing import Callable, Optional, Dict, List
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from enum import Enum, auto
+from typing import Callable
 
 log = logging.getLogger('tg-ws-alerts')
 
@@ -59,8 +59,8 @@ class Alert:
     title: str
     message: str
     timestamp: datetime = field(default_factory=datetime.now)
-    metadata: Dict = field(default_factory=dict)
-    
+    metadata: dict = field(default_factory=dict)
+
     def to_dict(self) -> dict:
         return {
             "type": self.alert_type.name,
@@ -84,20 +84,20 @@ class AlertThreshold:
 
 class AlertManager:
     """Centralized alert management system."""
-    
+
     def __init__(self):
-        self.alerts: List[Alert] = []
-        self.alert_history: List[Alert] = []
+        self.alerts: list[Alert] = []
+        self.alert_history: list[Alert] = []
         self.max_history = 1000
-        self._alert_callbacks: List[Callable[[Alert], None]] = []
-        self.thresholds: Dict[str, AlertThreshold] = {}
-        self._last_alert_time: Dict[str, float] = {}
-        self._email_config: Optional[Dict] = None
-        self._webhook_urls: List[str] = []
+        self._alert_callbacks: list[Callable[[Alert], None]] = []
+        self.thresholds: dict[str, AlertThreshold] = {}
+        self._last_alert_time: dict[str, float] = {}
+        self._email_config: dict | None = None
+        self._webhook_urls: list[str] = []
         self.alerts_sent = 0
         self.alerts_suppressed = 0
         self._setup_default_thresholds()
-    
+
     def _setup_default_thresholds(self) -> None:
         self.thresholds = {
             "connections_per_minute": AlertThreshold("connections_per_minute", 100, 500, cooldown_seconds=300),
@@ -107,32 +107,32 @@ class AlertManager:
             "ws_errors_per_minute": AlertThreshold("ws_errors_per_minute", 10, 50, cooldown_seconds=180),
             "traffic_gb_per_hour": AlertThreshold("traffic_gb_per_hour", 50, 100, cooldown_seconds=3600),
         }
-    
-    def check_threshold(self, metric: str, value: float) -> Optional[Alert]:
+
+    def check_threshold(self, metric: str, value: float) -> Alert | None:
         threshold = self.thresholds.get(metric)
         if not threshold or not threshold.enabled:
             return None
-        
+
         now = time.time()
         last_alert = self._last_alert_time.get(metric, 0)
         if now - last_alert < threshold.cooldown_seconds:
             self.alerts_suppressed += 1
             return None
-        
+
         severity = None
         if value >= threshold.critical_value:
             severity = AlertSeverity.CRITICAL
         elif value >= threshold.warning_value:
             severity = AlertSeverity.WARNING
-        
+
         if not severity:
             return None
-        
+
         alert = self._create_threshold_alert(metric, value, severity)
         self._send_alert(alert)
         self._last_alert_time[metric] = now
         return alert
-    
+
     def _create_threshold_alert(self, metric: str, value: float, severity: AlertSeverity) -> Alert:
         titles = {
             "connections_per_minute": f"High connection rate: {value:.0f}/min",
@@ -142,7 +142,7 @@ class AlertManager:
             "ws_errors_per_minute": f"WebSocket errors: {value:.0f}/min",
             "traffic_gb_per_hour": f"High traffic: {value:.1f} GB/hour",
         }
-        
+
         messages = {
             "connections_per_minute": f"Connection rate exceeded threshold. Current: {value:.0f}/min",
             "error_rate_percent": f"Error rate is above acceptable level. Current: {value:.1f}%",
@@ -151,7 +151,7 @@ class AlertManager:
             "ws_errors_per_minute": f"WebSocket errors detected. Current: {value:.0f}/min",
             "traffic_gb_per_hour": f"Traffic volume exceeded threshold. Current: {value:.1f} GB/hour",
         }
-        
+
         return Alert(
             alert_type=AlertType[metric.upper()],
             severity=severity,
@@ -159,36 +159,36 @@ class AlertManager:
             message=messages.get(metric, f"{metric}: {value}"),
             metadata={"value": value, "metric": metric},
         )
-    
-    def send_custom_alert(self, alert_type: AlertType, severity: AlertSeverity, title: str, message: str, metadata: Optional[Dict] = None) -> None:
+
+    def send_custom_alert(self, alert_type: AlertType, severity: AlertSeverity, title: str, message: str, metadata: dict | None = None) -> None:
         alert = Alert(alert_type=alert_type, severity=severity, title=title, message=message, metadata=metadata or {})
         self._send_alert(alert)
-    
+
     def _send_alert(self, alert: Alert) -> None:
         self.alerts.append(alert)
         self.alert_history.append(alert)
         self.alerts_sent += 1
-        
+
         if len(self.alert_history) > self.max_history:
             self.alert_history = self.alert_history[-self.max_history:]
-        
+
         for callback in self._alert_callbacks:
             try:
                 callback(alert)
             except Exception as e:
                 log.error("Alert callback error: %s", e)
-        
+
         log_method = log.warning if alert.severity in (AlertSeverity.CRITICAL, AlertSeverity.EMERGENCY) else log.info
         log_method("ALERT [%s] %s: %s", alert.severity.name, alert.title, alert.message)
-        
+
         asyncio.create_task(self._send_notifications(alert))
-    
+
     async def _send_notifications(self, alert: Alert) -> None:
         if self._email_config:
             await self._send_email_notification(alert)
         if self._webhook_urls:
             await self._send_webhook_notifications(alert)
-    
+
     async def _send_email_notification(self, alert: Alert) -> None:
         try:
             config = self._email_config
@@ -198,7 +198,7 @@ class AlertManager:
             msg['Subject'] = f"[{alert.severity.name}] {alert.title}"
             body = f"{alert.title}\n\n{alert.message}\n\nTime: {alert.timestamp}\nSeverity: {alert.severity.name}"
             msg.attach(MIMEText(body, 'plain'))
-            
+
             server = smtplib.SMTP(config['smtp_server'], config['smtp_port'])
             server.starttls()
             server.login(config['username'], config['password'])
@@ -207,7 +207,7 @@ class AlertManager:
             log.info("Alert email sent successfully")
         except Exception as e:
             log.error("Failed to send alert email: %s", e)
-    
+
     async def _send_webhook_notifications(self, alert: Alert) -> None:
         try:
             import aiohttp
@@ -224,25 +224,25 @@ class AlertManager:
             pass
         except Exception as e:
             log.error("Webhook notification error: %s", e)
-    
-    def configure_email(self, smtp_server: str, smtp_port: int, username: str, password: str, from_email: str, to_emails: List[str]) -> None:
+
+    def configure_email(self, smtp_server: str, smtp_port: int, username: str, password: str, from_email: str, to_emails: list[str]) -> None:
         self._email_config = {'smtp_server': smtp_server, 'smtp_port': smtp_port, 'username': username, 'password': password, 'from_email': from_email, 'to_emails': to_emails}
         log.info("Email alerts configured for %s", from_email)
-    
-    def configure_webhook(self, urls: List[str]) -> None:
+
+    def configure_webhook(self, urls: list[str]) -> None:
         self._webhook_urls = urls
         log.info("Webhook alerts configured for %d URLs", len(urls))
-    
-    def get_recent_alerts(self, limit: int = 50) -> List[Alert]:
+
+    def get_recent_alerts(self, limit: int = 50) -> list[Alert]:
         return self.alert_history[-limit:]
-    
+
     def get_statistics(self) -> dict:
         now = datetime.now()
         hour_ago = now - timedelta(hours=1)
         day_ago = now - timedelta(days=1)
         recent_alerts = [a for a in self.alert_history if a.timestamp > hour_ago]
         day_alerts = [a for a in self.alert_history if a.timestamp > day_ago]
-        
+
         return {
             "total_alerts": len(self.alert_history),
             "alerts_last_hour": len(recent_alerts),
@@ -250,8 +250,8 @@ class AlertManager:
             "alerts_sent": self.alerts_sent,
             "alerts_suppressed": self.alerts_suppressed,
         }
-    
-    def update_threshold(self, metric: str, warning: Optional[float] = None, critical: Optional[float] = None, enabled: Optional[bool] = None) -> None:
+
+    def update_threshold(self, metric: str, warning: float | None = None, critical: float | None = None, enabled: bool | None = None) -> None:
         threshold = self.thresholds.get(metric)
         if not threshold:
             raise ValueError(f"Unknown metric: {metric}")
@@ -263,7 +263,7 @@ class AlertManager:
             threshold.enabled = enabled
 
 
-_alert_manager: Optional[AlertManager] = None
+_alert_manager: AlertManager | None = None
 
 
 def get_alert_manager() -> AlertManager:
@@ -273,11 +273,11 @@ def get_alert_manager() -> AlertManager:
     return _alert_manager
 
 
-def check_alert(metric: str, value: float) -> Optional[Alert]:
+def check_alert(metric: str, value: float) -> Alert | None:
     return get_alert_manager().check_threshold(metric, value)
 
 
-def send_alert(alert_type: AlertType, severity: AlertSeverity, title: str, message: str, metadata: Optional[Dict] = None) -> None:
+def send_alert(alert_type: AlertType, severity: AlertSeverity, title: str, message: str, metadata: dict | None = None) -> None:
     get_alert_manager().send_custom_alert(alert_type, severity, title, message, metadata)
 
 

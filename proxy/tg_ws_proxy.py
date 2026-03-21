@@ -52,6 +52,21 @@ _ssl_ctx.verify_mode = ssl.CERT_NONE
 _dns_cache: dict[str, list[tuple[str, float]]] = {}
 _dns_cache_ttl = 300.0  # 5 minutes default TTL
 
+# Async DNS resolver (aiodns - optional for better performance)
+_dns_resolver = None
+
+
+def _init_async_dns() -> None:
+    """Initialize async DNS resolver if aiodns is available."""
+    global _dns_resolver
+    try:
+        import aiodns
+        _dns_resolver = aiodns.DNSResolver()
+        log.debug("Async DNS resolver initialized (aiodns)")
+    except ImportError:
+        log.debug("aiodns not installed, using asyncio.getaddrinfo()")
+        _dns_resolver = None
+
 
 async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 5.0) -> list[tuple[str, int]]:
     """
@@ -78,20 +93,31 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
             log.debug("DNS cache expired for %s", domain)
             del _dns_cache[domain]
 
-    # Resolve from scratch
+    # Resolve from scratch using aiodns if available
+    ips = []
     try:
-        loop = asyncio.get_event_loop()
-        results = await loop.getaddrinfo(domain, port, family=_socket.AF_INET, type=_socket.SOCK_STREAM)
+        if _dns_resolver is not None:
+            # Use aiodns for faster async resolution
+            result = await asyncio.wait_for(
+                _dns_resolver.query(domain, 'A'),
+                timeout=timeout
+            )
+            ips = [r.host for r in result]
+        else:
+            # Fallback to asyncio.getaddrinfo()
+            loop = asyncio.get_event_loop()
+            results = await loop.getaddrinfo(domain, port, family=_socket.AF_INET, type=_socket.SOCK_STREAM)
+            ips = list({r[4][0] for r in results})
 
-        # Extract unique IPs
-        ips = list({r[4][0] for r in results})
-        expiry = now + _dns_cache_ttl
+        if ips:
+            expiry = now + _dns_cache_ttl
+            _dns_cache[domain] = [(ip, expiry) for ip in ips]
+            log.debug("DNS resolved %s -> %s (cached for %ds)", domain, ips, int(_dns_cache_ttl))
+            return [(ip, port) for ip in ips]
+        else:
+            log.debug("DNS resolved empty for %s", domain)
+            return []
 
-        # Update cache
-        _dns_cache[domain] = [(ip, expiry) for ip in ips]
-        log.debug("DNS resolved %s -> %s (cached for %ds)", domain, ips, int(_dns_cache_ttl))
-
-        return [(ip, port) for ip in ips]
     except Exception as e:
         log.debug("DNS resolution failed for %s: %s", domain, e)
         return []
@@ -303,11 +329,19 @@ class ProxyServer:
         # Consecutive error count for exponential backoff
         self.dc_error_count: dict[tuple[int, bool], int] = {}
 
-        # Statistics
-        self.stats = Stats(enable_alerts=True)
+        # Statistics with memory optimization
+        self.stats = Stats(enable_alerts=True, optimize_memory=True)
 
-        # Start real-time monitoring
-        self.stats.start_realtime_monitoring(check_interval=30.0)  # Check every 30 seconds
+        # Start real-time monitoring with auto-export
+        import os
+
+        import appdirs
+        stats_dir = os.path.join(appdirs.user_data_dir('TgWsProxy', 'Dupley Maxim'), 'stats')
+        self.stats.start_realtime_monitoring(
+            check_interval=30.0,  # Check every 30 seconds
+            auto_export=True,
+            export_dir=stats_dir
+        )
 
         # WebSocket connection pool (lazy initialized)
         self._ws_pool: _WsPool | None = None
@@ -1745,6 +1779,9 @@ async def _run(
 ) -> None:
     global _server_instance
 
+    # Initialize async DNS resolver (aiodns) for better performance
+    _init_async_dns()
+
     # Create proxy server instance with encapsulated state
     server_instance = ProxyServer(
         dc_opt,
@@ -1834,6 +1871,32 @@ async def _run(
     else:
         log.info("    SOCKS5 proxy -> %s:%d  (no user/pass)", host, port)
     log.info("=" * 60)
+
+    # Check for updates (non-blocking)
+    try:
+        import asyncio
+
+        from .updater import check_for_updates
+
+        async def check_update_async():
+            try:
+                update_info = await check_for_updates(force=False)
+                if update_info:
+                    log.info(
+                        "🚀 New version available: %s → %s | Download: %s",
+                        update_info['current_version'],
+                        update_info['latest_version'],
+                        update_info['release_url']
+                    )
+                else:
+                    log.debug("Already on latest version")
+            except Exception as e:
+                log.debug("Update check failed: %s", e)
+
+        # Schedule update check (don't block startup)
+        asyncio.create_task(check_update_async())
+    except Exception as e:
+        log.debug("Failed to schedule update check: %s", e)
 
     async def log_stats() -> None:
         while True:

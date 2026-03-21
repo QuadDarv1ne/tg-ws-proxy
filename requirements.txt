@@ -26,5 +26,11 @@ flask-cors>=6.0.2
 rich>=14.3.3
 markdown-it-py>=3.0.0
 
+# Async DNS resolver (optional, for better performance)
+aiodns>=3.2.0; sys_platform != "win32"
+
+# Cross-platform directories
+appdirs>=1.4.4
+
 # Linux-specific
 # pylibappindicator; sys_platform == "linux"  # Optional, for AppIndicator support

@@ -54,7 +54,7 @@ def _human_time(seconds: float) -> str:
 class Stats:
     """Proxy statistics tracker."""
 
-    def __init__(self, history_size: int = 100, enable_alerts: bool = True) -> None:
+    def __init__(self, history_size: int = 50, enable_alerts: bool = True, optimize_memory: bool = True) -> None:
         self.connections_total = 0
         self.connections_ws = 0
         self.connections_tcp_fallback = 0
@@ -88,7 +88,8 @@ class Stats:
         self._memory_history: list[int] = []
 
         # History tracking (last N events)
-        self._history_size = history_size
+        self._history_size = history_size if not optimize_memory else 30
+        self._optimize_memory = optimize_memory
         self.connection_history: list[dict] = []
         self.traffic_history: list[dict] = []
         self._last_traffic_snapshot = (0, 0)
@@ -101,6 +102,14 @@ class Stats:
         self._error_rate_window: list[tuple[float, int]] = []  # (timestamp, errors)
         self._monitoring_enabled = False
         self._monitor_task: asyncio.Task | None = None
+
+        # Memory optimization
+        if self._optimize_memory:
+            self._error_rate_window_max = 30  # Limit error window size
+            self._latency_history_max = 20  # Limit latency history per DC
+        else:
+            self._error_rate_window_max = 60
+            self._latency_history_max = 60
 
     def add_connection(self, conn_type: str, dc: int | None = None) -> None:
         """Record a new connection in history."""
@@ -160,9 +169,13 @@ class Stats:
         if self.enable_alerts:
             now = time.monotonic()
             self._error_rate_window.append((now, 1))
-            # Keep only last minute
+            # Keep only last minute with optimized limit
             cutoff = now - 60
-            self._error_rate_window = [(t, e) for t, e in self._error_rate_window if t > cutoff]
+            max_window = self._error_rate_window_max if self._optimize_memory else 60
+            self._error_rate_window = [
+                (t, e) for t, e in self._error_rate_window
+                if t > cutoff
+            ][-max_window:]
 
             # Check error rate threshold
             errors_per_minute = sum(e for t, e in self._error_rate_window)
@@ -175,7 +188,9 @@ class Stats:
         if dc not in self._latency_history:
             self._latency_history[dc] = []
         self._latency_history[dc].append(latency_ms)
-        if len(self._latency_history[dc]) > 60:  # Keep last 60 measurements
+        # Use optimized limit if enabled
+        max_history = self._latency_history_max if self._optimize_memory else 60
+        if len(self._latency_history[dc]) > max_history:
             self._latency_history[dc].pop(0)
 
     def update_performance_metrics(self) -> None:
@@ -412,12 +427,14 @@ class Stats:
             "alerts_enabled": self.enable_alerts,
         }
 
-    def start_realtime_monitoring(self, check_interval: float = 10.0) -> None:
+    def start_realtime_monitoring(self, check_interval: float = 10.0, auto_export: bool = False, export_dir: str | None = None) -> None:
         """
         Start real-time monitoring with automatic threshold checks.
 
         Args:
             check_interval: How often to check thresholds (seconds)
+            auto_export: Enable automatic stats export
+            export_dir: Directory for exported stats files
         """
         if not self.enable_alerts:
             log.debug("Alerts disabled, skipping monitoring")
@@ -428,10 +445,33 @@ class Stats:
             log.info("Real-time monitoring started (interval: %.1fs)", check_interval)
             self._monitoring_enabled = True
 
+            # Auto-export tracking
+            last_export_time = time.monotonic()
+            export_interval = 3600  # Export every hour
+
+            # Memory cleanup tracking
+            last_cleanup_time = time.monotonic()
+            cleanup_interval = 600  # Cleanup every 10 minutes
+
             while self._monitoring_enabled:
                 try:
                     await asyncio.sleep(check_interval)
                     self._check_all_thresholds()
+
+                    # Auto-export stats
+                    if auto_export and export_dir:
+                        now = time.monotonic()
+                        if now - last_export_time >= export_interval:
+                            self._export_stats_to_file(export_dir)
+                            last_export_time = now
+
+                    # Memory cleanup
+                    if self._optimize_memory:
+                        now = time.monotonic()
+                        if now - last_cleanup_time >= cleanup_interval:
+                            self.cleanup()
+                            last_cleanup_time = now
+
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
@@ -444,6 +484,40 @@ class Stats:
             self._monitor_task = asyncio.create_task(monitor_loop())
         except Exception as e:
             log.warning("Failed to start monitoring task: %s", e)
+
+    def _export_stats_to_file(self, export_dir: str) -> None:
+        """Export current statistics to JSON file."""
+        import json
+        from datetime import datetime
+
+        try:
+            os.makedirs(export_dir, exist_ok=True)
+            stats = self.to_dict()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = os.path.join(export_dir, f"stats_{timestamp}.json")
+
+            with open(filename, 'w') as f:
+                json.dump(stats, f, indent=2, default=str)
+
+            log.debug("Stats exported to %s", filename)
+
+            # Keep only last 24 exports
+            self._cleanup_old_exports(export_dir, max_files=24)
+
+        except Exception as e:
+            log.error("Failed to export stats: %s", e)
+
+    def _cleanup_old_exports(self, export_dir: str, max_files: int = 24) -> None:
+        """Remove old export files, keeping only recent ones."""
+        try:
+            files = sorted(
+                [f for f in os.listdir(export_dir) if f.startswith("stats_") and f.endswith(".json")],
+                reverse=True
+            )
+            for old_file in files[max_files:]:
+                os.remove(os.path.join(export_dir, old_file))
+        except Exception as e:
+            log.debug("Failed to cleanup old exports: %s", e)
 
     def stop_realtime_monitoring(self) -> None:
         """Stop real-time monitoring."""
@@ -513,3 +587,31 @@ class Stats:
             "monitor_task": self._monitor_task is not None,
             "error_rate_window": len(self._error_rate_window),
         }
+
+    def cleanup(self) -> None:
+        """Clean up old data and free memory."""
+        import gc
+
+        # Clear old connection history
+        if len(self.connection_history) > self._history_size:
+            self.connection_history = self.connection_history[-self._history_size:]
+
+        # Clear old traffic history
+        if len(self.traffic_history) > self._history_size:
+            self.traffic_history = self.traffic_history[-self._history_size:]
+
+        # Clear old CPU/memory history
+        max_perf_history = 30 if self._optimize_memory else 60
+        if len(self._cpu_history) > max_perf_history:
+            self._cpu_history = self._cpu_history[-max_perf_history:]
+        if len(self._memory_history) > max_perf_history:
+            self._memory_history = self._memory_history[-max_perf_history:]
+
+        # Clear old latency history
+        for dc in self._latency_history:
+            max_lat = self._latency_history_max if self._optimize_memory else 60
+            if len(self._latency_history[dc]) > max_lat:
+                self._latency_history[dc] = self._latency_history[dc][-max_lat:]
+
+        # Force garbage collection
+        gc.collect()

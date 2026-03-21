@@ -389,3 +389,101 @@ class TestMeasureAllDcPings:
             assert 4 in results
             assert results[2] == 10.5
             assert results[4] == 10.5
+
+
+class TestHandleClientAuth:
+    """Tests for _handle_client authentication logic."""
+
+    @pytest.mark.asyncio
+    async def test_auth_required_client_no_support(self):
+        """Test client rejected when auth required but client doesn't support."""
+        dc_opt = {2: "149.154.167.220"}
+        auth_credentials = {"username": "test", "password": "pass"}
+        stats = Stats()
+        ws_pool = _WsPool(stats)
+
+        mock_reader = AsyncMock()
+        mock_writer = MagicMock()
+        mock_writer.get_extra_info.return_value = ("127.0.0.1", 12345)
+        mock_writer.is_closing.return_value = False
+        mock_writer.close = MagicMock()
+        mock_writer.drain = AsyncMock()
+
+        # SOCKS5 greeting with no auth method (only 0x00)
+        mock_reader.readexactly = AsyncMock(side_effect=[
+            b'\x05\x01',  # SOCKS5, 1 method
+            b'\x00',      # No auth method
+        ])
+
+        from proxy.tg_ws_proxy import _handle_client
+
+        await _handle_client(
+            reader=mock_reader,
+            writer=mock_writer,
+            stats=stats,
+            dc_opt=dc_opt,
+            ws_pool=ws_pool,
+            ws_blacklist=set(),
+            dc_fail_until={},
+            auth_required=True,
+            auth_credentials=auth_credentials,
+        )
+
+        # Should write \x05\xff (no acceptable methods)
+        mock_writer.write.assert_any_call(b'\x05\xff')
+
+
+class TestHandleClientIpWhitelist:
+    """Tests for IP whitelist functionality."""
+
+    @pytest.mark.asyncio
+    async def test_ip_not_in_whitelist(self):
+        """Test client rejected when IP not in whitelist."""
+        dc_opt = {2: "149.154.167.220"}
+        ip_whitelist = {"192.168.1.1"}
+        stats = Stats()
+        ws_pool = _WsPool(stats)
+
+        mock_reader = AsyncMock()
+        mock_writer = MagicMock()
+        mock_writer.get_extra_info.return_value = ("10.0.0.1", 12345)  # Not in whitelist
+        mock_writer.is_closing.return_value = False
+        mock_writer.close = MagicMock()
+
+        from proxy.tg_ws_proxy import _handle_client
+
+        await _handle_client(
+            reader=mock_reader,
+            writer=mock_writer,
+            stats=stats,
+            dc_opt=dc_opt,
+            ws_pool=ws_pool,
+            ws_blacklist=set(),
+            dc_fail_until={},
+            ip_whitelist=ip_whitelist,
+        )
+
+        # Writer should be closed
+        mock_writer.close.assert_called()
+
+    def test_proxy_server_whitelist_init(self):
+        """Test ProxyServer initializes whitelist correctly."""
+        dc_opt = {2: "149.154.167.220"}
+        whitelist = ["192.168.1.1", "10.0.0.1"]
+
+        from proxy.tg_ws_proxy import ProxyServer
+        server = ProxyServer(dc_opt=dc_opt, ip_whitelist=whitelist)
+
+        # Whitelist should be converted to set
+        assert isinstance(server.ip_whitelist, set)
+        assert server.ip_whitelist == {"192.168.1.1", "10.0.0.1"}
+
+    def test_proxy_server_whitelist_none(self):
+        """Test ProxyServer with no whitelist (None)."""
+        dc_opt = {2: "149.154.167.220"}
+
+        from proxy.tg_ws_proxy import ProxyServer
+        server = ProxyServer(dc_opt=dc_opt)
+
+        # No whitelist means all IPs allowed
+        assert server.ip_whitelist is None
