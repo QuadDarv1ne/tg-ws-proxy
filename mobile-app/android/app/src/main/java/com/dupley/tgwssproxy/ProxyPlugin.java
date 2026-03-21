@@ -25,6 +25,22 @@ public class ProxyPlugin extends Plugin {
     private static final String PREFS_NAME = "proxy_settings";
     private static final String KEY_PORT = "proxy_port";
     private static final String KEY_AUTO_PORT = "auto_port";
+    
+    private static ProxyPlugin instance;
+
+    @Override
+    public void load() {
+        super.load();
+        instance = this;
+    }
+
+    public static void onStatusChanged(boolean active) {
+        if (instance != null) {
+            JSObject ret = new JSObject();
+            ret.put("active", active);
+            instance.notifyListeners("statusChange", ret);
+        }
+    }
 
     @PluginMethod
     public void startProxy(PluginCall call) {
