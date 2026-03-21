@@ -92,8 +92,8 @@ Mypy: missing stubs (внешние зависимости)
 - [ ] **Memory Profiling** — поиск утечек в пулах (tracemalloc/memray)
 
 ### Безопасность
-- [ ] **Rate limiting** — защита от злоупотреблений (requests/minute)
-- [ ] **IP whitelist/blacklist** — фильтрация подключений
+- [x] **Rate limiting** — защита от злоупотреблений (10 req/s, 100 req/min) ✅
+- [x] **IP whitelist/blacklist** — фильтрация подключений (allow-list по умолчанию) ✅
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
 
 ### Android App
