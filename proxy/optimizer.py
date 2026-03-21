@@ -17,9 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
-from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Callable
@@ -155,11 +153,11 @@ class PerformanceOptimizer:
         self.optimizations_applied = 0
         self.last_optimization_time: float | None = None
         self._optimization_reasons: list[str] = []
-        
+
         # Smart DC selection
         self._dc_stats: dict[int, DCStats] = {}
         self._dc_stats_lock = asyncio.Lock()
-        
+
         # Connection cache with LRU eviction
         self._connection_cache: dict[str, tuple[any, float, int]] = {}  # key -> (connection, timestamp, hits)
         self._cache_max_size = 100
@@ -398,10 +396,10 @@ class PerformanceOptimizer:
     async def get_best_dc(self, available_dcs: list[int]) -> int | None:
         """
         Select best DC based on score (success rate, latency, recent errors).
-        
+
         Args:
             available_dcs: List of available DC IDs to choose from
-            
+
         Returns:
             Best DC ID or None if all are blacklisted
         """
