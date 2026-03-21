@@ -60,35 +60,35 @@ class DCStats:
     consecutive_errors: int = 0
     is_blacklisted: bool = False
     blacklisted_until: float | None = None
-    
+
     @property
     def success_rate(self) -> float:
         """Calculate success rate as percentage."""
         if self.total_connections == 0:
             return 100.0
         return ((self.total_connections - self.failed_connections) / self.total_connections) * 100
-    
+
     @property
     def avg_latency(self) -> float:
         """Calculate average latency."""
         if self.total_connections == 0:
             return 0.0
         return self.total_latency_ms / self.total_connections
-    
+
     def record_success(self, latency_ms: float) -> None:
         """Record a successful connection."""
         self.total_connections += 1
         self.total_latency_ms += latency_ms
         self.last_latency_ms = latency_ms
         self.consecutive_errors = 0
-    
+
     def record_failure(self) -> None:
         """Record a failed connection."""
         self.total_connections += 1
         self.failed_connections += 1
         self.last_error_time = time.time()
         self.consecutive_errors += 1
-    
+
     def get_score(self) -> float:
         """
         Calculate DC quality score (higher is better).
@@ -96,19 +96,19 @@ class DCStats:
         """
         # Base score from success rate (0-100)
         score = self.success_rate
-        
+
         # Latency penalty (reduce score for high latency)
         if self.last_latency_ms:
             latency_penalty = min(self.last_latency_ms / 10, 50)  # Max 50 point penalty
             score -= latency_penalty
-        
+
         # Consecutive error penalty
         score -= self.consecutive_errors * 10
-        
+
         # Blacklist penalty
         if self.is_blacklisted:
             score -= 100
-        
+
         return max(0, score)
 
 
@@ -130,6 +130,40 @@ class OptimizationConfig:
     dc_blacklist_duration: float = 300.0  # 5 minutes
     dc_error_threshold: int = 3  # Errors before blacklist consideration
     min_dc_success_rate: float = 50.0  # Minimum success rate to use DC
+
+
+class PerformanceOptimizer:
+    """Automatic performance optimizer."""
+
+    def __init__(
+        self,
+        config: OptimizationConfig | None = None,
+        on_optimization: Callable[[str], None] | None = None,
+    ):
+        self.config = config or OptimizationConfig()
+        self._on_optimization = on_optimization
+        self._metrics_history: list[PerformanceMetrics] = []
+        self._running = False
+        self._optimization_task: asyncio.Task | None = None
+        self._process = psutil.Process(os.getpid())
+
+        # Dynamic pool settings
+        self._current_pool_size = self.config.min_pool_size
+        self._current_max_connections = 100
+
+        # Optimization statistics
+        self.optimizations_applied = 0
+        self.last_optimization_time: float | None = None
+        self._optimization_reasons: list[str] = []
+        
+        # Smart DC selection
+        self._dc_stats: dict[int, DCStats] = {}
+        self._dc_stats_lock = asyncio.Lock()
+        
+        # Connection cache with LRU eviction
+        self._connection_cache: dict[str, tuple[any, float, int]] = {}  # key -> (connection, timestamp, hits)
+        self._cache_max_size = 100
+        self._cache_ttl = 120.0  # 2 minutes
 
     async def start(self) -> None:
         """Start the optimizer."""
@@ -328,31 +362,31 @@ class OptimizationConfig:
     # =========================================================================
     # Smart DC Selection
     # =========================================================================
-    
+
     async def record_dc_success(self, dc_id: int, latency_ms: float) -> None:
         """Record successful DC connection."""
         async with self._dc_stats_lock:
             if dc_id not in self._dc_stats:
                 self._dc_stats[dc_id] = DCStats(dc_id=dc_id)
             self._dc_stats[dc_id].record_success(latency_ms)
-            
+
             # Clear blacklist on success
             if self._dc_stats[dc_id].is_blacklisted:
                 self._dc_stats[dc_id].is_blacklisted = False
                 self._dc_stats[dc_id].blacklisted_until = None
                 self._log_optimization(f"DC{dc_id} removed from blacklist after successful connection")
-    
+
     async def record_dc_failure(self, dc_id: int, error: str = "") -> None:
         """Record failed DC connection."""
         async with self._dc_stats_lock:
             if dc_id not in self._dc_stats:
                 self._dc_stats[dc_id] = DCStats(dc_id=dc_id)
-            
+
             self._dc_stats[dc_id].record_failure()
-            
+
             # Check if should be blacklisted
             stats = self._dc_stats[dc_id]
-            if (stats.consecutive_errors >= self.config.dc_error_threshold and 
+            if (stats.consecutive_errors >= self.config.dc_error_threshold and
                 stats.success_rate < self.config.min_dc_success_rate):
                 stats.is_blacklisted = True
                 stats.blacklisted_until = time.time() + self.config.dc_blacklist_duration
@@ -360,7 +394,7 @@ class OptimizationConfig:
                     f"DC{dc_id} blacklisted for {self.config.dc_blacklist_duration:.0f}s "
                     f"(errors: {stats.consecutive_errors}, success rate: {stats.success_rate:.1f}%)"
                 )
-    
+
     async def get_best_dc(self, available_dcs: list[int]) -> int | None:
         """
         Select best DC based on score (success rate, latency, recent errors).
@@ -374,10 +408,10 @@ class OptimizationConfig:
         async with self._dc_stats_lock:
             now = time.time()
             candidates = []
-            
+
             for dc_id in available_dcs:
                 stats = self._dc_stats.get(dc_id, DCStats(dc_id=dc_id))
-                
+
                 # Check if blacklist expired
                 if stats.is_blacklisted:
                     if stats.blacklisted_until and now > stats.blacklisted_until:
@@ -386,25 +420,25 @@ class OptimizationConfig:
                         self._log_optimization(f"DC{dc_id} blacklist expired")
                     else:
                         continue  # Skip blacklisted DC
-                
+
                 score = stats.get_score()
                 candidates.append((dc_id, score))
-            
+
             if not candidates:
                 # All DCs blacklisted - return first available as fallback
                 log.warning("All DCs blacklisted - using fallback")
                 return available_dcs[0] if available_dcs else None
-            
+
             # Select DC with highest score
             best_dc, best_score = max(candidates, key=lambda x: x[1])
             log.debug("DC selection: %s", ", ".join(f"DC{dc}={score:.1f}" for dc, score in candidates))
             log.info("Selected best DC: DC%d (score: %.1f)", best_dc, best_score)
             return best_dc
-    
+
     def get_dc_stats(self, dc_id: int) -> DCStats | None:
         """Get statistics for a specific DC."""
         return self._dc_stats.get(dc_id)
-    
+
     def get_all_dc_stats(self) -> dict[int, dict]:
         """Get all DC statistics as dictionary."""
         return {
@@ -421,11 +455,11 @@ class OptimizationConfig:
             }
             for dc_id, stats in self._dc_stats.items()
         }
-    
+
     # =========================================================================
     # Connection Cache (LRU)
     # =========================================================================
-    
+
     async def cache_get(self, key: str) -> any | None:
         """Get connection from cache with LRU support."""
         now = time.time()
@@ -442,11 +476,11 @@ class OptimizationConfig:
                 del self._connection_cache[key]
                 log.debug("Cache expired for %s", key)
         return None
-    
+
     async def cache_put(self, key: str, connection: any) -> None:
         """Put connection to cache with LRU eviction."""
         now = time.time()
-        
+
         # Evict if cache is full
         if len(self._connection_cache) >= self._cache_max_size:
             # Find least recently used (lowest hits, oldest)
@@ -456,26 +490,26 @@ class OptimizationConfig:
             )
             del self._connection_cache[lru_key]
             log.debug("Cache evicted LRU: %s", lru_key)
-        
+
         # Clean expired entries periodically
         if len(self._connection_cache) % 10 == 0:
-            expired = [k for k, (_, ts, _) in self._connection_cache.items() 
+            expired = [k for k, (_, ts, _) in self._connection_cache.items()
                       if now - ts > self._cache_ttl]
             for k in expired:
                 del self._connection_cache[k]
-        
+
         self._connection_cache[key] = (connection, now, 0)
         log.debug("Cache put: %s", key)
-    
+
     async def cache_remove(self, key: str) -> None:
         """Remove connection from cache."""
         self._connection_cache.pop(key, None)
         log.debug("Cache remove: %s", key)
-    
+
     def get_cache_stats(self) -> dict:
         """Get cache statistics."""
         now = time.time()
-        valid_entries = sum(1 for _, (__, ts, ___) in self._connection_cache.items() 
+        valid_entries = sum(1 for _, (__, ts, ___) in self._connection_cache.items()
                            if now - ts < self._cache_ttl)
         return {
             "total_entries": len(self._connection_cache),
