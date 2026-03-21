@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -32,12 +33,14 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import org.json.JSONObject;
 
@@ -50,9 +53,7 @@ public class ProxyPlugin extends Plugin {
     private static final String KEY_AUTO_PORT = "auto_port";
     private static final String KEY_USER = "proxy_user";
     private static final String KEY_PASS = "proxy_pass";
-    private static final String KEY_WIFI_ONLY = "wifi_only";
     private static final String KEY_GEMINI_KEY = "gemini_api_key";
-    private static final String KEY_BATTERY_LEVEL = "battery_threshold";
     
     private static ProxyPlugin instance;
 
@@ -63,105 +64,112 @@ public class ProxyPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void exportConfigEncrypted(PluginCall call) {
-        String password = call.getString("password");
-        if (password == null || password.length() < 4) {
-            call.reject("Password too short (min 4 chars)");
-            return;
-        }
-
-        try {
-            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            SharedPreferences securePrefs = getSecurePrefs();
-            
-            JSONObject config = new JSONObject();
-            config.put("port", prefs.getInt(KEY_PORT, 1080));
-            config.put("autoPort", prefs.getBoolean(KEY_AUTO_PORT, true));
-            config.put("username", securePrefs.getString(KEY_USER, ""));
-            config.put("password", securePrefs.getString(KEY_PASS, ""));
-
-            String encrypted = encrypt(config.toString(), password);
-            JSObject ret = new JSObject();
-            ret.put("data", encrypted);
-            call.resolve(ret);
-        } catch (Exception e) {
-            call.reject("Export failed: " + e.getMessage());
-        }
-    }
-
-    @PluginMethod
-    public void importConfigEncrypted(PluginCall call) {
-        String data = call.getString("data");
-        String password = call.getString("password");
-        
-        try {
-            String decrypted = decrypt(data, password);
-            JSONObject json = new JSONObject(decrypted);
-            
-            SharedPreferences.Editor editor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
-            if (json.has("port")) editor.putInt(KEY_PORT, json.getInt("port"));
-            if (json.has("autoPort")) editor.putBoolean(KEY_AUTO_PORT, json.getBoolean("autoPort"));
-            editor.apply();
-
-            SharedPreferences.Editor secureEditor = getSecurePrefs().edit();
-            if (json.has("username")) secureEditor.putString(KEY_USER, json.getString("username"));
-            if (json.has("password")) secureEditor.putString(KEY_PASS, json.getString("password"));
-            secureEditor.apply();
-            
-            call.resolve();
-        } catch (Exception e) {
-            call.reject("Import failed: Check password or data format");
-        }
-    }
-
-    private String encrypt(String strToEncrypt, String secret) throws Exception {
-        byte[] key = MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8));
-        SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
-        return Base64.encodeToString(cipher.doFinal(strToEncrypt.getBytes(StandardCharsets.UTF_8)), Base64.DEFAULT);
-    }
-
-    private String decrypt(String strToDecrypt, String secret) throws Exception {
-        byte[] key = MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8));
-        SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-        cipher.init(Cipher.DECRYPT_MODE, secretKey);
-        return new String(cipher.doFinal(Base64.decode(strToDecrypt, Base64.DEFAULT)));
-    }
-
-    @PluginMethod
-    public void analyzeLogsWithAI(PluginCall call) {
+    public void predictNetworkIssues(PluginCall call) {
         SharedPreferences securePrefs = getSecurePrefs();
         String apiKey = securePrefs.getString(KEY_GEMINI_KEY, "");
         if (apiKey.isEmpty()) {
-            call.reject("Gemini API Key not set.");
+            call.reject("Gemini Key required");
             return;
         }
+
         try {
-            Python py = Python.getInstance();
-            PyObject module = py.getModule("android_entry");
-            String logs = module.callAttr("get_recent_logs").toString();
-            String crashLogs = module.callAttr("get_crash_logs").toString();
             JSObject stats = getStatsInternal();
             GenerativeModel gm = new GenerativeModel("gemini-1.5-flash", apiKey);
             GenerativeModelFutures model = GenerativeModelFutures.from(gm);
-            String systemInfo = String.format("Android: %s, SDK: %d, Device: %s, Proxy Stats: %s", 
-                Build.VERSION.RELEASE, Build.VERSION.SDK_INT, Build.MODEL, stats.toString());
-            String prompt = "Ты - эксперт по сетевым прокси. Проанализируй логи Telegram Proxy для Android и предложи решение проблемы. Отвечай кратко на русском языке.\n\nИНФОРМАЦИЯ О СИСТЕМЕ:\n" + systemInfo + "\n\nЛОГИ:\n" + logs + "\n\nИСТОРИЯ ОШИБОК:\n" + crashLogs;
+
+            String prompt = "На основе этой статистики прокси: " + stats.toString() + 
+                           "\nСделай предиктивный анализ: есть ли риск обрыва соединения или блокировки? " +
+                           "Ответь очень кратко на русском.";
+
             Content content = new Content.Builder().addText(prompt).build();
             ListenableFuture<GenerateContentResponse> response = model.generateContent(content);
             Futures.addCallback(response, new FutureCallback<GenerateContentResponse>() {
                 @Override
                 public void onSuccess(GenerateContentResponse result) {
                     JSObject ret = new JSObject();
-                    ret.put("analysis", result.getText());
+                    ret.put("prediction", result.getText());
                     call.resolve(ret);
                 }
                 @Override
                 public void onFailure(@NonNull Throwable t) { call.reject(t.getMessage()); }
             }, ContextCompat.getMainExecutor(getContext()));
         } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void getBatteryAnalytics(PluginCall call) {
+        JSObject ret = new JSObject();
+        try {
+            BatteryManager bm = (BatteryManager) getContext().getSystemService(Context.BATTERY_SERVICE);
+            if (bm != null) {
+                ret.put("capacity", bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY));
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    ret.put("isCharging", bm.isCharging());
+                }
+            }
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void exportConfigEncrypted(PluginCall call) {
+        String password = call.getString("password");
+        if (password == null) { call.reject("Password required"); return; }
+        try {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            SharedPreferences securePrefs = getSecurePrefs();
+            JSONObject config = new JSONObject();
+            config.put("port", prefs.getInt(KEY_PORT, 1080));
+            config.put("username", securePrefs.getString(KEY_USER, ""));
+            config.put("password", securePrefs.getString(KEY_PASS, ""));
+            String encrypted = encrypt(config.toString(), password);
+            JSObject ret = new JSObject();
+            ret.put("data", encrypted);
+            call.resolve(ret);
+        } catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void importConfigEncrypted(PluginCall call) {
+        String data = call.getString("data");
+        String password = call.getString("password");
+        try {
+            String decrypted = decrypt(data, password);
+            JSONObject json = new JSONObject(decrypted);
+            SharedPreferences.Editor editor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+            if (json.has("port")) editor.putInt(KEY_PORT, json.getInt("port"));
+            editor.apply();
+            SharedPreferences.Editor secureEditor = getSecurePrefs().edit();
+            if (json.has("username")) secureEditor.putString(KEY_USER, json.getString("username"));
+            if (json.has("password")) secureEditor.putString(KEY_PASS, json.getString("password"));
+            secureEditor.apply();
+            call.resolve();
+        } catch (Exception e) { call.reject("Import failed"); }
+    }
+
+    private String encrypt(String value, String password) throws Exception {
+        byte[] key = MessageDigest.getInstance("SHA-256").digest(password.getBytes(StandardCharsets.UTF_8));
+        SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        byte[] iv = new byte[16];
+        new SecureRandom().nextBytes(iv);
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, new IvParameterSpec(iv));
+        byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
+        byte[] combined = new byte[iv.length + encrypted.length];
+        System.arraycopy(iv, 0, combined, 0, iv.length);
+        System.arraycopy(encrypted, 0, combined, iv.length, encrypted.length);
+        return Base64.encodeToString(combined, Base64.NO_WRAP);
+    }
+
+    private String decrypt(String combinedBase64, String password) throws Exception {
+        byte[] combined = Base64.decode(combinedBase64, Base64.NO_WRAP);
+        byte[] key = MessageDigest.getInstance("SHA-256").digest(password.getBytes(StandardCharsets.UTF_8));
+        SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        byte[] iv = new byte[16];
+        System.arraycopy(combined, 0, iv, 0, 16);
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, new IvParameterSpec(iv));
+        return new String(cipher.doFinal(combined, 16, combined.length - 16));
     }
 
     @PluginMethod
@@ -194,24 +202,19 @@ public class ProxyPlugin extends Plugin {
 
     @PluginMethod
     public void startProxy(PluginCall call) {
-        saveSettings(call);
         vibrate(50);
-        Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(serviceIntent);
-        else getContext().startService(serviceIntent);
-        JSObject ret = new JSObject();
-        ret.put("status", "starting");
-        call.resolve(ret);
+        Intent intent = new Intent(getContext(), ProxyForegroundService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(intent);
+        else getContext().startService(intent);
+        call.resolve();
     }
 
     @PluginMethod
     public void stopProxy(PluginCall call) {
         vibrate(100);
-        Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class).setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
-        getContext().startService(serviceIntent);
-        JSObject ret = new JSObject();
-        ret.put("status", "stopping");
-        call.resolve(ret);
+        Intent intent = new Intent(getContext(), ProxyForegroundService.class).setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
+        getContext().startService(intent);
+        call.resolve();
     }
 
     private SharedPreferences getSecurePrefs() {
@@ -237,16 +240,5 @@ public class ProxyPlugin extends Plugin {
             ret.put("active", active);
             instance.notifyListeners("statusChange", ret);
         }
-    }
-
-    private void saveSettings(PluginCall call) {
-        Integer port = call.getInt("port");
-        Boolean autoPort = call.getBoolean("autoPort");
-        Boolean wifiOnly = call.getBoolean("wifiOnly");
-        SharedPreferences.Editor normalEditor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
-        if (port != null) normalEditor.putInt(KEY_PORT, port);
-        if (autoPort != null) normalEditor.putBoolean(KEY_AUTO_PORT, autoPort);
-        if (wifiOnly != null) normalEditor.putBoolean(KEY_WIFI_ONLY, wifiOnly);
-        normalEditor.apply();
     }
 }
