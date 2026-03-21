@@ -29,11 +29,13 @@
 - ✅ Python 3.14 совместимость (tray.py asyncio.run)
 
 ### Тесты
-- ✅ Tests: 438 passed, 7 skipped (было 255 passed)
+- ✅ Tests: 463 passed, 7 skipped (было 255 passed)
 - ✅ Добавлены тесты для i18n, updater, whitelist
 - ✅ Покрытие web_dashboard.py: 61% → 74%
 - ✅ Исправлены тесты config_backup (Windows permissions)
 - ✅ Создана fixtures для Windows (tmp_path_safe)
+- ✅ Добавлены тесты для rate_limiter.py (14 тестов)
+- ✅ Исправлены все ruff ошибки (I001, F401, W293)
 
 ### Документация
 - ✅ Очистка документации от дублирования
@@ -44,7 +46,7 @@
 
 ---
 
-## ✅ Выполнено (v2.22.0 — v2.30.0)
+## ✅ Выполнено (v2.22.0 — v2.31.0)
 
 ### Новые модули
 - ✅ `proxy/optimizer.py` — авто-оптимизация производительности
@@ -72,11 +74,18 @@
 - ✅ test_connection_cache.py: 27 тестов
 - ✅ test_client_stats.py: 39 тестов
 - ✅ test_config_backup.py: 24 тестов
-- ✅ Итого: 438 passed, 7 skipped
+- ✅ test_rate_limiter.py: 14 тестов
+- ✅ Итого: 463 passed, 7 skipped
+
+### Android
+- ✅ ProxyForegroundService — улучшена стабильность (watchdog, proxyThread)
+- ✅ MainActivity — улучшения
+- ✅ shortcuts.xml — добавлены ярлыки
+- ✅ AndroidManifest — обновления
 
 ---
 
-## 🔴 Высокий приоритет (v2.30.0)
+## 🔴 Высокий приоритет (v2.31.0)
 
 ### Тесты и покрытие
 - [ ] Покрытие tg_ws_proxy.py: 13% → 60%
@@ -87,9 +96,10 @@
 - [ ] Coverage > 80% (текущее ~35%)
 
 ### Покрытие тестами
-- [ ] rate_limiter.py: 0% → 80%
+- [ ] rate_limiter.py: 14 тестов → 80% coverage
 - [ ] crypto.py: 25% → 80%
 - [ ] alerts.py: 40% → 80%
+- [ ] logger.py: 0% → 80%
 
 ### Производительность
 - [ ] HTTP/2 для WebSocket
@@ -98,7 +108,7 @@
 
 ---
 
-## 🟢 Низкий приоритет (v2.31.0)
+## 🟢 Низкий приоритет (v2.32.0)
 
 ### Документация (без запроса не менять)
 - [ ] Скриншоты интерфейса в README
@@ -111,12 +121,16 @@
 - [ ] Улучшенная SOCKS5 аутентификация
 - [ ] TLS для локального прокси
 
+### Android
+- [ ] Улучшения стабильности сервиса
+- [ ] Оптимизация батареи
+
 ---
 
 ## 📊 Статус
 
 ```
-Tests: 438 passed, 7 skipped, 0 errors
+Tests: 463 passed, 7 skipped, 0 errors
 Coverage: ~35% (цель >80%)
 Ruff: 0 ошибок
 Mypy: missing stubs (внешние зависимости)
@@ -124,19 +138,20 @@ Mypy: missing stubs (внешние зависимости)
 
 **Проблемные зоны:**
 - `tg_ws_proxy.py` — 12%
-- `rate_limiter.py` — 0% (исключён из тестов)
+- `rate_limiter.py` — 14 тестов, покрытие ~40%
 - `crypto.py` — 25%
 - `alerts.py` — 40%
+- `logger.py` — 9 тестов (PermissionError на Windows)
 
 **Новые модули (требуют тестов):**
 - `optimizer.py` — 100% (17 тестов)
 - `plugins.py` — 100% (14 тестов)
 - `dc_monitor.py` — 100% (30 тестов)
-- `notifications.py` — 85% (25 тестов, 4 skipped)
+- `notifications.py` — 85% (29 тестов, 4 skipped)
 - `connection_cache.py` — 100% (27 тестов)
 - `client_stats.py` — 100% (39 тестов)
 - `config_backup.py` — 100% (24 тестов)
-- `logger.py` — требует тестов
+- `logger.py` — 0% (9 тестов, Windows PermissionError)
 
 ---
 
