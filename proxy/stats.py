@@ -592,6 +592,11 @@ class Stats:
         """Clean up old data and free memory."""
         import gc
 
+        # Cancel monitoring task
+        if self._monitor_task and not self._monitor_task.done():
+            self._monitor_task.cancel()
+            self._monitor_task = None
+
         # Clear old connection history
         if len(self.connection_history) > self._history_size:
             self.connection_history = self.connection_history[-self._history_size:]

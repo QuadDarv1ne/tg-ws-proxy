@@ -1,0 +1,40 @@
+[versions]
+# Android SDK
+compileSdk = "35"
+minSdk = "22"
+targetSdk = "35"
+
+# Libraries
+androidx-activity = "1.13.0"
+androidx-appcompat = "1.7.1"
+androidx-coordinatorlayout = "1.3.0"
+androidx-core = "1.18.0"
+androidx-fragment = "1.8.5"
+androidx-webkit = "1.15.0"
+core-splashscreen = "1.2.0"
+junit = "4.13.2"
+androidx-junit = "1.3.0"
+androidx-espresso = "3.7.0"
+leakcanary = "2.14"
+
+# Plugins
+android-gradle-plugin = "8.8.2"
+google-services = "4.4.4"
+
+[libraries]
+android-gradle-plugin = { group = "com.android.tools.build", name = "gradle", version.ref = "android-gradle-plugin" }
+google-services = { group = "com.google.gms", name = "google-services", version.ref = "google-services" }
+androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "androidx-activity" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "androidx-appcompat" }
+androidx-coordinatorlayout = { group = "androidx.coordinatorlayout", name = "coordinatorlayout", version.ref = "androidx-coordinatorlayout" }
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidx-core" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "core-splashscreen" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "androidx-webkit" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-junit" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "androidx-espresso" }
+leakcanary = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "leakcanary" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }

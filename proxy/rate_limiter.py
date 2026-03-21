@@ -6,6 +6,7 @@ Provides connection rate limiting to prevent abuse and overload:
 - Global connection limits
 - Exponential backoff for violations
 - Sliding window rate limiting
+- Allow-list support for trusted IPs
 
 Author: Dupley Maxim Igorevich
 © 2026 Dupley Maxim Igorevich. All rights reserved.
@@ -16,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
@@ -42,11 +43,14 @@ class RateLimitConfig:
     initial_delay_ms: int = 100
     max_delay_ms: int = 5000
     backoff_multiplier: float = 2.0
+    # Trusted IPs that are not subject to rate limits
+    allow_list: set[str] = field(default_factory=lambda: {"127.0.0.1", "::1"})
 
 
 @dataclass
 class IPStats:
-    requests: list[float] = field(default_factory=list)
+    # Use deque for efficient O(1) removal from the left
+    requests: deque[float] = field(default_factory=deque)
     violations: int = 0
     last_violation: float = 0.0
     ban_until: float = 0.0
@@ -60,7 +64,7 @@ class RateLimiter:
     def __init__(self, config: RateLimitConfig | None = None):
         self.config = config or RateLimitConfig()
         self._ip_stats: dict[str, IPStats] = defaultdict(IPStats)
-        self._global_requests: list[float] = []
+        self._global_requests: deque[float] = deque()
         self._active_connections: dict[str, int] = defaultdict(int)
         self._total_active = 0
         self._cleanup_task: asyncio.Task | None = None
@@ -69,7 +73,7 @@ class RateLimiter:
     async def start(self) -> None:
         self._running = True
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
-        log.info("Rate limiter started")
+        log.info("Rate limiter started (Allow-list size: %d)", len(self.config.allow_list))
 
     async def stop(self) -> None:
         self._running = False
@@ -84,7 +88,8 @@ class RateLimiter:
     async def _cleanup_loop(self) -> None:
         while self._running:
             try:
-                await asyncio.sleep(60)
+                # Cleanup every 5 minutes to reduce CPU usage
+                await asyncio.sleep(300)
                 self._cleanup_old_data()
             except asyncio.CancelledError:
                 break
@@ -97,20 +102,28 @@ class RateLimiter:
 
         ips_to_remove = []
         for ip, stats in self._ip_stats.items():
-            stats.requests = [t for t in stats.requests if t > hour_ago]
+            # Efficiently remove old requests
+            while stats.requests and stats.requests[0] < hour_ago:
+                stats.requests.popleft()
+
             if stats.ban_until > 0 and now > stats.ban_until:
                 stats.ban_until = 0.0
                 stats.violations = 0
                 log.info("IP %s unbanned after timeout", ip)
-            if not stats.requests and stats.ban_until == 0:
+
+            if not stats.requests and stats.ban_until == 0 and self._active_connections[ip] == 0:
                 ips_to_remove.append(ip)
 
         for ip in ips_to_remove:
             del self._ip_stats[ip]
 
-        self._global_requests = [t for t in self._global_requests if t > hour_ago]
+        while self._global_requests and self._global_requests[0] < hour_ago:
+            self._global_requests.popleft()
 
     def check_rate_limit(self, ip: str) -> tuple[RateLimitAction, float]:
+        if ip in self.config.allow_list:
+            return RateLimitAction.ALLOW, 0.0
+
         now = time.time()
         stats = self._ip_stats[ip]
         stats.total_requests += 1
@@ -126,17 +139,21 @@ class RateLimiter:
 
         self._clean_old_requests(stats)
 
+        # 1. Per Second Limit
         recent_second = sum(1 for t in stats.requests if t > now - 1)
         if recent_second >= self.config.requests_per_second:
             return self._handle_violation(ip, stats, "requests/second")
 
+        # 2. Per Minute Limit
         recent_minute = sum(1 for t in stats.requests if t > now - 60)
         if recent_minute >= self.config.requests_per_minute:
             return self._handle_violation(ip, stats, "requests/minute")
 
+        # 3. Per Hour Limit
         if len(stats.requests) >= self.config.requests_per_hour:
             return self._handle_violation(ip, stats, "requests/hour")
 
+        # 4. Max Concurrent Connections per IP
         if self._active_connections[ip] >= self.config.max_connections_per_ip:
             stats.blocked_requests += 1
             return RateLimitAction.REJECT, 0
@@ -146,7 +163,9 @@ class RateLimiter:
 
     def _check_global_limit(self) -> RateLimitAction:
         now = time.time()
-        self._global_requests = [t for t in self._global_requests if t > now - 60]
+        # Clean global requests older than 1 minute
+        while self._global_requests and self._global_requests[0] < now - 60:
+            self._global_requests.popleft()
 
         if len(self._global_requests) >= self.config.requests_per_minute * 10:
             log.warning("Global rate limit exceeded: %d requests/minute", len(self._global_requests))
@@ -160,22 +179,28 @@ class RateLimiter:
 
     def _clean_old_requests(self, stats: IPStats) -> None:
         hour_ago = time.time() - 3600
-        stats.requests = [t for t in stats.requests if t > hour_ago]
+        while stats.requests and stats.requests[0] < hour_ago:
+            stats.requests.popleft()
 
     def _handle_violation(self, ip: str, stats: IPStats, limit_type: str) -> tuple[RateLimitAction, float]:
         stats.violations += 1
         stats.last_violation = time.time()
         stats.blocked_requests += 1
 
-        delay_ms = min(self.config.initial_delay_ms * (self.config.backoff_multiplier ** (stats.violations - 1)), self.config.max_delay_ms)
+        delay_ms = min(
+            self.config.initial_delay_ms * (self.config.backoff_multiplier ** (stats.violations - 1)),
+            self.config.max_delay_ms
+        )
         delay_sec = delay_ms / 1000.0
 
         if stats.violations >= self.config.ban_threshold:
             stats.ban_until = time.time() + self.config.ban_duration_seconds
-            log.warning("IP %s banned for %.0f seconds (violations: %d, limit: %s)", ip, self.config.ban_duration_seconds, stats.violations, limit_type)
+            log.warning("IP %s banned for %.0f seconds (violations: %d, limit: %s)",
+                        ip, self.config.ban_duration_seconds, stats.violations, limit_type)
             return RateLimitAction.BAN, self.config.ban_duration_seconds
 
-        log.debug("IP %s rate limited: %s (violation %d, delay: %.1fs)", ip, limit_type, stats.violations, delay_sec)
+        log.debug("IP %s rate limited: %s (violation %d, delay: %.1fs)",
+                  ip, limit_type, stats.violations, delay_sec)
         return RateLimitAction.DELAY, delay_sec
 
     def add_connection(self, ip: str) -> None:
@@ -190,23 +215,37 @@ class RateLimiter:
 
     def get_ip_stats(self, ip: str) -> dict:
         stats = self._ip_stats.get(ip, IPStats())
-        return {"total_requests": stats.total_requests, "blocked_requests": stats.blocked_requests, "violations": stats.violations, "active_connections": self._active_connections[ip], "is_banned": stats.ban_until > time.time(), "ban_remaining": max(0, stats.ban_until - time.time()), "requests_last_minute": sum(1 for t in stats.requests if t > time.time() - 60)}
+        now = time.time()
+        return {
+            "total_requests": stats.total_requests,
+            "blocked_requests": stats.blocked_requests,
+            "violations": stats.violations,
+            "active_connections": self._active_connections[ip],
+            "is_banned": stats.ban_until > now,
+            "ban_remaining": max(0, stats.ban_until - now),
+            "requests_last_minute": sum(1 for t in stats.requests if t > now - 60)
+        }
 
     def get_global_stats(self) -> dict:
         now = time.time()
-        return {"total_active_connections": self._total_active, "unique_ips": len(self._ip_stats), "requests_last_minute": len([t for t in self._global_requests if t > now - 60]), "banned_ips": sum(1 for s in self._ip_stats.values() if s.ban_until > now), "total_violations": sum(s.violations for s in self._ip_stats.values())}
+        return {
+            "total_active_connections": self._total_active,
+            "unique_ips": len(self._ip_stats),
+            "requests_last_minute": len([t for t in self._global_requests if t > now - 60]),
+            "banned_ips": sum(1 for s in self._ip_stats.values() if s.ban_until > now),
+            "total_violations": sum(s.violations for s in self._ip_stats.values())
+        }
 
     def reset_ip(self, ip: str) -> None:
         if ip in self._ip_stats:
             stats = self._ip_stats[ip]
             stats.violations = 0
             stats.ban_until = 0.0
-            stats.requests = []
+            stats.requests.clear()
 
     def ban_ip(self, ip: str, duration: float | None = None) -> None:
         duration = duration or self.config.ban_duration_seconds
-        if ip in self._ip_stats:
-            self._ip_stats[ip].ban_until = time.time() + duration
+        self._ip_stats[ip].ban_until = time.time() + duration
 
     def unban_ip(self, ip: str) -> None:
         if ip in self._ip_stats:
