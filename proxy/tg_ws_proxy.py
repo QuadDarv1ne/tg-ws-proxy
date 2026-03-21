@@ -427,6 +427,11 @@ class ProxyServer:
         # WebSocket connection pool (lazy initialized)
         self._ws_pool: _WsPool | None = None
 
+        # Background tasks for graceful shutdown
+        self._log_stats_task: asyncio.Task | None = None
+        self._dc_monitor_task: asyncio.Task | None = None
+        self._optimize_pool_task: asyncio.Task | None = None
+
         # Server instance for graceful shutdown
         self._server_instance: asyncio.Server | None = None
         self._server_stop_event: asyncio.Event | None = None
