@@ -9,8 +9,8 @@ android {
         applicationId "com.dupley.tgwssproxy"
         minSdkVersion libs.versions.minSdk.get().toInteger()
         targetSdkVersion libs.versions.targetSdk.get().toInteger()
-        versionCode 1
-        versionName "1.0"
+        versionCode 236
+        versionName "2.36.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         
         aaptOptions {
@@ -34,7 +34,7 @@ android {
                 src false
                 pip true
             }
-            // Optimization for Cycle 6
+            // Optimization for v2.36.0
             extractPackages "cryptography", "psutil", "zeroconf"
         }
     }

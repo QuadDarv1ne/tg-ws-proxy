@@ -5,18 +5,33 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Icon;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
+import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
+import com.chaquo.python.PyObject;
+import com.chaquo.python.Python;
+
 @RequiresApi(api = Build.VERSION_CODES.N)
 public class ProxyTileService extends TileService {
+    private static final String TAG = "ProxyTile";
+    private Handler updateHandler = new Handler(Looper.getMainLooper());
+    private Runnable updateRunnable;
 
     @Override
     public void onStartListening() {
         super.onStartListening();
-        updateTile();
+        startTileUpdates();
+    }
+
+    @Override
+    public void onStopListening() {
+        stopTileUpdates();
+        super.onStopListening();
     }
 
     @Override
@@ -24,20 +39,37 @@ public class ProxyTileService extends TileService {
         super.onClick();
         boolean isActive = isServiceRunning(ProxyForegroundService.class);
         
+        Intent intent = new Intent(this, ProxyForegroundService.class);
         if (isActive) {
-            Intent stopIntent = new Intent(this, ProxyForegroundService.class);
-            stopIntent.setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
-            startService(stopIntent);
+            intent.setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
+            startService(intent);
         } else {
-            Intent startIntent = new Intent(this, ProxyForegroundService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(startIntent);
+                startForegroundService(intent);
             } else {
-                startService(startIntent);
+                startService(intent);
             }
         }
         
-        updateTile();
+        // Кратковременная задержка для обновления статуса
+        updateHandler.postDelayed(this::updateTile, 500);
+    }
+
+    private void startTileUpdates() {
+        updateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateTile();
+                updateHandler.postDelayed(this, 3000); // Обновляем раз в 3 секунды
+            }
+        };
+        updateHandler.post(updateRunnable);
+    }
+
+    private void stopTileUpdates() {
+        if (updateRunnable != null) {
+            updateHandler.removeCallbacks(updateRunnable);
+        }
     }
 
     private void updateTile() {
@@ -48,17 +80,43 @@ public class ProxyTileService extends TileService {
         
         if (isActive) {
             tile.setState(Tile.STATE_ACTIVE);
-            tile.setLabel(getString(R.string.tile_on));
+            String speedInfo = getSpeedFromPython();
+            tile.setLabel(getString(R.string.tile_label));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                tile.setSubtitle(speedInfo != null ? speedInfo : getString(R.string.tile_on));
+            }
         } else {
             tile.setState(Tile.STATE_INACTIVE);
-            tile.setLabel(getString(R.string.tile_off));
+            tile.setLabel(getString(R.string.tile_label));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                tile.setSubtitle(getString(R.string.tile_off));
+            }
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            tile.setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher));
-        }
-        
         tile.updateTile();
+    }
+
+    private String getSpeedFromPython() {
+        try {
+            if (!Python.isStarted()) return null;
+            Python py = Python.getInstance();
+            PyObject stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
+            
+            PyObject speedUp = stats.get(py.getBuiltins().get("str").call("speed_up"));
+            PyObject speedDown = stats.get(py.getBuiltins().get("str").call("speed_down"));
+            
+            if (speedUp != null && speedDown != null) {
+                Object[] upList = speedUp.asList().toArray();
+                Object[] downList = speedDown.asList().toArray();
+                if (upList.length > 0 && downList.length > 0) {
+                    return String.format("↑%s KB/s  ↓%s KB/s", 
+                        upList[upList.length-1], downList[downList.length-1]);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting speed from Python: " + e.getMessage());
+        }
+        return null;
     }
 
     private boolean isServiceRunning(Class<?> serviceClass) {
