@@ -27,12 +27,15 @@ android {
                 install "cryptography"
                 install "psutil"
                 install "appdirs"
+                install "zeroconf"
             }
             staticProxy = true
             pyc {
                 src false
                 pip true
             }
+            // Optimization for Cycle 6
+            extractPackages "cryptography", "psutil", "zeroconf"
         }
     }
 
