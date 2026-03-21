@@ -19,17 +19,17 @@
 - [x] **Локализация**: Полный перевод на RU/EN.
 - [x] **Package Visibility**: Решена проблема видимости пакетов на Android 11+.
 - [x] **Log Sharing**: Добавлена возможность отправки логов из приложения.
-- [x] **Status API Upgrade**: Реактивные события и Watchdog.
+- [x] **Status API Upgrade**: Реактивные события, Watchdog и Heartbeat.
 - [x] **Data Backup**: Автоматическое резервное копирование настроек в облако.
 
-## План "Expert Level Polish":
-1.  [ ] **Encrypted Storage**: Переход на `EncryptedSharedPreferences` для безопасного хранения паролей и секретов.
-2.  [ ] **Advanced DoH**: Расширенный выбор DoH провайдеров (Cloudflare, Quad9) с возможностью ручного ввода.
-3.  [ ] **Background Refresh**: Интеграция `WorkManager` для фонового обновления конфигов DC.
-4.  [ ] **Handshake Diagnostics**: Детализация этапов MTProto-рукопожатия в логах и статусе.
-5.  [ ] **Adaptive Pooling**: Тонкая настройка пула WebSocket в зависимости от скорости текущего соединения.
-6.  [ ] **Native Splash API**: Полная интеграция Android 12+ Splash Screen API для бесшовного запуска.
-7.  [ ] **Structured Session Logs**: Хранение логов сессий в виде структурированных отчетов.
-8.  [ ] **TCP Tuning**: Оптимизация параметров TCP сокетов (Keepalive, Window Size) в Python для мобильных сетей.
-9.  [ ] **Config Profiles**: Поддержка и переключение между несколькими профилями настроек.
-10. [ ] **Security Hardening**: Добавление проверок целостности Python-кода при запуске.
+## План "Ultimate Power & Intelligence":
+1.  [ ] **Dynamic Best DC**: Автоматический выбор и переключение на DC с минимальной задержкой.
+2.  [ ] **Biometric Security**: Защита настроек и логов через отпечаток пальца или Face ID.
+3.  [ ] **Advanced Analytics**: Интеграция графиков трафика и пинга в реальном времени (Chart.js).
+4.  [ ] **MTProto Listener**: Поддержка прямого MTProto проксирования для мобильных клиентов.
+5.  [ ] **System Theme Sync**: Синхронизация темы приложения с системной (Dark/Light mode).
+6.  [ ] **Deep Link Import**: Поддержка импорта настроек через ссылки `tg://proxy?server=...`.
+7.  [ ] **Network Whitelist**: Возможность работы прокси только в сетях Wi-Fi или на определенных SSID.
+8.  [ ] **Memory Leak Guard**: Глубокая настройка LeakCanary и обработка Low Memory событий.
+9.  [ ] **Multi-Session View**: Просмотр списка активных соединений с деталями (IP, время, DC).
+10. [ ] **AI Log Analyzer**: Интеграция Gemini для анализа логов и предложения решений при ошибках.
