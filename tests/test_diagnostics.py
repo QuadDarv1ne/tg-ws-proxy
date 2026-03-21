@@ -342,14 +342,17 @@ class TestDiagnosticsExtended:
         assert isinstance(result.success, bool)
 
     @pytest.mark.asyncio
-    async def test_tcp_connect_timeout(self):
+    @patch('proxy.diagnostics.asyncio.wait_for')
+    async def test_tcp_connect_timeout(self, mock_wait_for):
         """Test TCP connect timeout."""
-        # Use a non-routable IP to trigger timeout
-        result = await check_tcp_connect("10.255.255.1", 80, timeout=0.5)
+        import asyncio
+        mock_wait_for.side_effect = asyncio.TimeoutError()
+
+        result = await check_tcp_connect("10.255.255.1", 80, timeout=0.1)
 
         assert result.name == "TCP 10.255.255.1:80"
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "Connection timeout"
 
     @pytest.mark.asyncio
     async def test_websocket_connect_invalid(self):
