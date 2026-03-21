@@ -7,7 +7,6 @@ Supports Windows, Linux (AppIndicator), and macOS (Cocoa).
 from __future__ import annotations
 
 import asyncio
-import ctypes
 import json
 import logging
 import os
@@ -402,8 +401,8 @@ def _load_icon(status: str | None = None) -> Image.Image | None:
 def _show_error(text: str, title: str = "TG WS Proxy — Ошибка") -> None:
     """Show error dialog."""
     if IS_WINDOWS:
-        # MB_SYSTEMMODAL (0x1000) ensures the dialog is properly modal and responsive
-        ctypes.windll.user32.MessageBoxW(0, text, title, 0x1010)  # MB_ICONERROR | MB_SYSTEMMODAL
+        # Use tkinter for reliable dialog on Windows (MessageBoxW has issues from tray thread)
+        threading.Thread(target=_show_tkinter_dialog, args=(text, title, "error"), daemon=True).start()
     elif HAS_GUI:
         _show_dialog(text, title, "error")
     else:
@@ -413,12 +412,49 @@ def _show_error(text: str, title: str = "TG WS Proxy — Ошибка") -> None:
 def _show_info(text: str, title: str = "TG WS Proxy") -> None:
     """Show info dialog."""
     if IS_WINDOWS:
-        # MB_SYSTEMMODAL (0x1000) ensures the dialog is properly modal and responsive
-        ctypes.windll.user32.MessageBoxW(0, text, title, 0x1040)  # MB_ICONINFORMATION | MB_SYSTEMMODAL
+        # Use tkinter for reliable dialog on Windows (MessageBoxW has issues from tray thread)
+        threading.Thread(target=_show_tkinter_dialog, args=(text, title, "info"), daemon=True).start()
     elif HAS_GUI:
         _show_dialog(text, title, "info")
     else:
         log.info("%s: %s", title, text)
+
+
+def _show_tkinter_dialog(text: str, title: str, dialog_type: str = "info") -> None:
+    """Show a tkinter dialog (runs in its own thread with proper message pump)."""
+    import tkinter as tk
+    from tkinter import messagebox
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    root.update()  # Ensure window is ready
+
+    if dialog_type == "error":
+        messagebox.showerror(title, text, parent=root)
+    else:
+        messagebox.showinfo(title, text, parent=root)
+
+    root.destroy()
+
+
+def _show_tkinter_askyesno(text: str, title: str) -> bool:
+    """Show a tkinter yes/no dialog (runs in its own thread)."""
+    import tkinter as tk
+    from tkinter import messagebox
+
+    result = [False]  # Use list to allow modification in nested function
+
+    def do_show():
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        root.update()
+        result[0] = messagebox.askyesno(title, text, parent=root)
+        root.destroy()
+
+    do_show()
+    return result[0]
 
 
 def _show_notification(text: str, title: str = "TG WS Proxy") -> None:
@@ -432,8 +468,8 @@ def _show_notification(text: str, title: str = "TG WS Proxy") -> None:
             toaster = ToastNotifier()
             toaster.show_toast(title, text, duration=5, icon_path=None)
         except ImportError:
-            # Fallback to simple messagebox (MB_ICONINFORMATION | MB_SYSTEMMODAL)
-            ctypes.windll.user32.MessageBoxW(0, text, title, 0x1040)
+            # Fallback to tkinter dialog
+            threading.Thread(target=_show_tkinter_dialog, args=(text, title, "info"), daemon=True).start()
     elif HAS_GUI:
         # For Linux/macOS - use system notifications if available
         try:
@@ -696,16 +732,12 @@ def _on_dc_preset(icon=None, item=None, preset: str = "") -> None:
 def _on_toggle_autostart(icon=None, item=None) -> None:
     """Show autostart toggle dialog."""
     is_enabled = _is_autostart_enabled()
+    msg = (f"Автозапуск сейчас {'включен' if is_enabled else 'выключен'}.\n\n"
+           f"{'Отключить' if is_enabled else 'Включить'} автозапуск?")
 
     if IS_WINDOWS:
-        # MB_YESNO (0x4) | MB_ICONQUESTION (0x20) | MB_SYSTEMMODAL (0x1000) = 0x1024
-        result = ctypes.windll.user32.MessageBoxW(
-            0,
-            f"Автозапуск сейчас {'включен' if is_enabled else 'выключен'}.\n\n"
-            f"{'Отключить' if is_enabled else 'Включить'} автозапуск?",
-            "TG WS Proxy — Автозапуск",
-            0x1024)
-        if result == 6:
+        result = _show_tkinter_askyesno(msg, "TG WS Proxy — Автозапуск")
+        if result:
             _set_autostart(not is_enabled)
             _show_info(
                 f"Автозапуск {'включен' if not is_enabled else 'выключен'}.")
@@ -716,10 +748,7 @@ def _on_toggle_autostart(icon=None, item=None) -> None:
         root = tk.Tk()
         root.withdraw()
         result = messagebox.askyesno(
-            "TG WS Proxy — Автозапуск",
-            f"Автозапуск сейчас {'включен' if is_enabled else 'выключен'}.\n\n"
-            f"{'Отключить' if is_enabled else 'Включить'} автозапуск?",
-            parent=root)
+            "TG WS Proxy — Автозапуск", msg, parent=root)
         root.destroy()
         if result:
             _set_autostart(not is_enabled)
@@ -1618,10 +1647,8 @@ def _show_update_notification(latest_version: str, release_url: str) -> None:
     )
 
     if IS_WINDOWS:
-        # MB_YESNO (0x4) | MB_ICONINFORMATION (0x40) | MB_SYSTEMMODAL (0x1000) = 0x1044
-        result = ctypes.windll.user32.MessageBoxW(
-            0, msg, "TG WS Proxy — Обновление", 0x1044)
-        if result == 6:  # IDYES
+        result = _show_tkinter_askyesno(msg, "TG WS Proxy — Обновление")
+        if result:
             webbrowser.open(release_url)
     elif HAS_GUI:
         import tkinter as tk
