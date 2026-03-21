@@ -63,11 +63,19 @@ Mypy: missing stubs (внешние зависимости)
 ## 📋 План на v2.38.0: Stability & Monitoring
 
 ### Производительность
+- [x] **Zero-copy буферизация** — `memoryview` вместо копирования байтов ✅
+- [x] **Batch WebSocket отправка** — группировка мелких пакетов (<4KB) ✅
+- [x] **Автоматический выбор DC** — по latency в реальном времени (5 мин) ✅
 - [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP
-- [ ] **Memory Profiling** — поиск утечек в пулах (tracemalloc/memray)
 
 ### Надёжность
-- [ ] **Graceful shutdown** — корректное завершение всех соединений
+- [x] **Экспоненциальный backoff** — при ошибках подключения (2^(n-1), max 8x) ✅
+- [x] **Graceful shutdown** — корректное завершение всех соединений ✅
+- [ ] **Memory Profiling** — поиск утечек в пулах (tracemalloc/memray)
+
+### Безопасность
+- [x] **Rate limiting** — защита от злоупотреблений (10 req/s, 100 req/min) ✅
+- [x] **IP whitelist/blacklist** — фильтрация подключений (allow-list по умолчанию) ✅
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
 
 ### Android App
