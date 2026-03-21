@@ -50,7 +50,7 @@ class TuningConfig:
     enable_pool_tuning: bool = True
     enable_timeout_tuning: bool = True
     enable_retry_tuning: bool = True
-    
+
     # Thresholds
     high_latency_threshold_ms: float = 200.0
     critical_latency_threshold_ms: float = 500.0
@@ -60,7 +60,7 @@ class TuningConfig:
 
 class AutoTuner:
     """Automatic performance tuner."""
-    
+
     def __init__(
         self,
         config: TuningConfig | None = None,
@@ -68,32 +68,32 @@ class AutoTuner:
     ):
         self.config = config or TuningConfig()
         self._on_tuning_applied = on_tuning_applied
-        
+
         # Performance samples
         self._samples: list[PerformanceSample] = []
         self._samples_lock = asyncio.Lock()
-        
+
         # Current tuned values
         self._current_pool_size = 4
         self._current_timeout_ms = 10000.0
         self._current_max_retries = 3
-        
+
         # Tuning state
         self._last_adjustment_time: float = 0.0
         self._tuning_applied_count = 0
         self._running = False
         self._tuning_task: asyncio.Task | None = None
-        
+
         # Baseline metrics
         self._baseline_latency: float | None = None
         self._baseline_success_rate: float = 1.0
-        
+
     async def start(self) -> None:
         """Start auto-tuner."""
         self._running = True
         self._tuning_task = asyncio.create_task(self._tuning_loop())
         log.info("Auto-tuner started (mode: %s)", self.config.mode.name)
-    
+
     async def stop(self) -> None:
         """Stop auto-tuner."""
         self._running = False
@@ -104,7 +104,7 @@ class AutoTuner:
             except asyncio.CancelledError:
                 pass
         log.info("Auto-tuner stopped")
-    
+
     async def _tuning_loop(self) -> None:
         """Main tuning loop."""
         while self._running:
@@ -115,40 +115,40 @@ class AutoTuner:
                 break
             except Exception as e:
                 log.error("Auto-tuner error: %s", e)
-    
+
     async def _analyze_and_tune(self) -> None:
         """Analyze performance and apply tuning if needed."""
         now = time.time()
-        
+
         # Check cooldown
         if now - self._last_adjustment_time < self.config.adjustment_cooldown_seconds:
             return
-        
+
         async with self._samples_lock:
             # Check minimum samples
             if len(self._samples) < self.config.min_samples:
                 return
-            
+
             # Filter recent samples
             cutoff = now - self.config.sample_window_seconds
             recent_samples = [s for s in self._samples if s.timestamp > cutoff]
-            
+
             if len(recent_samples) < self.config.min_samples:
                 return
-            
+
             # Calculate metrics
             avg_latency = sum(s.latency_ms for s in recent_samples) / len(recent_samples)
             success_rate = sum(1 for s in recent_samples if s.success) / len(recent_samples)
             pool_reuse_rate = sum(1 for s in recent_samples if s.connection_reused) / len(recent_samples)
-            
+
             # Store baseline if not set
             if self._baseline_latency is None:
                 self._baseline_latency = avg_latency
                 self._baseline_success_rate = success_rate
-            
+
             # Apply tuning based on mode
             await self._apply_tuning(avg_latency, success_rate, pool_reuse_rate)
-    
+
     async def _apply_tuning(
         self,
         avg_latency: float,
@@ -157,53 +157,53 @@ class AutoTuner:
     ) -> None:
         """Apply tuning adjustments based on metrics."""
         adjustments = []
-        
+
         # Pool size tuning
         if self.config.enable_pool_tuning:
             pool_adjustment = self._tune_pool_size(pool_reuse_rate, success_rate)
             if pool_adjustment:
                 adjustments.append(pool_adjustment)
-        
+
         # Timeout tuning
         if self.config.enable_timeout_tuning:
             timeout_adjustment = self._tune_timeout(avg_latency)
             if timeout_adjustment:
                 adjustments.append(timeout_adjustment)
-        
+
         # Retry tuning
         if self.config.enable_retry_tuning:
             retry_adjustment = self._tune_retries(success_rate)
             if retry_adjustment:
                 adjustments.append(retry_adjustment)
-        
+
         # Apply adjustments
         if adjustments:
             self._last_adjustment_time = time.time()
             self._tuning_applied_count += 1
-            
+
             for adjustment in adjustments:
                 log.info("Auto-tuning applied: %s", adjustment)
                 if self._on_tuning_applied:
                     self._on_tuning_applied(adjustment)
-    
+
     def _tune_pool_size(self, pool_reuse_rate: float, success_rate: float) -> str | None:
         """Adjust connection pool size."""
         target = self.config.pool_utilization_target
-        
+
         if pool_reuse_rate > target + 0.2 and self._current_pool_size < 16:
             # High reuse - increase pool
             old_size = self._current_pool_size
             self._current_pool_size = min(self._current_pool_size + 2, 16)
             return f"Pool size increased: {old_size} → {self._current_pool_size}"
-        
+
         elif pool_reuse_rate < target - 0.2 and self._current_pool_size > 2:
             # Low reuse - decrease pool
             old_size = self._current_pool_size
             self._current_pool_size = max(self._current_pool_size - 1, 2)
             return f"Pool size decreased: {old_size} → {self._current_pool_size}"
-        
+
         return None
-    
+
     def _tune_timeout(self, avg_latency: float) -> str | None:
         """Adjust connection timeout."""
         # Set timeout based on latency with safety margin
@@ -214,7 +214,7 @@ class AutoTuner:
                 old_timeout = self._current_timeout_ms
                 self._current_timeout_ms = new_timeout
                 return f"Timeout increased: {old_timeout/1000:.1f}s → {new_timeout/1000:.1f}s"
-        
+
         elif avg_latency < self.config.high_latency_threshold_ms * 0.5:
             # Low latency - decrease timeout for faster failover
             new_timeout = max(avg_latency * 5, 3000.0)
@@ -222,27 +222,27 @@ class AutoTuner:
                 old_timeout = self._current_timeout_ms
                 self._current_timeout_ms = new_timeout
                 return f"Timeout decreased: {old_timeout/1000:.1f}s → {new_timeout/1000:.1f}s"
-        
+
         return None
-    
+
     def _tune_retries(self, success_rate: float) -> str | None:
         """Adjust max retries based on success rate."""
         target = self.config.success_rate_target
-        
+
         if success_rate < target - 0.1 and self._current_max_retries < 5:
             # Low success rate - increase retries
             old_retries = self._current_max_retries
             self._current_max_retries = min(self._current_max_retries + 1, 5)
             return f"Max retries increased: {old_retries} → {self._current_max_retries}"
-        
+
         elif success_rate > target and self._current_max_retries > 2:
             # High success rate - decrease retries
             old_retries = self._current_max_retries
             self._current_max_retries = max(self._current_max_retries - 1, 2)
             return f"Max retries decreased: {old_retries} → {self._current_max_retries}"
-        
+
         return None
-    
+
     async def record_sample(
         self,
         latency_ms: float,
@@ -257,26 +257,26 @@ class AutoTuner:
             bytes_transferred=bytes_transferred,
             connection_reused=connection_reused,
         )
-        
+
         async with self._samples_lock:
             self._samples.append(sample)
-            
+
             # Keep only recent samples
             cutoff = time.time() - self.config.sample_window_seconds * 2
             self._samples = [s for s in self._samples if s.timestamp > cutoff]
-    
+
     def get_current_pool_size(self) -> int:
         """Get current tuned pool size."""
         return self._current_pool_size
-    
+
     def get_current_timeout(self) -> float:
         """Get current tuned timeout in milliseconds."""
         return self._current_timeout_ms
-    
+
     def get_current_max_retries(self) -> int:
         """Get current tuned max retries."""
         return self._current_max_retries
-    
+
     def get_statistics(self) -> dict:
         """Get auto-tuner statistics."""
         return {
