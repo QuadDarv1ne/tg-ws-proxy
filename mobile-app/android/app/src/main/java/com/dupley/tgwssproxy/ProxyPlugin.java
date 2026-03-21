@@ -31,6 +31,7 @@ public class ProxyPlugin extends Plugin {
     private static final String KEY_AUTO_PORT = "auto_port";
     private static final String KEY_USER = "proxy_user";
     private static final String KEY_PASS = "proxy_pass";
+    private static final String KEY_PROFILES = "proxy_profiles";
     
     private static ProxyPlugin instance;
 
@@ -44,15 +45,68 @@ public class ProxyPlugin extends Plugin {
         try {
             String masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC);
             return EncryptedSharedPreferences.create(
-                SECURE_PREFS_NAME,
-                masterKeyAlias,
-                getContext(),
+                SECURE_PREFS_NAME, masterKeyAlias, getContext(),
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             );
         } catch (Exception e) {
-            // Fallback to normal prefs if encryption fails
             return getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        }
+    }
+
+    @PluginMethod
+    public void saveProfile(PluginCall call) {
+        String name = call.getString("name");
+        JSObject config = call.getObject("config");
+        if (name == null || config == null) {
+            call.reject("Name and config are required");
+            return;
+        }
+
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        try {
+            JSONObject profiles;
+            String existing = prefs.getString(KEY_PROFILES, "{}");
+            profiles = new JSONObject(existing);
+            profiles.put(name, config.toString());
+            
+            prefs.edit().putString(KEY_PROFILES, profiles.toString()).apply();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void loadProfile(PluginCall call) {
+        String name = call.getString("name");
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        try {
+            JSONObject profiles = new JSONObject(prefs.getString(KEY_PROFILES, "{}"));
+            if (profiles.has(name)) {
+                String configStr = profiles.getString(name);
+                importConfigInternal(configStr);
+                call.resolve();
+            } else {
+                call.reject("Profile not found");
+            }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    private void importConfigInternal(String jsonStr) throws Exception {
+        JSONObject json = new JSONObject(jsonStr);
+        SharedPreferences.Editor editor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        if (json.has("port")) editor.putInt(KEY_PORT, json.getInt("port"));
+        if (json.has("autoPort")) editor.putBoolean(KEY_AUTO_PORT, json.getBoolean("autoPort"));
+        editor.apply();
+
+        if (json.has("username") || json.has("password")) {
+            SharedPreferences.Editor secureEditor = getSecurePrefs().edit();
+            if (json.has("username")) secureEditor.putString(KEY_USER, json.getString("username"));
+            if (json.has("password")) secureEditor.putString(KEY_PASS, json.getString("password"));
+            secureEditor.apply();
         }
     }
 
@@ -86,70 +140,6 @@ public class ProxyPlugin extends Plugin {
         call.resolve(ret);
     }
 
-    @PluginMethod
-    public void setAuth(PluginCall call) {
-        String user = call.getString("username");
-        String pass = call.getString("password");
-        
-        SharedPreferences.Editor editor = getSecurePrefs().edit();
-        editor.putString(KEY_USER, user);
-        editor.putString(KEY_PASS, pass);
-        editor.apply();
-        
-        if (Python.isStarted()) Python.getInstance().getModule("android_entry").callAttr("set_auth", user, pass);
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void getProxyUrl(PluginCall call) {
-        SharedPreferences securePrefs = getSecurePrefs();
-        SharedPreferences normalPrefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        
-        int port = normalPrefs.getInt(KEY_PORT, 1080);
-        String user = securePrefs.getString(KEY_USER, null);
-        String pass = securePrefs.getString(KEY_PASS, null);
-        
-        String url = (user != null && !user.isEmpty()) 
-            ? "https://t.me/socks?server=127.0.0.1&port=" + port + "&user=" + user + "&pass=" + pass
-            : "https://t.me/socks?server=127.0.0.1&port=" + port;
-        
-        JSObject ret = new JSObject();
-        ret.put("url", url);
-        call.resolve(ret);
-    }
-
-    @PluginMethod
-    public void getSettings(PluginCall call) {
-        SharedPreferences normalPrefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        SharedPreferences securePrefs = getSecurePrefs();
-        
-        JSObject ret = new JSObject();
-        ret.put("port", normalPrefs.getInt(KEY_PORT, 1080));
-        ret.put("autoPort", normalPrefs.getBoolean(KEY_AUTO_PORT, true));
-        ret.put("username", securePrefs.getString(KEY_USER, ""));
-        ret.put("password", securePrefs.getString(KEY_PASS, ""));
-        call.resolve(ret);
-    }
-
-    private void saveSettings(PluginCall call) {
-        Integer port = call.getInt("port");
-        Boolean autoPort = call.getBoolean("autoPort");
-        String user = call.getString("username");
-        String pass = call.getString("password");
-        
-        SharedPreferences.Editor normalEditor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
-        if (port != null) normalEditor.putInt(KEY_PORT, port);
-        if (autoPort != null) normalEditor.putBoolean(KEY_AUTO_PORT, autoPort);
-        normalEditor.apply();
-        
-        if (user != null || pass != null) {
-            SharedPreferences.Editor secureEditor = getSecurePrefs().edit();
-            if (user != null) secureEditor.putString(KEY_USER, user);
-            if (pass != null) secureEditor.putString(KEY_PASS, pass);
-            secureEditor.apply();
-        }
-    }
-
     private void vibrate(long duration) {
         Vibrator v = (Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
         if (v != null) {
@@ -176,5 +166,34 @@ public class ProxyPlugin extends Plugin {
             } else ret.put("error", "Python not started");
         } catch (Exception e) { ret.put("error", e.getMessage()); }
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getSettings(PluginCall call) {
+        SharedPreferences normalPrefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences securePrefs = getSecurePrefs();
+        JSObject ret = new JSObject();
+        ret.put("port", normalPrefs.getInt(KEY_PORT, 1080));
+        ret.put("autoPort", normalPrefs.getBoolean(KEY_AUTO_PORT, true));
+        ret.put("username", securePrefs.getString(KEY_USER, ""));
+        ret.put("password", securePrefs.getString(KEY_PASS, ""));
+        call.resolve(ret);
+    }
+
+    private void saveSettings(PluginCall call) {
+        Integer port = call.getInt("port");
+        Boolean autoPort = call.getBoolean("autoPort");
+        String user = call.getString("username");
+        String pass = call.getString("password");
+        SharedPreferences.Editor normalEditor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        if (port != null) normalEditor.putInt(KEY_PORT, port);
+        if (autoPort != null) normalEditor.putBoolean(KEY_AUTO_PORT, autoPort);
+        normalEditor.apply();
+        if (user != null || pass != null) {
+            SharedPreferences.Editor secureEditor = getSecurePrefs().edit();
+            if (user != null) secureEditor.putString(KEY_USER, user);
+            if (pass != null) secureEditor.putString(KEY_PASS, pass);
+            secureEditor.apply();
+        }
     }
 }
