@@ -2463,6 +2463,111 @@ class WebDashboard:
 
             return jsonify({'dc_stats': formatted})
 
+        @self.app.route('/api/optimizer/stats')
+        def api_optimizer_stats() -> Response:
+            """Get performance optimizer statistics."""
+            try:
+                from .optimizer import get_optimizer
+                optimizer = get_optimizer()
+                stats = optimizer.get_statistics()
+                return jsonify(stats)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/optimizer/config', methods=['POST'])
+        def api_optimizer_config() -> Response:
+            """Update optimizer configuration."""
+            try:
+                from .optimizer import (
+                    OptimizationLevel,
+                    get_optimizer,
+                )
+                data = request.get_json()
+                if not data:
+                    return jsonify({'error': 'Invalid JSON'}), 400
+
+                optimizer = get_optimizer()
+
+                # Update config
+                if 'level' in data:
+                    level_map = {
+                        'MINIMAL': OptimizationLevel.MINIMAL,
+                        'BALANCED': OptimizationLevel.BALANCED,
+                        'AGGRESSIVE': OptimizationLevel.AGGRESSIVE,
+                    }
+                    optimizer.config.level = level_map.get(data['level'], OptimizationLevel.BALANCED)
+
+                if 'enable_auto_scaling' in data:
+                    optimizer.config.enable_auto_scaling = data['enable_auto_scaling']
+
+                if 'enable_memory_optimization' in data:
+                    optimizer.config.enable_memory_optimization = data['enable_memory_optimization']
+
+                return jsonify({'status': 'success', 'config': optimizer.get_statistics()})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/plugins/stats')
+        def api_plugins_stats() -> Response:
+            """Get plugin statistics."""
+            try:
+                from .plugins import get_plugin_manager
+                pm = get_plugin_manager()
+                stats = pm.get_statistics()
+                return jsonify(stats)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/plugins/list')
+        def api_plugins_list() -> Response:
+            """List loaded plugins."""
+            try:
+                from .plugins import get_plugin_manager
+                pm = get_plugin_manager()
+                plugins = pm.list_plugins()
+                return jsonify({'plugins': plugins})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/traffic-history')
+        def api_traffic_history() -> Response:
+            """Get traffic history for charts."""
+            try:
+                stats = self.get_stats()
+                traffic_history = stats.get('traffic_history', [])
+
+                # Format for Chart.js
+                labels = []
+                upload_data = []
+                download_data = []
+
+                for entry in traffic_history[-50:]:  # Last 50 entries
+                    labels.append(entry.get('time', ''))
+                    upload_data.append(entry.get('bytes_up', 0))
+                    download_data.append(entry.get('bytes_down', 0))
+
+                return jsonify({
+                    'labels': labels,
+                    'upload': upload_data,
+                    'download': download_data,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/performance-history')
+        def api_performance_history() -> Response:
+            """Get performance history for charts."""
+            try:
+                stats = self.get_stats()
+
+                return jsonify({
+                    'cpu_history': stats.get('cpu_history', []),
+                    'memory_history': stats.get('memory_history', []),
+                    'latency_history': stats.get('latency_history', {}),
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
         @self.app.route('/manifest.json')
         def manifest() -> Response:
             """Serve PWA manifest."""
