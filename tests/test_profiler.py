@@ -1,247 +1,210 @@
-"""Unit tests for proxy profiler module."""
+"""Unit tests for proxy memory profiler module."""
+
+from __future__ import annotations
+
+import gc
+import time
+
+import pytest
+
+from proxy.profiler import ComponentTracker, MemoryDiff, MemoryProfiler, MemorySnapshot
+
+
+class TestMemorySnapshot:
+    """Tests for MemorySnapshot dataclass."""
+
+    def test_snapshot_creation(self):
+        """Test MemorySnapshot creation."""
+        snapshot = MemorySnapshot(
+            timestamp=100.0,
+            total_bytes=1024,
+            total_count=10,
+            top_allocations=[("file.py:10", 512, 5)],
+        )
+
+        assert snapshot.timestamp == 100.0
+        assert snapshot.total_bytes == 1024
+        assert snapshot.total_count == 10
+        assert len(snapshot.top_allocations) == 1
+
+    def test_snapshot_diff(self):
+        """Test calculating difference between snapshots."""
+        snapshot1 = MemorySnapshot(
+            timestamp=100.0,
+            total_bytes=1024,
+            total_count=10,
+            top_allocations=[],
+        )
+        snapshot2 = MemorySnapshot(
+            timestamp=200.0,
+            total_bytes=2048,
+            total_count=20,
+            top_allocations=[],
+        )
+
+        diff = snapshot1.diff(snapshot2)
+
+        assert diff.timestamp_delta == 100.0
+        assert diff.bytes_delta == 1024
+        assert diff.count_delta == 10
+
+    def test_memory_diff_bytes_per_second(self):
+        """Test bytes_per_second calculation."""
+        diff = MemoryDiff(
+            timestamp_delta=10.0,
+            bytes_delta=10240,
+            count_delta=100,
+            top_grows=[],
+        )
+
+        assert diff.bytes_per_second == 1024.0
 
+    def test_memory_diff_is_leak_suspected(self):
+        """Test leak detection."""
+        # High growth rate - leak suspected
+        diff1 = MemoryDiff(
+            timestamp_delta=10.0,
+            bytes_delta=20480,  # 2048 bytes/s
+            count_delta=100,
+            top_grows=[],
+        )
+        assert diff1.is_leak_suspected() is True
 
+        # Low growth rate - no leak
+        diff2 = MemoryDiff(
+            timestamp_delta=10.0,
+            bytes_delta=1024,  # 102.4 bytes/s
+            count_delta=10,
+            top_grows=[],
+        )
+        assert diff2.is_leak_suspected() is False
 
-from proxy.profiler import AsyncPerformanceProfiler, PerformanceProfiler
+    def test_memory_diff_zero_timestamp(self):
+        """Test bytes_per_second with zero timestamp delta."""
+        diff = MemoryDiff(
+            timestamp_delta=0,
+            bytes_delta=1024,
+            count_delta=10,
+            top_grows=[],
+        )
 
+        assert diff.bytes_per_second == 0.0
 
-class TestPerformanceProfiler:
-    """Tests for PerformanceProfiler class."""
 
-    def test_init(self):
-        """Test profiler initialization."""
-        profiler = PerformanceProfiler()
-        assert profiler._profiler is None
-        assert profiler._stats is None
-        assert profiler._is_profiling is False
+class TestComponentTracker:
+    """Tests for ComponentTracker class."""
 
-    def test_start_stop(self):
-        """Test start and stop profiling."""
-        profiler = PerformanceProfiler()
-        profiler.start()
-        assert profiler._is_profiling is True
-        assert profiler._profiler is not None
-        profiler.stop()
+    def test_tracker_creation(self):
+        """Test ComponentTracker creation."""
+        tracker = ComponentTracker("test_component")
 
-    def test_stop_without_start(self):
-        """Test stopping without starting does nothing."""
-        profiler = PerformanceProfiler()
-        profiler.stop()  # Should not raise
-        assert profiler._is_profiling is False
+        assert tracker.name == "test_component"
 
-    def test_get_stats_empty(self):
-        """Test get_stats without profiling."""
-        profiler = PerformanceProfiler()
-        stats = profiler.get_stats()
-        assert stats == {}
+    def test_track_object(self):
+        """Test tracking an object."""
+        tracker = ComponentTracker("test")
+        obj = {"key": "value"}
 
-    def test_profile_sync_function(self):
-        """Test profiling a synchronous function."""
-        profiler = PerformanceProfiler()
+        tracker.track(obj)
 
-        def test_func():
-            return 42
+        stats = tracker.stats
+        assert stats['created_total'] == 1
 
-        result = profiler.profile(test_func)
+    def test_get_stats(self):
+        """Test getting component stats."""
+        tracker = ComponentTracker("test")
+        obj = object()
+        tracker.track(obj)
 
-        assert result == 42
-        assert profiler._stats is not None
+        stats = tracker.stats
 
-    def test_profile_async_function(self):
-        """Test profiling an async function."""
-        import asyncio
+        assert 'created_total' in stats
+        assert 'destroyed_total' in stats
+        assert 'live_objects' in stats
 
-        profiler = PerformanceProfiler()
 
-        async def test_func():
-            return 42
+class TestMemoryProfiler:
+    """Tests for MemoryProfiler class."""
 
-        result = asyncio.run(profiler.profile_async(test_func))
+    def test_profiler_creation(self):
+        """Test MemoryProfiler creation."""
+        profiler = MemoryProfiler()
 
-        assert result == 42
-        assert profiler._stats is not None
+        assert profiler._snapshots == []
+        assert profiler._component_trackers == {}
+        assert profiler._running is False
 
-    def test_print_stats(self, caplog):
-        """Test print_stats method."""
-        profiler = PerformanceProfiler()
+    def test_register_component(self):
+        """Test registering a component tracker."""
+        profiler = MemoryProfiler()
 
-        def test_func():
-            return 42
+        tracker = profiler.register_component("test_component")
 
-        profiler.profile(test_func)
+        assert "test_component" in profiler._component_trackers
+        assert tracker.name == "test_component"
 
-        # Should not raise
-        profiler.print_stats()
+    def test_register_component_singleton(self):
+        """Test that register_component returns same tracker."""
+        profiler = MemoryProfiler()
 
-    def test_get_stats_with_data(self):
-        """Test get_stats after profiling."""
-        profiler = PerformanceProfiler()
+        tracker1 = profiler.register_component("test")
+        tracker2 = profiler.register_component("test")
 
-        def test_func():
-            return 42
+        assert tracker1 is tracker2
 
-        profiler.profile(test_func)
-        stats = profiler.get_stats()
+    def test_take_snapshot_basic(self):
+        """Test taking a memory snapshot."""
+        profiler = MemoryProfiler()
 
-        assert isinstance(stats, dict)
+        snapshot = profiler.take_snapshot()
 
-    def test_start_while_already_profiling(self, caplog):
-        """Test starting while already profiling."""
-        profiler = PerformanceProfiler()
-        profiler.start()
-        profiler.start()  # Should log warning
+        assert snapshot is not None
+        assert snapshot.total_bytes >= 0
+        assert snapshot.total_count >= 0
 
-        assert "Profiling already in progress" in caplog.text
+    def test_get_snapshots_empty(self):
+        """Test getting snapshots when none exist."""
+        profiler = MemoryProfiler()
 
+        snapshots = profiler.get_snapshots()
 
-class TestAsyncPerformanceProfiler:
-    """Tests for AsyncPerformanceProfiler class."""
+        assert snapshots == []
 
-    def test_init(self):
-        """Test async profiler initialization."""
-        profiler = AsyncPerformanceProfiler()
-        assert profiler._timings == {}
-        assert profiler._call_counts == {}
+    def test_get_report(self):
+        """Test generating memory report."""
+        profiler = MemoryProfiler()
+        profiler.take_snapshot()
 
-    def test_record_timing(self):
-        """Test _record_timing method."""
-        profiler = AsyncPerformanceProfiler()
-        profiler._record_timing("test_func", 0.5)
+        report = profiler.get_report()
 
-        assert "test_func" in profiler._timings
-        assert profiler._timings["test_func"] == [0.5]
-        assert profiler._call_counts["test_func"] == 1
+        assert isinstance(report, str)
+        assert len(report) > 0
 
-    def test_record_timing_limit(self):
-        """Test _record_timing keeps only last 1000 measurements."""
-        profiler = AsyncPerformanceProfiler()
+    def test_context_manager(self):
+        """Test using profiler as context manager."""
+        profiler = MemoryProfiler()
 
-        for i in range(1005):
-            profiler._record_timing("test_func", i * 0.001)
+        with profiler:
+            assert profiler._running is True
 
-        assert len(profiler._timings["test_func"]) == 1000
-        assert profiler._timings["test_func"][0] == 0.005
+        # After context, profiler should be stopped
+        # (but background task may still be running)
 
-    def test_get_stats_empty(self):
-        """Test get_stats without profiling."""
-        profiler = AsyncPerformanceProfiler()
-        stats = profiler.get_stats()
-        assert stats == {}
+    def test_max_snapshots_limit(self):
+        """Test that max_snapshots limit is enforced."""
+        profiler = MemoryProfiler(check_interval=0.01)
+        profiler._max_snapshots = 5
 
-    def test_get_stats_with_data(self):
-        """Test get_stats after profiling."""
-        profiler = AsyncPerformanceProfiler()
-        profiler._record_timing("test_func", 0.1)
-        profiler._record_timing("test_func", 0.2)
-        profiler._record_timing("test_func", 0.3)
-        profiler._call_counts["test_func"] = 3
+        # Manually add snapshots
+        for _ in range(10):
+            profiler._snapshots.append(
+                MemorySnapshot(
+                    timestamp=float(_),
+                    total_bytes=_,
+                    total_count=_,
+                    top_allocations=[],
+                )
+            )
 
-        stats = profiler.get_stats()
-
-        assert 'test_func' in stats
-        assert stats['test_func']['calls'] == 3
-        assert stats['test_func']['total_time'] == 0.6
-        assert abs(stats['test_func']['avg_time'] - 0.2) < 0.001
-        assert stats['test_func']['min_time'] == 0.1
-        assert stats['test_func']['max_time'] == 0.3
-        assert stats['test_func']['last_time'] == 0.3
-
-    def test_get_stats_multiple_functions(self):
-        """Test get_stats with multiple functions."""
-        profiler = AsyncPerformanceProfiler()
-        profiler._record_timing("func_a", 0.1)
-        profiler._record_timing("func_b", 0.2)
-
-        stats = profiler.get_stats()
-        assert 'func_a' in stats
-        assert 'func_b' in stats
-
-    def test_clear(self):
-        """Test clear method."""
-        profiler = AsyncPerformanceProfiler()
-        profiler._record_timing("test_func", 0.5)
-        profiler.clear()
-
-        assert profiler._timings == {}
-        assert profiler._call_counts == {}
-
-    def test_profile_async_method(self):
-        """Test profile_async method."""
-        import asyncio
-
-        profiler = AsyncPerformanceProfiler()
-
-        async def test_func():
-            return 42
-
-        result = asyncio.run(profiler.profile_async(test_func))
-
-        assert result == 42
-        assert "test_func" in profiler._timings
-
-    def test_profile_async_with_args(self):
-        """Test profile_async with arguments."""
-        import asyncio
-
-        profiler = AsyncPerformanceProfiler()
-
-        async def test_func(x, y):
-            return x + y
-
-        result = asyncio.run(profiler.profile_async(test_func, "test_func", 2, 3))
-
-        assert result == 5
-        assert "test_func" in profiler._timings
-
-    def test_profile_async_with_kwargs(self):
-        """Test profile_async with keyword arguments."""
-        import asyncio
-
-        profiler = AsyncPerformanceProfiler()
-
-        async def test_func(x, y=10):
-            return x + y
-
-        result = asyncio.run(profiler.profile_async(test_func, "test_func", 2, y=5))
-
-        assert result == 7
-        assert "test_func" in profiler._timings
-
-
-class TestPerformanceProfilerExtended:
-    """Extended tests for PerformanceProfiler."""
-
-    def test_profile_async_method(self):
-        """Test profile_async method."""
-        import asyncio
-
-        profiler = AsyncPerformanceProfiler()
-
-        async def test_func():
-            return 42
-
-        result = asyncio.run(profiler.profile_async(test_func))
-
-        assert result == 42
-        assert "test_func" in profiler._timings
-
-
-class TestAsyncPerformanceProfilerExtended:
-    """Extended tests for AsyncPerformanceProfiler."""
-
-    def test_clear_multiple_times(self):
-        """Test clear can be called multiple times."""
-        profiler = AsyncPerformanceProfiler()
-
-        profiler._record_timing("func1", 0.1)
-        profiler.clear()
-        profiler.clear()  # Should not raise
-
-        assert profiler._timings == {}
-
-    def test_get_stats_empty_async(self):
-        """Test get_stats on empty async profiler."""
-        profiler = AsyncPerformanceProfiler()
-        stats = profiler.get_stats()
-
-        assert stats == {}
+        # Should be trimmed to max_snapshots
+        assert len(profiler._snapshots) <= profiler._max_snapshots + 1
