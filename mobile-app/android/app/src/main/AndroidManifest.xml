@@ -15,45 +15,19 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
         </intent>
-        <intent>
-            <component android:name="com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.letv.android.letvsafe/com.letv.android.letvsafe.AutobootManageActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.huawei.systemmanager/com.huawei.systemmanager.optimize.process.ProtectActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.huawei.systemmanager/com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.coloros.safecenter/com.coloros.safecenter.permission.startup.StartupAppListActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.coloros.safecenter/com.coloros.safecenter.startupapp.StartupAppListActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.oppo.safe/com.oppo.safe.permission.startup.StartupAppListActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.BgStartUpManager" />
-        </intent>
-        <intent>
-            <component android:name="com.vivo.permissionmanager/com.vivo.permissionmanager.activity.BgStartUpManagerActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.htc.pitroad/com.htc.pitroad.landingpage.activity.LandingPageActivity" />
-        </intent>
-        <intent>
-            <component android:name="com.asus.mobilemanager/com.asus.mobilemanager.autostart.AutoStartActivity" />
-        </intent>
+        <intent><component android:name="com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity" /></intent>
+        <intent><component android:name="com.letv.android.letvsafe/com.letv.android.letvsafe.AutobootManageActivity" /></intent>
+        <intent><component android:name="com.huawei.systemmanager/com.huawei.systemmanager.optimize.process.ProtectActivity" /></intent>
+        <intent><component android:name="com.huawei.systemmanager/com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity" /></intent>
+        <intent><component android:name="com.coloros.safecenter/com.coloros.safecenter.permission.startup.StartupAppListActivity" /></intent>
+        <intent><component android:name="com.coloros.safecenter/com.coloros.safecenter.startupapp.StartupAppListActivity" /></intent>
+        <intent><component android:name="com.oppo.safe/com.oppo.safe.permission.startup.StartupAppListActivity" /></intent>
+        <intent><component android:name="com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity" /></intent>
+        <intent><component android:name="com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.BgStartUpManager" /></intent>
+        <intent><component android:name="com.vivo.permissionmanager/com.vivo.permissionmanager.activity.BgStartUpManagerActivity" /></intent>
+        <intent><component android:name="com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity" /></intent>
+        <intent><component android:name="com.htc.pitroad/com.htc.pitroad.landingpage.activity.LandingPageActivity" /></intent>
+        <intent><component android:name="com.asus.mobilemanager/com.asus.mobilemanager.autostart.AutoStartActivity" /></intent>
     </queries>
 
     <application
@@ -79,6 +53,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Automation Intent Filter (Task 7) -->
+            <intent-filter>
+                <action android:name="com.dupley.tgwssproxy.ACTION_START_PROXY" />
+                <action android:name="com.dupley.tgwssproxy.ACTION_STOP_PROXY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
             <meta-data android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
 
@@ -87,8 +68,12 @@
         <service
             android:name=".ProxyForegroundService"
             android:enabled="true"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="com.dupley.tgwssproxy.START" />
+                <action android:name="com.dupley.tgwssproxy.STOP" />
+            </intent-filter>
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Ensures stable Telegram connection via WebSocket tunnel."/>
         </service>
