@@ -154,7 +154,7 @@
 ## 📊 Статус
 
 ```
-Tests: 463 passed, 7 skipped, 9 errors
+Tests: 472 passed, 7 skipped, 0 errors
 Coverage: ~35% (цель >80%)
 Ruff: 0 ошибок
 Mypy: missing stubs (внешние зависимости)
@@ -167,6 +167,7 @@ Mypy: missing stubs (внешние зависимости)
 - `alerts.py` — 40%
 - `logger.py` — 9 тестов (Windows PermissionError)
 - `diagnostics_advanced.py` — новый модуль, требует тестов
+- `autotune.py` — новый модуль, требует тестов
 
 **Отличное покрытие:**
 - `optimizer.py` — 100% (17 тестов) ✅
