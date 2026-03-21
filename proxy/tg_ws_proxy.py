@@ -427,6 +427,11 @@ class ProxyServer:
         # WebSocket connection pool (lazy initialized)
         self._ws_pool: _WsPool | None = None
 
+        # Background tasks for graceful shutdown
+        self._log_stats_task: asyncio.Task | None = None
+        self._dc_monitor_task: asyncio.Task | None = None
+        self._optimize_pool_task: asyncio.Task | None = None
+
         # Server instance for graceful shutdown
         self._server_instance: asyncio.Server | None = None
         self._server_stop_event: asyncio.Event | None = None
@@ -2244,7 +2249,7 @@ async def _run(
                 for d, m in sorted(server_instance.ws_blacklist)) or 'none'
             log.info("stats: %s | ws_bl: %s", server_instance.stats.summary(), bl)
 
-    asyncio.create_task(log_stats())
+    server_instance._log_stats_task = asyncio.create_task(log_stats())
 
     # Background task for periodic DC ping monitoring with auto-switch
     _last_latency_alert: dict[int, float] = {}  # dc_id -> last alert time
@@ -2322,7 +2327,7 @@ async def _run(
                     best_dc, best_latency,
                     f"DC{_current_best_dc}" if _current_best_dc else "none")
 
-    asyncio.create_task(monitor_dc_latency())
+    server_instance._dc_monitor_task = asyncio.create_task(monitor_dc_latency())
 
     # Background task for dynamic pool optimization
     async def optimize_pool() -> None:
@@ -2334,7 +2339,7 @@ async def _run(
             except Exception as e:
                 log.debug("Pool optimization error: %s", e)
 
-    asyncio.create_task(optimize_pool())
+    server_instance._optimize_pool_task = asyncio.create_task(optimize_pool())
 
     # Background task for DNS cache cleanup
     async def cleanup_dns_cache() -> None:
@@ -2383,14 +2388,52 @@ async def _run(
             log.info("Server socket closed")
 
             # Close all idle WebSocket connections in pool
+            ws_count = 0
             for key, bucket in server_instance.ws_pool._idle.items():
                 dc, is_media = key
                 for ws, _ in bucket:
                     try:
                         await ws.close()
+                        ws_count += 1
                     except Exception:
                         pass
-            log.info("WebSocket pool closed")
+            log.info("WebSocket pool closed (%d connections)", ws_count)
+
+            # Stop DC latency monitor
+            if hasattr(server_instance, '_dc_monitor_task') and server_instance._dc_monitor_task:
+                server_instance._dc_monitor_task.cancel()
+                try:
+                    await server_instance._dc_monitor_task
+                except asyncio.CancelledError:
+                    pass
+                log.info("DC monitor stopped")
+
+            # Stop log stats task
+            if hasattr(server_instance, '_log_stats_task') and server_instance._log_stats_task:
+                server_instance._log_stats_task.cancel()
+                try:
+                    await server_instance._log_stats_task
+                except asyncio.CancelledError:
+                    pass
+                log.info("Log stats stopped")
+
+            # Stop pool optimization task
+            if hasattr(server_instance, '_optimize_pool_task') and server_instance._optimize_pool_task:
+                server_instance._optimize_pool_task.cancel()
+                try:
+                    await server_instance._optimize_pool_task
+                except asyncio.CancelledError:
+                    pass
+                log.info("Pool optimization stopped")
+
+            # Stop health checker
+            if hasattr(server_instance.ws_pool, '_health_check_task') and server_instance.ws_pool._health_check_task:
+                server_instance.ws_pool._health_check_task.cancel()
+                try:
+                    await server_instance.ws_pool._health_check_task
+                except asyncio.CancelledError:
+                    pass
+                log.info("Health checker stopped")
 
             log.info("Graceful shutdown completed")
 
