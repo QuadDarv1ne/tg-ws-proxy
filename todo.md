@@ -6,12 +6,15 @@
 
 ---
 
-## ✅ Выполнено (v2.10.0 — v2.35.0)
+## ✅ Выполнено (v2.37.0)
 
-### Сборка и Тесты
-- ✅ Android APK сборка (Java 21 LTS, AGP 9.1.0)
-- ✅ Исправлен `Windows PermissionError` в `tests/test_logger.py`
-- ✅ `logger.py` — 100% покрытие ✅
+### Performance & Stability
+- ✅ Zero-copy буферизация WebSocket
+- ✅ Batch отправка WebSocket фреймов
+- ✅ Исправлена обработка ошибок WebSocket (_read_frame, recv)
+- ✅ Timeout на чтение фреймов (30s)
+- ✅ Обработка IncompleteReadError и TimeoutError
+- ✅ Улучшен health check — подсчёт failed connections
 
 ### Ядро и Сеть (Stability Phase)
 - ✅ `test_tg_ws_proxy_logic.py` — тесты парсинга пакетов ✅
