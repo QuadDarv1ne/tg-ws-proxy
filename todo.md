@@ -6,7 +6,7 @@
 
 ---
 
-## ✅ Выполнено (v2.10.0 — v2.20.0)
+## ✅ Выполнено (v2.10.0 — v2.21.0)
 
 ### Сборка и релиз
 - ✅ Android APK сборка (Java 21 LTS)
@@ -29,9 +29,11 @@
 - ✅ Python 3.14 совместимость (tray.py asyncio.run)
 
 ### Тесты
-- ✅ Tests: 255 passed, 3 skipped
+- ✅ Tests: 438 passed, 7 skipped (было 255 passed)
 - ✅ Добавлены тесты для i18n, updater, whitelist
 - ✅ Покрытие web_dashboard.py: 61% → 74%
+- ✅ Исправлены тесты config_backup (Windows permissions)
+- ✅ Создана fixtures для Windows (tmp_path_safe)
 
 ### Документация
 - ✅ Очистка документации от дублирования
@@ -42,7 +44,7 @@
 
 ---
 
-## 🔴 Высокий приоритет (v2.20.0)
+## 🔴 Высокий приоритет (v2.21.0)
 
 ### Тесты и покрытие
 - [ ] Покрытие tg_ws_proxy.py: 13% → 60%
@@ -56,6 +58,8 @@
 - [ ] mtproto_proxy.py: 49% → 80%
 - [ ] dashboard.py: 57% → 80%
 - [ ] alerts.py: 40% → 80%
+- [ ] rate_limiter.py: 0% → 80%
+- [ ] crypto.py: 25% → 80%
 
 ### Производительность
 - [ ] HTTP/2 для WebSocket
@@ -64,7 +68,7 @@
 
 ---
 
-## 🟢 Низкий приоритет (v2.21.0)
+## 🟢 Низкий приоритет (v2.22.0)
 
 ### Документация (без запроса не менять)
 - [ ] Скриншоты интерфейса в README
@@ -84,8 +88,8 @@
 ## 📊 Статус
 
 ```
-Tests: 255 passed, 3 skipped, 1 failed (test_tcp_connect_timeout)
-Coverage: 35% (цель >80%)
+Tests: 438 passed, 7 skipped, 0 errors
+Coverage: ~35% (цель >80%)
 Ruff: 0 ошибок
 Mypy: missing stubs (внешние зависимости)
 ```

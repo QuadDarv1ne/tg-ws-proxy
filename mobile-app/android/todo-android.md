@@ -19,3 +19,5 @@
 - [x] **Package Visibility**: Добавить `<queries>` в Manifest для корректной работы `AutoStartHelper` на Android 11+.
 - [x] **Улучшение ProxyPlugin**: Добавлен метод для открытия конфигурации в Telegram.
 - [x] **Release Ready**: Настроены ProGuard/R8 правила для Chaquopy и нативных мостов.
+- [ ] **Log Sharing**: Добавить возможность делиться логами через стандартное меню Android.
+- [ ] **Status API Upgrade**: Улучшить передачу состояния сервиса в веб-слой для более точного UI.
