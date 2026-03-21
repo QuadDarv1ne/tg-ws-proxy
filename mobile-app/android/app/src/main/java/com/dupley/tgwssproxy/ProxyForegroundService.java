@@ -34,6 +34,7 @@ public class ProxyForegroundService extends Service {
     private Handler statsHandler = new Handler(Looper.getMainLooper());
     private Runnable statsRunnable;
     private PowerManager.WakeLock wakeLock;
+    private Thread proxyThread;
 
     @Override
     public void onCreate() {
@@ -81,9 +82,9 @@ public class ProxyForegroundService extends Service {
     }
 
     private void startProxy() {
-        if (isPythonRunning) return;
+        if (isPythonRunning && proxyThread != null && proxyThread.isAlive()) return;
         
-        new Thread(() -> {
+        proxyThread = new Thread(() -> {
             try {
                 SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 int savedPort = prefs.getInt(KEY_PORT, 1080);
@@ -100,18 +101,31 @@ public class ProxyForegroundService extends Service {
                 }
 
                 isPythonRunning = true;
-                ProxyPlugin.onStatusChanged(true); // Уведомляем UI
+                ProxyPlugin.onStatusChanged(true);
                 Log.i(TAG, "Python Proxy started on port: " + actualPort);
+                
+                // Watchdog: ждем завершения потока
+                // В данной архитектуре поток Python живет пока работает asyncio loop.
+                // Если он завершится, нам нужно обновить статус.
             } catch (Exception e) {
                 Log.e(TAG, "Error starting Python Proxy: " + e.getMessage());
+                isPythonRunning = false;
+                ProxyPlugin.onStatusChanged(false);
             }
-        }).start();
+        });
+        proxyThread.start();
     }
 
     private void startStatsUpdateLoop() {
         statsRunnable = new Runnable() {
             @Override
             public void run() {
+                // Проверяем живой ли поток Python
+                if (isPythonRunning && (proxyThread == null || !proxyThread.isAlive())) {
+                    Log.w(TAG, "Watchdog: Python thread died, restarting...");
+                    startProxy();
+                }
+                
                 if (isPythonRunning) {
                     updateNotificationWithStats();
                 }
@@ -182,7 +196,7 @@ public class ProxyForegroundService extends Service {
             PyObject proxyModule = py.getModule("android_entry");
             proxyModule.callAttr("stop_proxy");
             isPythonRunning = false;
-            ProxyPlugin.onStatusChanged(false); // Уведомляем UI
+            ProxyPlugin.onStatusChanged(false);
         } catch (Exception e) {
             Log.e(TAG, "Error stopping Python Proxy: " + e.getMessage());
         }
