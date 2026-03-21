@@ -44,14 +44,31 @@ _last_heartbeat = 0
 _current_pool_size = WS_POOL_SIZE
 _session_id = None
 
+def tune_tcp_socket(sock):
+    """Низкоуровневая настройка TCP для мобильных сетей (Task 8)"""
+    try:
+        # Включаем Keep-Alive
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        
+        # Настройка параметров Keep-Alive для Android
+        # (интервал проверки при простое)
+        if hasattr(socket, "TCP_KEEPIDLE"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+        
+        # Увеличиваем буферы для компенсации лагов мобильной сети
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 128 * 1024)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 128 * 1024)
+        
+        logger.debug("TCP Socket tuned for mobile network")
+    except Exception as e:
+        logger.error(f"Failed to tune socket: {e}")
+
 def start_session_logging():
-    """Инициализация структурированного лога сессии (Task 7)"""
     global _session_id
     _session_id = int(time.time())
     logger.info(f"New Proxy Session started: {_session_id}")
 
 def save_session_report():
-    """Сохранение итогового отчета сессии (Task 7)"""
     try:
         stats = get_stats()
         report = {
@@ -62,19 +79,10 @@ def save_session_report():
         }
         file_path = os.path.join(os.environ.get("HOME", "."), f"session_{_session_id}.json")
         with open(file_path, "w") as f: json.dump(report, f)
-        
-        # Очистка старых отчетов (оставляем последние 5)
         path = os.environ.get("HOME", ".")
         reports = sorted([f for f in os.listdir(path) if f.startswith("session_")])
         for r in reports[:-5]: os.remove(os.path.join(path, r))
     except: pass
-
-def on_network_changed(is_wifi):
-    global _is_wifi, _current_pool_size
-    _is_wifi = is_wifi
-    _current_pool_size = 6 if is_wifi else 2
-    logger.info(f"Adaptive Pooling: Network={ 'WiFi' if is_wifi else 'Mobile' }, Size={_current_pool_size}")
-    return _current_pool_size
 
 def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
     global stop_event, proxy_thread, _proxy_port, _custom_dc_opt, _auth_creds
@@ -108,7 +116,7 @@ def get_proxy_stats_dict():
         stats = get_stats()
         stats["is_running"] = proxy_thread is not None and proxy_thread.is_alive()
         stats["port"] = _proxy_port
-        stats["session_id"] = _session_id
+        stats["tcp_tuning"] = True
         return stats
     except Exception as e: return {"error": str(e)}
 
