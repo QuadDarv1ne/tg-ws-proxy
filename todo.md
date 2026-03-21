@@ -27,15 +27,16 @@
 - ✅ Mypy: missing stubs (внешние зависимости)
 - ✅ Новые модули: `proxy/i18n.py`, `proxy/updater.py`
 - ✅ Python 3.14 совместимость (tray.py asyncio.run)
+- ✅ diagnostics_advanced.py — расширенная диагностика
 
 ### Тесты
-- ✅ Tests: 463 passed, 7 skipped (было 255 passed)
+- ✅ Tests: 451 passed, 7 skipped, 12 failed (было 255 passed)
 - ✅ Добавлены тесты для i18n, updater, whitelist
 - ✅ Покрытие web_dashboard.py: 61% → 74%
 - ✅ Исправлены тесты config_backup (Windows permissions)
 - ✅ Создана fixtures для Windows (tmp_path_safe)
 - ✅ Добавлены тесты для rate_limiter.py (14 тестов)
-- ✅ Исправлены все ruff ошибки (I001, F401, W293)
+- ✅ Исправлены все ruff ошибки (I001, F401, W293, B007)
 - ✅ Ruff: 0 ошибок во всех файлах
 
 ### Документация
@@ -111,7 +112,7 @@
 
 ---
 
-## 🟢 Низкий приоритет (v2.33.0)
+## 🟢 Низкий приоритет (v2.34.0)
 
 ### Документация (без запроса не менять)
 - [ ] Скриншоты интерфейса в README
@@ -128,6 +129,10 @@
 - [ ] Улучшения стабильности сервиса
 - [ ] Оптимизация батареи
 - [ ] Quick Settings Tile
+
+### Производительность
+- [ ] optimizer.py — авто-оптимизация (pool size, memory, DC selection)
+- [ ] connection_cache.py — LRU кэш соединений
 
 ---
 
