@@ -402,7 +402,8 @@ def _load_icon(status: str | None = None) -> Image.Image | None:
 def _show_error(text: str, title: str = "TG WS Proxy — Ошибка") -> None:
     """Show error dialog."""
     if IS_WINDOWS:
-        ctypes.windll.user32.MessageBoxW(0, text, title, 0x10)
+        # MB_SYSTEMMODAL (0x1000) ensures the dialog is properly modal and responsive
+        ctypes.windll.user32.MessageBoxW(0, text, title, 0x1010)  # MB_ICONERROR | MB_SYSTEMMODAL
     elif HAS_GUI:
         _show_dialog(text, title, "error")
     else:
@@ -412,7 +413,8 @@ def _show_error(text: str, title: str = "TG WS Proxy — Ошибка") -> None:
 def _show_info(text: str, title: str = "TG WS Proxy") -> None:
     """Show info dialog."""
     if IS_WINDOWS:
-        ctypes.windll.user32.MessageBoxW(0, text, title, 0x40)
+        # MB_SYSTEMMODAL (0x1000) ensures the dialog is properly modal and responsive
+        ctypes.windll.user32.MessageBoxW(0, text, title, 0x1040)  # MB_ICONINFORMATION | MB_SYSTEMMODAL
     elif HAS_GUI:
         _show_dialog(text, title, "info")
     else:
@@ -430,8 +432,8 @@ def _show_notification(text: str, title: str = "TG WS Proxy") -> None:
             toaster = ToastNotifier()
             toaster.show_toast(title, text, duration=5, icon_path=None)
         except ImportError:
-            # Fallback to simple messagebox
-            ctypes.windll.user32.MessageBoxW(0, text, title, 0x40)
+            # Fallback to simple messagebox (MB_ICONINFORMATION | MB_SYSTEMMODAL)
+            ctypes.windll.user32.MessageBoxW(0, text, title, 0x1040)
     elif HAS_GUI:
         # For Linux/macOS - use system notifications if available
         try:
@@ -696,12 +698,13 @@ def _on_toggle_autostart(icon=None, item=None) -> None:
     is_enabled = _is_autostart_enabled()
 
     if IS_WINDOWS:
+        # MB_YESNO (0x4) | MB_ICONQUESTION (0x20) | MB_SYSTEMMODAL (0x1000) = 0x1024
         result = ctypes.windll.user32.MessageBoxW(
             0,
             f"Автозапуск сейчас {'включен' if is_enabled else 'выключен'}.\n\n"
             f"{'Отключить' if is_enabled else 'Включить'} автозапуск?",
             "TG WS Proxy — Автозапуск",
-            0x34)
+            0x1024)
         if result == 6:
             _set_autostart(not is_enabled)
             _show_info(
@@ -1615,8 +1618,9 @@ def _show_update_notification(latest_version: str, release_url: str) -> None:
     )
 
     if IS_WINDOWS:
+        # MB_YESNO (0x4) | MB_ICONINFORMATION (0x40) | MB_SYSTEMMODAL (0x1000) = 0x1044
         result = ctypes.windll.user32.MessageBoxW(
-            0, msg, "TG WS Proxy — Обновление", 0x34)  # MB_YESNO | MB_ICONINFORMATION
+            0, msg, "TG WS Proxy — Обновление", 0x1044)
         if result == 6:  # IDYES
             webbrowser.open(release_url)
     elif HAS_GUI:
