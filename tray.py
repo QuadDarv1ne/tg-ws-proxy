@@ -1876,11 +1876,12 @@ def run_tray() -> None:
 
     # Create tray icon first
     icon_image = _load_icon()
+    menu_items = _build_menu()
     _tray_icon = pystray.Icon(
         APP_NAME,
         icon_image,
         "TG WS Proxy",
-        menu=pystray.Menu(_build_menu))
+        menu=menu_items.items if hasattr(menu_items, 'items') else menu_items)
 
     log.info("Tray icon running")
 
