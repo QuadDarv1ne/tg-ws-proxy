@@ -13,6 +13,13 @@ from datetime import date
 from proxy.constants import DC_IP_MAP
 from proxy.tg_ws_proxy import _run, get_stats, get_stats_summary, _measure_dc_ping, _clear_dns_cache
 
+# Провайдеры DoH (Task 2)
+DOH_PROVIDERS = {
+    "google": "https://dns.google/resolve",
+    "cloudflare": "https://cloudflare-dns.com/dns-query",
+    "quad9": "https://dns.quad9.net/dns-query"
+}
+
 log_stream = io.StringIO()
 log_handler = logging.StreamHandler(log_stream)
 log_handler.setFormatter(logging.Formatter('%(asctime)s: %(message)s', datefmt='%H:%M:%S'))
@@ -29,8 +36,8 @@ proxy_thread = None
 _proxy_port = 1080
 _custom_dc_opt = None
 _use_doh = False
+_doh_provider = "google"
 _auth_creds = None
-_mtproto_secret = None
 _traffic_limit_mb = 0
 _is_wifi = True
 _last_heartbeat = 0
@@ -40,14 +47,42 @@ def ping():
     _last_heartbeat = time.time()
     return True
 
-def set_mtproto_secret(secret):
-    """Устанавливает кастомный секрет MTProto (Task 8)"""
-    global _mtproto_secret
-    if secret and len(secret) == 32:
-        _mtproto_secret = secret
-        logger.info("Custom MTProto secret set")
-        return True
-    return False
+def set_secure_dns(enabled, provider="google"):
+    """Настраивает расширенный DoH (Task 2)"""
+    global _use_doh, _doh_provider
+    _use_doh = enabled
+    if provider in DOH_PROVIDERS:
+        _doh_provider = provider
+    logger.info(f"Secure DNS (DoH) enabled: {enabled}, Provider: {_doh_provider}")
+    return True
+
+def resolve_doh(domain):
+    """Продвинутый резолвинг через DoH провайдеров"""
+    if not _use_doh: return None
+    
+    url = DOH_PROVIDERS.get(_doh_provider, DOH_PROVIDERS["google"])
+    params = f"?name={domain}&type=A"
+    
+    # Cloudflare/Quad9 требуют заголовок Accept
+    headers = {"Accept": "application/dns-json"}
+    
+    try:
+        req = urllib.request.Request(url + params, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            if "Answer" in data:
+                return data["Answer"][0]["data"]
+    except Exception as e:
+        logger.error(f"DoH resolution failed ({_doh_provider}) for {domain}: {e}")
+        # Автоматический фоллбек на Google
+        if _doh_provider != "google":
+            logger.info("Retrying DoH with Google DNS...")
+            try:
+                with urllib.request.urlopen(DOH_PROVIDERS["google"] + params, timeout=5) as resp:
+                    data = json.loads(resp.read().decode())
+                    if "Answer" in data: return data["Answer"][0]["data"]
+            except: pass
+    return None
 
 def on_network_changed(is_wifi):
     global _is_wifi
@@ -74,7 +109,7 @@ def save_daily_stats():
     except: pass
 
 def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
-    global stop_event, proxy_thread, _proxy_port, _custom_dc_opt, _auth_creds, _mtproto_secret
+    global stop_event, proxy_thread, _proxy_port, _custom_dc_opt, _auth_creds
     _proxy_port = port
     if proxy_thread and proxy_thread.is_alive(): return {"status": "Already running", "port": _proxy_port}
     stop_event = asyncio.Event()
@@ -104,7 +139,7 @@ def get_proxy_stats_dict():
         stats["is_running"] = proxy_thread is not None and proxy_thread.is_alive()
         stats["port"] = _proxy_port
         stats["last_heartbeat"] = _last_heartbeat
-        stats["mtproto_secret_active"] = _mtproto_secret is not None
+        stats["doh_provider"] = _doh_provider
         if int(time.time()) % 60 == 0: save_daily_stats()
         return stats
     except Exception as e: return {"error": str(e)}
