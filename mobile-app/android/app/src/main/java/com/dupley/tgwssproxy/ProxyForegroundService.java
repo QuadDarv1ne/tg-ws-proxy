@@ -36,6 +36,7 @@ public class ProxyForegroundService extends Service {
     private static final String KEY_PORT = "proxy_port";
     private static final String KEY_AUTO_PORT = "auto_port";
     private static final String KEY_WIFI_ONLY = "wifi_only";
+    private static final String KEY_BATTERY_LEVEL = "battery_threshold";
 
     private boolean isPythonRunning = false;
     private Handler statsHandler = new Handler(Looper.getMainLooper());
@@ -55,26 +56,16 @@ public class ProxyForegroundService extends Service {
         }
     };
 
-    @Override
-    public void onTrimMemory(int level) {
-        super.onTrimMemory(level);
-        if (level >= TRIM_MEMORY_MODERATE) {
-            Log.w(TAG, "Low memory detected (level: " + level + "). Clearing Python caches...");
-            if (isPythonRunning && Python.isStarted()) {
-                try {
-                    Python.getInstance().getModule("android_entry").callAttr("clear_dns");
-                    System.gc(); // Форсируем сборку мусора в Java
-                } catch (Exception e) { }
-            }
-        }
-    }
-
     private void checkBattery(Intent intent) {
         int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
         int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
         float batteryPct = level * 100 / (float)scale;
-        if (batteryPct <= 15 && isPythonRunning) {
-            Log.w(TAG, "Battery low, stopping service.");
+
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        int threshold = prefs.getInt(KEY_BATTERY_LEVEL, 15); // По умолчанию 15%
+
+        if (batteryPct <= threshold && isPythonRunning) {
+            Log.w(TAG, "Battery below threshold (" + threshold + "%), stopping service.");
             stopProxy();
             stopForeground(true);
             stopSelf();

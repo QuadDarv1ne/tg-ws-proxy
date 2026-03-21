@@ -17,12 +17,17 @@ import android.webkit.WebSettings;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowCompat;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.JSObject;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.Date;
 
 public class MainActivity extends BridgeActivity {
 
@@ -35,6 +40,7 @@ public class MainActivity extends BridgeActivity {
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
         
+        setupCrashReporting(); // Task 10 Cycle 5
         syncSystemTheme();
         registerPlugin(ProxyPlugin.class);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -47,6 +53,27 @@ public class MainActivity extends BridgeActivity {
         if (!ACTION_STOP_PROXY.equals(getIntent().getAction())) {
             startProxyService();
         }
+    }
+
+    private void setupCrashReporting() {
+        Thread.UncaughtExceptionHandler defaultHandler = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            try {
+                StringWriter sw = new StringWriter();
+                throwable.printStackTrace(new PrintWriter(sw));
+                String crashInfo = String.format("\n--- JAVA CRASH AT %s ---\n%s\n", new Date(), sw.toString());
+                
+                File crashFile = new File(getFilesDir(), "crash_log.txt");
+                try (FileOutputStream fos = new FileOutputStream(crashFile, true)) {
+                    fos.write(crashInfo.getBytes());
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to write crash log", e);
+            }
+            if (defaultHandler != null) {
+                defaultHandler.uncaughtException(thread, throwable);
+            }
+        });
     }
 
     private void syncSystemTheme() {
@@ -86,7 +113,6 @@ public class MainActivity extends BridgeActivity {
         String action = intent.getAction();
         Uri data = intent.getData();
 
-        // Handle Deep Links (Task 6)
         if (Intent.ACTION_VIEW.equals(action) && data != null) {
             handleDeepLink(data);
         }
@@ -101,19 +127,11 @@ public class MainActivity extends BridgeActivity {
     private void handleDeepLink(Uri uri) {
         String server = uri.getQueryParameter("server");
         String port = uri.getQueryParameter("port");
-        String user = uri.getQueryParameter("user");
-        String pass = uri.getQueryParameter("pass");
-
         if (server != null && port != null) {
             JSObject config = new JSObject();
             config.put("server", server);
             config.put("port", Integer.parseInt(port));
-            config.put("username", user != null ? user : "");
-            config.put("password", pass != null ? pass : "");
-
-            // Отправляем событие в веб-слой для подтверждения импорта
             bridge.triggerWindowStageEvent("deepLinkConfig", config.toString());
-            Log.i(TAG, "Deep Link Config detected: " + server + ":" + port);
         }
     }
 

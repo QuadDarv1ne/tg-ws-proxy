@@ -1,4 +1,4 @@
-# План по улучшению Android-проекта (Capacitor) - СТАТУС: ВЫПОЛНЕНО (Циклы 1-4)
+# План по улучшению Android-проекта (Capacitor) - СТАТУС: ВЫПОЛНЕНО (Циклы 1-5)
 
 - [x] **Core Stability**: Исправлены ошибки сборки, обновлены зависимости, включен R8.
 - [x] **Python Core**: Chaquopy интеграция, asyncio мост, логирование.
@@ -8,15 +8,16 @@
 - [x] **UX/UI**: Material 3, Splash API, Theme Sync, Quick Tile, App Shortcuts.
 - [x] **Security**: Encrypted Storage, Biometrics, Root/Debug detect, SSL Hardening.
 - [x] **Enterprise**: WorkManager обновления, CSV экспорт, Remote Dashboard.
+- [x] **Intelligence**: Dynamic DC Failover, Adaptive Pooling, Auto Secret Rotation.
 
-## План "Cycle 5: Intelligence & Reliability" (В работе):
-1.  [ ] **Dynamic DC Failover**: Автоматическое переключение на резервный DC при сбое основного.
-2.  [ ] **Advanced Handshake Logging**: Детальное логирование процесса установки соединения MTProto.
-3.  [ ] **Session Persistence**: Сохранение состояния активных сессий для восстановления после перезапуска.
-4.  [ ] **Enhanced Gemini Analysis**: Улучшенные промпты для более точного анализа логов через ИИ.
-5.  [ ] **VPN Mode Integration**: Интеграция VpnService с Python-ядром (экспериментально).
-6.  [ ] **Certificate Pinning**: Защита обновлений конфига от MITM атак.
-7.  [ ] **Configurable Battery Threshold**: Настройка порога отключения прокси пользователем.
-8.  [ ] **Network Speed History**: Накопление данных о скорости для построения графиков производительности.
-9.  [ ] **Auto Secret Rotation**: Логика периодической ротации секретов MTProto.
-10. [ ] **Java Crash Reporting**: Запись нативных падений Java в тот же файл логов.
+## План "Cycle 6: Pro Connectivity & Global Access":
+1.  [ ] **UDP Associate Support**: Реализация поддержки UDP для корректной работы голосовых звонков в Telegram.
+2.  [ ] **Local PAC Server**: Запуск локального HTTP-сервера для раздачи PAC-файла (автонастройка прокси для других устройств).
+3.  [ ] **ZeroConf / mDNS**: Анонсирование прокси в локальной сети для автоматического обнаружения.
+4.  [ ] **Tunnel Compression**: Опциональное сжатие данных (zlib) в WebSocket-туннеле для экономии трафика.
+5.  [ ] **Sleep Timer**: Таймер автоматического выключения прокси.
+6.  [ ] **Password Protected Config**: Шифрование экспортируемых JSON-конфигов паролем.
+7.  [ ] **Proxy Chaining**: Поддержка каскадирования (использование внешнего SOCKS5 прокси как апстрима).
+8.  [ ] **Battery Analytics**: Интеграция с системным API для отображения реального потребления энергии сервисом.
+9.  [ ] **VpnService Routing**: Переход от прототипа к работающей маршрутизации трафика через TUN-интерфейс.
+10. [ ] **AI Optimization**: Обновление модели Gemini и добавление предиктивного анализа сетевых сбоев.
