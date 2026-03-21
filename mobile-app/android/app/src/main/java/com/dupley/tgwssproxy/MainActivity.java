@@ -2,18 +2,20 @@ package com.dupley.tgwssproxy;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Debug;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
-import android.webkit.WebSettings;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -33,14 +35,25 @@ public class MainActivity extends BridgeActivity {
 
     public static final String ACTION_START_PROXY = "com.dupley.tgwssproxy.ACTION_START_PROXY";
     public static final String ACTION_STOP_PROXY = "com.dupley.tgwssproxy.ACTION_STOP_PROXY";
+    public static final String ACTION_STATUS_UPDATE = "com.dupley.tgwssproxy.STATUS_UPDATE";
     private static final String TAG = "MainActivity";
+
+    private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (ACTION_STATUS_UPDATE.equals(intent.getAction())) {
+                boolean isRunning = intent.getBooleanExtra("is_running", false);
+                updateUiStatus(isRunning);
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
         
-        setupCrashReporting(); // Task 10 Cycle 5
+        setupCrashReporting();
         syncSystemTheme();
         registerPlugin(ProxyPlugin.class);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -50,9 +63,47 @@ public class MainActivity extends BridgeActivity {
         checkBatteryOptimization();
         AutoStartHelper.requestAutoStart(this);
 
-        if (!ACTION_STOP_PROXY.equals(getIntent().getAction())) {
+        if (!ACTION_STOP_PROXY.equals(getIntent().getAction()) && isNetworkAvailable()) {
             startProxyService();
+        } else if (!isNetworkAvailable()) {
+            Toast.makeText(this, "Нет подключения к сети", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        IntentFilter filter = new IntentFilter(ACTION_STATUS_UPDATE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(statusReceiver, filter);
+        }
+        syncSystemTheme();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        unregisterReceiver(statusReceiver);
+    }
+
+    private void updateUiStatus(boolean isRunning) {
+        if (bridge != null && bridge.getWebView() != null) {
+            JSObject data = new JSObject();
+            data.put("status", isRunning ? "running" : "stopped");
+            bridge.triggerWindowStageEvent("proxyStatusChanged", data.toString());
+        }
+    }
+
+    private boolean isNetworkAvailable() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm == null) return false;
+        NetworkCapabilities capabilities = cm.getNetworkCapabilities(cm.getActiveNetwork());
+        return capabilities != null && (
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET));
     }
 
     private void setupCrashReporting() {
@@ -80,10 +131,10 @@ public class MainActivity extends BridgeActivity {
         int nightModeFlags = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         if (bridge != null && bridge.getWebView() != null) {
             boolean isDark = nightModeFlags == Configuration.UI_MODE_NIGHT_YES;
-            bridge.getWebView().evaluateJavascript(
+            bridge.getWebView().post(() -> bridge.getWebView().evaluateJavascript(
                 "document.documentElement.setAttribute('data-theme', '" + (isDark ? "dark" : "light") + "')", 
                 null
-            );
+            ));
         }
     }
 
@@ -168,7 +219,9 @@ public class MainActivity extends BridgeActivity {
                     startActivity(intent);
                     Toast.makeText(this, getString(R.string.battery_optimization_toast), Toast.LENGTH_LONG).show();
                 } catch (Exception e) {
-                    startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                    try {
+                        startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                    } catch (Exception ignored) {}
                 }
             }
         }

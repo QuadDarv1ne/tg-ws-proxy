@@ -30,6 +30,7 @@ public class ProxyForegroundService extends Service {
     private static final String TAG = "ProxyService";
     private static final String CHANNEL_ID = "ProxyServiceChannel";
     public static final String ACTION_STOP_SERVICE = "STOP_PROXY_SERVICE";
+    public static final String ACTION_STATUS_UPDATE = "com.dupley.tgwssproxy.STATUS_UPDATE";
     private static final int NOTIFICATION_ID = 1;
     
     private static final String PREFS_NAME = "proxy_settings";
@@ -56,13 +57,19 @@ public class ProxyForegroundService extends Service {
         }
     };
 
+    private void notifyStatusChanged(boolean isRunning) {
+        Intent intent = new Intent(ACTION_STATUS_UPDATE);
+        intent.putExtra("is_running", isRunning);
+        sendBroadcast(intent);
+    }
+
     private void checkBattery(Intent intent) {
         int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
         int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
         float batteryPct = level * 100 / (float)scale;
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        int threshold = prefs.getInt(KEY_BATTERY_LEVEL, 15); // По умолчанию 15%
+        int threshold = prefs.getInt(KEY_BATTERY_LEVEL, 15);
 
         if (batteryPct <= threshold && isPythonRunning) {
             Log.w(TAG, "Battery below threshold (" + threshold + "%), stopping service.");
@@ -101,6 +108,7 @@ public class ProxyForegroundService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        createNotificationChannel();
         initPython();
         acquireWakeLock();
         
@@ -159,16 +167,20 @@ public class ProxyForegroundService extends Service {
         }
 
         if (isPythonRunning && proxyThread != null && proxyThread.isAlive()) return;
+        
         proxyThread = new Thread(() -> {
             try {
                 Python py = Python.getInstance();
                 PyObject proxyModule = py.getModule("android_entry");
                 proxyModule.callAttr("start_proxy", "127.0.0.1", prefs.getInt(KEY_PORT, 1080), prefs.getBoolean(KEY_AUTO_PORT, true));
                 isPythonRunning = true;
+                notifyStatusChanged(true);
                 ProxyPlugin.onStatusChanged(true);
                 updateNetworkType();
             } catch (Exception e) {
+                Log.e(TAG, "Error starting proxy", e);
                 isPythonRunning = false;
+                notifyStatusChanged(false);
                 ProxyPlugin.onStatusChanged(false);
             }
         });
@@ -179,8 +191,12 @@ public class ProxyForegroundService extends Service {
         statsRunnable = new Runnable() {
             @Override
             public void run() {
-                if (isPythonRunning && (proxyThread == null || !proxyThread.isAlive())) startProxy();
-                if (isPythonRunning) updateNotificationWithStats();
+                if (isPythonRunning && (proxyThread == null || !proxyThread.isAlive())) {
+                    startProxy();
+                }
+                if (isPythonRunning) {
+                    updateNotificationWithStats();
+                }
                 statsHandler.postDelayed(this, 5000);
             }
         };
@@ -191,17 +207,26 @@ public class ProxyForegroundService extends Service {
         try {
             Python py = Python.getInstance();
             PyObject stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
-            int port = stats.get(py.getBuiltins().get("str").call("port")).toInt();
-            int conn = stats.get(py.getBuiltins().get("str").call("connections_ws")).toInt();
-            long up = stats.get(py.getBuiltins().get("str").call("bytes_up")).toLong();
-            long down = stats.get(py.getBuiltins().get("str").call("bytes_down")).toLong();
+            PyObject portObj = stats.get(py.getBuiltins().get("str").call("port"));
+            PyObject connObj = stats.get(py.getBuiltins().get("str").call("connections_ws"));
+            PyObject upObj = stats.get(py.getBuiltins().get("str").call("bytes_up"));
+            PyObject downObj = stats.get(py.getBuiltins().get("str").call("bytes_down"));
+            
+            if (portObj == null || connObj == null) return;
+
+            int port = portObj.toInt();
+            int conn = connObj.toInt();
+            long up = upObj != null ? upObj.toLong() : 0;
+            long down = downObj != null ? downObj.toLong() : 0;
             
             NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             manager.notify(NOTIFICATION_ID, createNotification(
                 getString(R.string.proxy_status_template, port, conn),
                 getString(R.string.proxy_traffic_template, formatBytes(up), formatBytes(down))
             ));
-        } catch (Exception e) { }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to update notification stats", e);
+        }
     }
 
     private String formatBytes(long bytes) {
@@ -215,6 +240,7 @@ public class ProxyForegroundService extends Service {
         PendingIntent stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Intent openTgIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("tg://socks?server=127.0.0.1&port=1080"));
         PendingIntent openTgPendingIntent = PendingIntent.getActivity(this, 1, openTgIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.proxy_running_title))
                 .setContentText(content).setSubText(subContent).setSmallIcon(R.mipmap.ic_launcher)
@@ -225,14 +251,19 @@ public class ProxyForegroundService extends Service {
     }
 
     private void stopProxy() {
-        statsHandler.removeCallbacks(statsRunnable);
+        if (statsRunnable != null) statsHandler.removeCallbacks(statsRunnable);
         try {
-            Python py = Python.getInstance();
-            PyObject proxyModule = py.getModule("android_entry");
-            proxyModule.callAttr("stop_proxy");
+            if (Python.isStarted()) {
+                Python py = Python.getInstance();
+                PyObject proxyModule = py.getModule("android_entry");
+                proxyModule.callAttr("stop_proxy");
+            }
             isPythonRunning = false;
+            notifyStatusChanged(false);
             ProxyPlugin.onStatusChanged(false);
-        } catch (Exception e) { }
+        } catch (Exception e) {
+            Log.e(TAG, "Error stopping proxy", e);
+        }
     }
 
     @Override
@@ -249,7 +280,8 @@ public class ProxyForegroundService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel serviceChannel = new NotificationChannel(CHANNEL_ID, getString(R.string.proxy_service_channel_name), NotificationManager.IMPORTANCE_DEFAULT);
             serviceChannel.setDescription(getString(R.string.proxy_service_channel_desc));
-            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).createNotificationChannel(serviceChannel);
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) manager.createNotificationChannel(serviceChannel);
         }
     }
 }
