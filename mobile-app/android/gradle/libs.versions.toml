@@ -18,7 +18,7 @@ androidx-espresso = "3.7.0"
 leakcanary = "2.14"
 
 # Plugins
-android-gradle-plugin = "8.8.2"
+android-gradle-plugin = "8.13.2"
 google-services = "4.4.4"
 
 [libraries]
