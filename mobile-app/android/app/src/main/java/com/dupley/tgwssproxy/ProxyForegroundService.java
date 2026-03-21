@@ -52,7 +52,7 @@ public class ProxyForegroundService extends Service {
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TGWSProxy:ServiceWakeLock");
-            wakeLock.acquire(10 * 60 * 1000L /*10 minutes fallback*/);
+            wakeLock.acquire(10 * 60 * 1000L);
             Log.i(TAG, "WakeLock acquired");
         }
     }
@@ -100,6 +100,7 @@ public class ProxyForegroundService extends Service {
                 }
 
                 isPythonRunning = true;
+                ProxyPlugin.onStatusChanged(true); // Уведомляем UI
                 Log.i(TAG, "Python Proxy started on port: " + actualPort);
             } catch (Exception e) {
                 Log.e(TAG, "Error starting Python Proxy: " + e.getMessage());
@@ -181,6 +182,7 @@ public class ProxyForegroundService extends Service {
             PyObject proxyModule = py.getModule("android_entry");
             proxyModule.callAttr("stop_proxy");
             isPythonRunning = false;
+            ProxyPlugin.onStatusChanged(false); // Уведомляем UI
         } catch (Exception e) {
             Log.e(TAG, "Error stopping Python Proxy: " + e.getMessage());
         }

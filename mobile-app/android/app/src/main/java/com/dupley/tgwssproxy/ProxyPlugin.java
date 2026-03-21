@@ -25,6 +25,22 @@ public class ProxyPlugin extends Plugin {
     private static final String PREFS_NAME = "proxy_settings";
     private static final String KEY_PORT = "proxy_port";
     private static final String KEY_AUTO_PORT = "auto_port";
+    
+    private static ProxyPlugin instance;
+
+    @Override
+    public void load() {
+        super.load();
+        instance = this;
+    }
+
+    public static void onStatusChanged(boolean active) {
+        if (instance != null) {
+            JSObject ret = new JSObject();
+            ret.put("active", active);
+            instance.notifyListeners("statusChange", ret);
+        }
+    }
 
     @PluginMethod
     public void startProxy(PluginCall call) {
@@ -54,6 +70,32 @@ public class ProxyPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void shareLogs(PluginCall call) {
+        try {
+            if (Python.isStarted()) {
+                Python py = Python.getInstance();
+                PyObject module = py.getModule("android_entry");
+                String logs = module.callAttr("get_recent_logs").toString();
+                
+                Intent sendIntent = new Intent();
+                sendIntent.setAction(Intent.ACTION_SEND);
+                sendIntent.putExtra(Intent.EXTRA_TEXT, logs);
+                sendIntent.putExtra(Intent.EXTRA_TITLE, "TG WS Proxy Logs");
+                sendIntent.setType("text/plain");
+
+                Intent shareIntent = Intent.createChooser(sendIntent, "Share Logs via");
+                shareIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(shareIntent);
+                call.resolve();
+            } else {
+                call.reject("Python not started");
+            }
+        } catch (Exception e) {
+            call.reject("Error sharing logs: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
     public void openTelegramProxy(PluginCall call) {
         SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         int port = prefs.getInt(KEY_PORT, 1080);
@@ -72,7 +114,7 @@ public class ProxyPlugin extends Plugin {
     @PluginMethod
     public void openSystemProxySettings(PluginCall call) {
         try {
-            Intent intent = new Intent(Settings.ACTION_WIFI_SETTINGS); // Прямого пути к Proxy нет, это лучший вариант
+            Intent intent = new Intent(Settings.ACTION_WIFI_SETTINGS);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(intent);
             call.resolve();
