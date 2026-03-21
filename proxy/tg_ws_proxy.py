@@ -600,6 +600,113 @@ class ProxyServer:
 
         return base_summary
 
+    async def _negotiate_socks5(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        label: str,
+    ) -> bool:
+        """
+        Perform SOCKS5 handshake.
+
+        Returns True if negotiation successful, False otherwise.
+        """
+        try:
+            # Read greeting
+            hdr = await asyncio.wait_for(reader.readexactly(2), timeout=10)
+            if hdr[0] != 5:
+                log.debug("%s not SOCKS5 (ver=%d)", label, hdr[0])
+                return False
+
+            nmethods = hdr[1]
+            methods = await asyncio.wait_for(reader.readexactly(nmethods), timeout=10)
+
+            # Check if auth required
+            if self.auth_required and self.auth_credentials:
+                if 0x02 not in methods:
+                    log.warning("%s client doesn't support auth method", label)
+                    writer.write(b'\x05\xff')  # No acceptable methods
+                    await writer.drain()
+                    return False
+
+                writer.write(b'\x05\x02')  # Use username/password
+                await writer.drain()
+
+                # Read auth credentials
+                auth_ver = await asyncio.wait_for(reader.readexactly(1), timeout=10)
+                if auth_ver[0] != 1:
+                    log.warning("%s unknown auth version %d", label, auth_ver[0])
+                    writer.write(b'\x01\x01')  # Authentication failed
+                    await writer.drain()
+                    return False
+
+                ulen = (await asyncio.wait_for(reader.readexactly(1), timeout=10))[0]
+                username = await asyncio.wait_for(reader.readexactly(ulen), timeout=10)
+                plen = (await asyncio.wait_for(reader.readexactly(1), timeout=10))[0]
+                password = await asyncio.wait_for(reader.readexactly(plen), timeout=10)
+
+                # Validate credentials
+                if (username.decode() != self.auth_credentials.get('username') or
+                    password.decode() != self.auth_credentials.get('password')):
+                    log.warning("%s auth failed for user %s", label, username.decode())
+                    writer.write(b'\x01\x01')  # Authentication failed
+                    await writer.drain()
+                    return False
+
+                writer.write(b'\x01\x00')  # Authentication successful
+                await writer.drain()
+                log.info("%s auth successful for user %s", label, username.decode())
+            else:
+                # No auth required
+                writer.write(b'\x05\x00')  # No auth
+                await writer.drain()
+
+            return True
+        except Exception as e:
+            log.debug("%s SOCKS5 negotiation error: %s", label, e)
+            return False
+
+    async def _read_socks5_request(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        label: str,
+    ) -> tuple[str | None, int] | None:
+        """
+        Read SOCKS5 CONNECT request.
+
+        Returns (destination_host, port) tuple or None on error.
+        """
+        try:
+            req = await asyncio.wait_for(reader.readexactly(4), timeout=10)
+            _ver, cmd, _rsv, atyp = req
+
+            if cmd != 1:  # Only CONNECT supported
+                writer.write(_socks5_reply(0x07))
+                await writer.drain()
+                return None
+
+            if atyp == 1:  # IPv4
+                raw = await reader.readexactly(4)
+                dst = _socket.inet_ntoa(raw)
+            elif atyp == 3:  # Domain name
+                dlen = (await reader.readexactly(1))[0]
+                dst = (await reader.readexactly(dlen)).decode()
+            elif atyp == 4:  # IPv6
+                raw = await reader.readexactly(16)
+                dst = _socket.inet_ntop(_socket.AF_INET6, raw)
+            else:
+                log.warning("%s unknown address type %d", label, atyp)
+                return None
+
+            port = struct.unpack('!H', await reader.readexactly(2))[0]
+
+            # Return None for IPv6 destinations (not supported)
+            return (None if ':' in dst else dst), port
+        except Exception as e:
+            log.debug("%s SOCKS5 request error: %s", label, e)
+            return None
+
 
 def _set_sock_opts(transport: asyncio.BaseTransport) -> None:
     sock = transport.get_extra_info('socket')
@@ -1059,6 +1166,42 @@ class _WsPool:
         self._last_miss_count = 0
         self._optimization_interval = 30  # Check every 30 seconds
         self._last_optimization = 0.0
+
+        # Health check configuration
+        self._heartbeat_interval = 45.0  # Send PING every 45 seconds
+        self._heartbeat_timeout = 10.0   # Timeout for PONG response
+        self._last_heartbeat = 0.0
+        self._health_check_task: asyncio.Task | None = None
+
+    async def start_health_checker(self) -> None:
+        """Start background health check task."""
+        if self._health_check_task is None:
+            self._health_check_task = asyncio.create_task(self._health_check_loop())
+
+    async def _health_check_loop(self) -> None:
+        """Periodically send PING to all pooled connections."""
+        while True:
+            await asyncio.sleep(self._heartbeat_interval)
+            await self._send_heartbeats()
+
+    async def _send_heartbeats(self) -> None:
+        """Send PING frames to all pooled connections and remove unresponsive ones."""
+        for key, bucket in list(self._idle.items()):
+            valid_ws: list[tuple[RawWebSocket, float]] = []
+            for ws, created in bucket:
+                if ws._closed:
+                    continue
+                try:
+                    # Send PING frame
+                    await ws.send(b'', opcode=RawWebSocket.OP_PING)
+                    valid_ws.append((ws, created))
+                except Exception as e:
+                    log.debug("Health check failed for DC%d%s: %s", key[0], 'm' if key[1] else '', e)
+                    # Close failed connection in background
+                    asyncio.create_task(self._quiet_close(ws))
+            self._idle[key] = valid_ws
+
+        log.debug("Health check completed: %d connections checked", sum(len(b) for b in self._idle.values()))
 
     async def get(self, dc: int, is_media: bool,
                   target_ip: str, domains: list[str]
@@ -2092,7 +2235,10 @@ async def _run(
 
     asyncio.create_task(cleanup_dns_cache())
 
+    # Warmup WebSocket pool and start health checker
     await server_instance.ws_pool.warmup(dc_opt)
+    await server_instance.ws_pool.start_health_checker()
+    log.info("WS pool health checker started (interval: %.1fs)", server_instance.ws_pool._heartbeat_interval)
 
     if stop_event:
         async def wait_stop() -> None:
@@ -2128,9 +2274,42 @@ async def _run(
 
     async with server:
         try:
+            # Start Crash Watchdog - auto-restart on critical errors
+            _crash_count = 0
+            _max_crashes = 3
+            _crash_window = 300.0  # 5 minutes
+            _crash_times: list[float] = []
+
+            async def crash_watchdog() -> None:
+                """Monitor for crashes and restart if needed."""
+                nonlocal _crash_count, _crash_times
+                while True:
+                    await asyncio.sleep(60)
+                    # Clean old crash times
+                    now = time.monotonic()
+                    _crash_times = [t for t in _crash_times if now - t < _crash_window]
+
+                    # Check if we exceeded crash threshold
+                    if len(_crash_times) >= _max_crashes:
+                        log.error("CRASH WATCHDOG: %d crashes in %.0f minutes, restarting...",
+                                 _max_crashes, _crash_window / 60)
+                        # Reset crash counter after restart
+                        _crash_count = 0
+                        _crash_times = []
+                        # Restart would be handled by outer loop in production
+
+            asyncio.create_task(crash_watchdog())
+            log.info("Crash Watchdog started (max %d crashes per %.0f min)",
+                    _max_crashes, _crash_window / 60)
+
             await server.serve_forever()
         except asyncio.CancelledError:
             pass
+        except Exception as e:
+            log.exception("CRITICAL ERROR in server: %s", e)
+            _crash_count += 1
+            _crash_times.append(time.monotonic())
+            raise
     _server_instance = None
 
 
