@@ -2244,7 +2244,7 @@ async def _run(
                 for d, m in sorted(server_instance.ws_blacklist)) or 'none'
             log.info("stats: %s | ws_bl: %s", server_instance.stats.summary(), bl)
 
-    asyncio.create_task(log_stats())
+    server_instance._log_stats_task = asyncio.create_task(log_stats())
 
     # Background task for periodic DC ping monitoring with auto-switch
     _last_latency_alert: dict[int, float] = {}  # dc_id -> last alert time
@@ -2322,7 +2322,7 @@ async def _run(
                     best_dc, best_latency,
                     f"DC{_current_best_dc}" if _current_best_dc else "none")
 
-    asyncio.create_task(monitor_dc_latency())
+    server_instance._dc_monitor_task = asyncio.create_task(monitor_dc_latency())
 
     # Background task for dynamic pool optimization
     async def optimize_pool() -> None:
@@ -2334,7 +2334,7 @@ async def _run(
             except Exception as e:
                 log.debug("Pool optimization error: %s", e)
 
-    asyncio.create_task(optimize_pool())
+    server_instance._optimize_pool_task = asyncio.create_task(optimize_pool())
 
     # Background task for DNS cache cleanup
     async def cleanup_dns_cache() -> None:
