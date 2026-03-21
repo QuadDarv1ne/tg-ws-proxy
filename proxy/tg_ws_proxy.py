@@ -53,9 +53,22 @@ _ssl_ctx.verify_mode = ssl.CERT_NONE
 # DNS cache: {domain: [(ip, expiry_time), ...]}
 _dns_cache: dict[str, list[tuple[str, float]]] = {}
 _dns_cache_ttl = 300.0  # 5 minutes default TTL
+_dns_cache_lock = asyncio.Lock()  # Lock for thread-safe cache access
 
 # Async DNS resolver (aiodns - optional for better performance)
 _dns_resolver = None
+
+# Connection optimization settings
+_OPTIMIZATION_CONFIG = {
+    'enable_dns_cache': True,
+    'enable_connection_pooling': True,
+    'enable_auto_dc_selection': True,
+    'pool_min_size': 2,
+    'pool_max_size': 8,
+    'pool_max_age': 120.0,
+    'dns_cache_ttl': 300.0,
+    'max_concurrent_connections': 500,
+}
 
 
 def _init_async_dns() -> None:
@@ -72,7 +85,7 @@ def _init_async_dns() -> None:
 
 async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 5.0) -> list[tuple[str, int]]:
     """
-    Resolve domain with caching.
+    Resolve domain with caching (thread-safe).
 
     Args:
         domain: Domain name to resolve
@@ -82,19 +95,24 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
     Returns:
         List of (ip, port) tuples
     """
+    if not _OPTIMIZATION_CONFIG.get('enable_dns_cache', True):
+        # DNS cache disabled - resolve directly
+        return await _resolve_domain_direct(domain, port, timeout)
+    
     now = time.monotonic()
-
-    # Check cache
-    if domain in _dns_cache:
-        # Filter expired entries
-        valid_entries = [(ip, exp) for ip, exp in _dns_cache[domain] if exp > now]
-        if valid_entries:
-            log.debug("DNS cache hit for %s: %d entries", domain, len(valid_entries))
-            return [(ip, port) for ip, _ in valid_entries]
-        else:
-            log.debug("DNS cache expired for %s", domain)
-            del _dns_cache[domain]
-
+    
+    async with _dns_cache_lock:
+        # Check cache
+        if domain in _dns_cache:
+            # Filter expired entries
+            valid_entries = [(ip, exp) for ip, exp in _dns_cache[domain] if exp > now]
+            if valid_entries:
+                log.debug("DNS cache hit for %s: %d entries", domain, len(valid_entries))
+                return [(ip, port) for ip, _ in valid_entries]
+            else:
+                log.debug("DNS cache expired for %s", domain)
+                del _dns_cache[domain]
+    
     # Resolve from scratch using aiodns if available
     ips = []
     try:
@@ -113,7 +131,8 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
 
         if ips:
             expiry = now + _dns_cache_ttl
-            _dns_cache[domain] = [(ip, expiry) for ip in ips]
+            async with _dns_cache_lock:
+                _dns_cache[domain] = [(ip, expiry) for ip in ips]
             log.debug("DNS resolved %s -> %s (cached for %ds)", domain, ips, int(_dns_cache_ttl))
             return [(ip, port) for ip in ips]
         else:
@@ -125,10 +144,70 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
         return []
 
 
+async def _resolve_domain_direct(domain: str, port: int = 443, timeout: float = 5.0) -> list[tuple[str, int]]:
+    """
+    Resolve domain without caching (for when cache is disabled).
+    
+    Args:
+        domain: Domain name to resolve
+        port: Target port
+        timeout: Resolution timeout
+        
+    Returns:
+        List of (ip, port) tuples
+    """
+    ips = []
+    try:
+        if _dns_resolver is not None:
+            result = await asyncio.wait_for(
+                _dns_resolver.query(domain, 'A'),
+                timeout=timeout
+            )
+            ips = [r.host for r in result]
+        else:
+            loop = asyncio.get_event_loop()
+            results = await loop.getaddrinfo(domain, port, family=_socket.AF_INET, type=_socket.SOCK_STREAM)
+            ips = list({r[4][0] for r in results})
+        
+        return [(ip, port) for ip in ips]
+    except Exception as e:
+        log.debug("Direct DNS resolution failed for %s: %s", domain, e)
+        return []
+
+
 def _clear_dns_cache() -> None:
     """Clear DNS cache."""
     _dns_cache.clear()
     log.info("DNS cache cleared")
+
+
+def update_optimization_config(config: dict) -> None:
+    """
+    Update optimization configuration at runtime.
+    
+    Args:
+        config: Dictionary with optimization settings
+    """
+    global _dns_cache_ttl, _OPTIMIZATION_CONFIG
+    
+    for key, value in config.items():
+        if key in _OPTIMIZATION_CONFIG:
+            _OPTIMIZATION_CONFIG[key] = value
+            log.info("Optimization config updated: %s = %s", key, value)
+        elif key == 'dns_cache_ttl':
+            _dns_cache_ttl = float(value)
+            log.info("DNS cache TTL updated: %s seconds", _dns_cache_ttl)
+    
+    log.debug("Current optimization config: %s", _OPTIMIZATION_CONFIG)
+
+
+def get_optimization_config() -> dict:
+    """Get current optimization configuration."""
+    return {
+        **_OPTIMIZATION_CONFIG,
+        'dns_cache_ttl': _dns_cache_ttl,
+        'dns_cache_size': len(_dns_cache),
+    }
 
 
 async def _check_ws_domain_available(dc_id: int, timeout: float = 5.0) -> tuple[bool, str | None]:
@@ -351,6 +430,38 @@ class ProxyServer:
         # Server instance for graceful shutdown
         self._server_instance: asyncio.Server | None = None
         self._server_stop_event: asyncio.Event | None = None
+        
+        # Optimization metrics
+        self._optimization_metrics = {
+            'total_dns_resolutions': 0,
+            'dns_cache_hits': 0,
+            'dns_cache_misses': 0,
+            'avg_connection_time_ms': 0.0,
+            'peak_connections': 0,
+        }
+
+    def get_optimization_metrics(self) -> dict:
+        """Get current optimization metrics."""
+        return {
+            **self._optimization_metrics,
+            'config': get_optimization_config(),
+        }
+    
+    def update_optimization_metrics(self, **kwargs) -> None:
+        """Update optimization metrics."""
+        for key, value in kwargs.items():
+            if key in self._optimization_metrics:
+                self._optimization_metrics[key] = value
+    
+    def record_dns_cache_hit(self) -> None:
+        """Record DNS cache hit."""
+        self._optimization_metrics['total_dns_resolutions'] += 1
+        self._optimization_metrics['dns_cache_hits'] += 1
+    
+    def record_dns_cache_miss(self) -> None:
+        """Record DNS cache miss."""
+        self._optimization_metrics['total_dns_resolutions'] += 1
+        self._optimization_metrics['dns_cache_misses'] += 1
 
     def _setup_encryption(self, config: dict) -> None:
         """Setup modern encryption based on configuration."""
