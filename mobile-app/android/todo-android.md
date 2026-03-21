@@ -1,4 +1,4 @@
-# План по улучшению Android-проекта (Capacitor) - СТАТУС: ВЫПОЛНЕНО
+# План по улучшению Android-проекта (Capacitor) - СТАТУС: ВЫПОЛНЕНО (Циклы 1-3)
 
 - [x] **Исправление критических ошибок (Sync Fix)**: Удален `flatDir`, настроен `fileTree`.
 - [x] **Обновление зависимостей**: Версии в `variables.gradle` и `libs.versions.toml` обновлены.
@@ -41,3 +41,15 @@
 - [x] **Memory Leak Guard**: Очистка ресурсов при нехватке памяти.
 - [x] **Multi-Session View**: Детали активных соединений.
 - [x] **AI Log Analyzer**: Анализ ошибок через Gemini AI на русском языке.
+
+## Новый план "Pro Connectivity & Enterprise":
+1.  [ ] **Remote Web Dashboard**: Запуск веб-панели на локальном IP устройства для мониторинга с ПК.
+2.  [ ] **Persistent Rolling Logs**: Сохранение логов в файлы на диске с ротацией.
+3.  [ ] **Multiple MTProto Secrets**: Поддержка управления списком секретов в плагине.
+4.  [ ] **Network Speed Limiter**: Возможность программного ограничения скорости.
+5.  [ ] **Auto-Update Script**: Проверка и загрузка обновлений python-логики с GitHub.
+6.  [ ] **IPv6 Stack Support**: Поддержка IPv6 для WebSocket и MTProto соединений.
+7.  [ ] **Task Automation Intents**: Публичные Intent-ы для управления прокси через Tasker/MacroDroid.
+8.  [ ] **SSL/TLS Hardening**: Поддержка кастомных сертификатов для туннелирования.
+9.  [ ] **Memory Optimization (Chaquopy)**: Настройка исключения неиспользуемых модулей Python (std-lib).
+10. [ ] **Export to CSV/Excel**: Выгрузка накопленной статистики трафика в табличный формат.
