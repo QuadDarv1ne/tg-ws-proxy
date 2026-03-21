@@ -22,14 +22,14 @@
 - [x] **Status API Upgrade**: Реактивные события и Watchdog.
 - [x] **Data Backup**: Автоматическое резервное копирование настроек в облако.
 
-## Новый план (Advanced Optimization) - ВЫПОЛНЕНО:
-1.  [x] **Battery Watchdog**: Авто-выключение при низком заряде (<15%).
-2.  [x] **SOCKS5 Auth**: Настройка логина/пароля сервера.
-3.  [x] **Traffic Quota**: Механизм лимитов трафика.
-4.  [x] **Network-Aware Pooling**: Оптимизация под Wi-Fi/Mobile.
-5.  [x] **Daily Statistics**: Локальная БД истории трафика.
-6.  [x] **JSON Export/Import**: Быстрый перенос всех настроек.
-7.  [x] **Heartbeat Mechanism**: Проверка активности моста JS-Python.
-8.  [x] **Custom MTProto Secret**: Возможность смены секретного ключа.
-9.  [x] **Material 3 Animations**: Визуальный апгрейд нативных элементов.
-10. [x] **VpnService Prototype**: Прототип глобального VPN-режима.
+## План "Expert Level Polish":
+1.  [ ] **Encrypted Storage**: Переход на `EncryptedSharedPreferences` для безопасного хранения паролей и секретов.
+2.  [ ] **Advanced DoH**: Расширенный выбор DoH провайдеров (Cloudflare, Quad9) с возможностью ручного ввода.
+3.  [ ] **Background Refresh**: Интеграция `WorkManager` для фонового обновления конфигов DC.
+4.  [ ] **Handshake Diagnostics**: Детализация этапов MTProto-рукопожатия в логах и статусе.
+5.  [ ] **Adaptive Pooling**: Тонкая настройка пула WebSocket в зависимости от скорости текущего соединения.
+6.  [ ] **Native Splash API**: Полная интеграция Android 12+ Splash Screen API для бесшовного запуска.
+7.  [ ] **Structured Session Logs**: Хранение логов сессий в виде структурированных отчетов.
+8.  [ ] **TCP Tuning**: Оптимизация параметров TCP сокетов (Keepalive, Window Size) в Python для мобильных сетей.
+9.  [ ] **Config Profiles**: Поддержка и переключение между несколькими профилями настроек.
+10. [ ] **Security Hardening**: Добавление проверок целостности Python-кода при запуске.

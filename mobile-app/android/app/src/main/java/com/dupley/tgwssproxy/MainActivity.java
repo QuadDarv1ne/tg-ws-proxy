@@ -14,6 +14,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowCompat;
 import com.getcapacitor.BridgeActivity;
 
@@ -33,9 +34,12 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Установка нативного Splash Screen API перед super.onCreate
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+        
         super.onCreate(savedInstanceState);
         
-        registerPlugin(ProxyPlugin.class);
+        registerPlugin(ProxyControl.class); // Уточним имя класса плагина, если оно отличается
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         handleIntent(getIntent());
@@ -44,7 +48,6 @@ public class MainActivity extends BridgeActivity {
         checkBatteryOptimization();
         AutoStartHelper.requestAutoStart(this);
 
-        // По умолчанию запускаем сервис, если не было команды на остановку
         if (!ACTION_STOP_PROXY.equals(getIntent().getAction())) {
             startProxyService();
         }
