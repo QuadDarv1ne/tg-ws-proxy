@@ -50,50 +50,24 @@
 ## 📊 Статус
 
 ```
-Tests: 493 passed, 28 skipped, 0 errors ✅
+Tests: 486 passed, 7 skipped, 0 errors ✅
 Coverage: ~40% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: missing stubs (внешние зависимости)
 ```
 
-**Восстановлено после повреждения:**
-- `proxy/web_dashboard.py` — 2987 строк (веб-панель) ✅
-- `proxy/crypto.py` — 716 строк (шифрование) ✅
-- `proxy/tg_ws_proxy.py` — 2431 строк (ядро прокси) ✅
-
-**Новые тесты:**
-- `tests/test_socks5.py` — 5 тестов (SOCKS5 negotiation) ✅
-- `tests/test_ws_pool.py` — 4 теста (WebSocket pool + health check) ✅
-- `tests/test_tg_ws_proxy_logic.py` — 5 тестов (core logic: DC parsing, patching) ✅
-
-**Отличное покрытие:**
-- `logger.py`, `optimizer.py`, `dc_monitor.py` — 100% ✅
-- `test_tg_ws_proxy_logic.py`, `test_socks5.py`, `test_ws_pool.py` — 100% ✅
-
-**Реализовано в v2.36.0:**
-- Health Checks: WS PING/PONG каждые 45с, авто-очистка мёртвых соединений ✅
-- Crash Watchdog: мониторинг сбоев (3 сбоя за 5 мин), логирование ✅
-- DoH: DNS over HTTPS (Cloudflare/Google) ✅
-- Pool Tests: тесты переполнения, очистки, expired connections ✅
+**Актуальная версия:** v2.37.0 (dev + main синхронизированы) ✅
 
 ---
 
-## 📋 План на v2.37.0: Performance & Mobile
+## 📋 План на v2.38.0: Stability & Monitoring
 
 ### Производительность
-- [x] **Zero-copy буферизация** — `memoryview` вместо копирования байтов ✅
-- [x] **Batch WebSocket отправка** — группировка мелких пакетов (<4KB) ✅
-- [x] **Автоматический выбор DC** — по latency в реальном времени (5 мин) ✅
 - [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP
-
-### Надёжность
-- [x] **Экспоненциальный backoff** — при ошибках подключения (2^(n-1), max 8x) ✅
-- [ ] **Graceful shutdown** — корректное завершение всех соединений
 - [ ] **Memory Profiling** — поиск утечек в пулах (tracemalloc/memray)
 
-### Безопасность
-- [x] **Rate limiting** — защита от злоупотреблений (10 req/s, 100 req/min) ✅
-- [x] **IP whitelist/blacklist** — фильтрация подключений (allow-list по умолчанию) ✅
+### Надёжность
+- [ ] **Graceful shutdown** — корректное завершение всех соединений
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
 
 ### Android App
