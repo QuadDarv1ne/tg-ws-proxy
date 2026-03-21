@@ -1687,29 +1687,29 @@ def _build_menu() -> pystray.Menu | None:
         pystray.MenuItem(
             "DC 2 (рекомендуется)",
             lambda: _on_dc_preset(preset="dc2"),
-            checked=current_dc_ip == ["2:149.154.167.220"]),
+            checked=lambda _: current_dc_ip == ["2:149.154.167.220"]),
         pystray.MenuItem(
             "DC 2+4 (рекомендуется)",
             lambda: _on_dc_preset(preset="dc2_4"),
-            checked=current_dc_ip == ["2:149.154.167.220", "4:149.154.167.220"]),
+            checked=lambda _: current_dc_ip == ["2:149.154.167.220", "4:149.154.167.220"]),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
             "DC 1",
             lambda: _on_dc_preset(preset="dc1"),
-            checked=current_dc_ip == ["1:149.154.175.53"]),
+            checked=lambda _: current_dc_ip == ["1:149.154.175.53"]),
         pystray.MenuItem(
             "DC 3",
             lambda: _on_dc_preset(preset="dc3"),
-            checked=current_dc_ip == ["3:149.154.175.100"]),
+            checked=lambda _: current_dc_ip == ["3:149.154.175.100"]),
         pystray.MenuItem(
             "DC 5",
             lambda: _on_dc_preset(preset="dc5"),
-            checked=current_dc_ip == ["5:91.108.56.100"]),
+            checked=lambda _: current_dc_ip == ["5:91.108.56.100"]),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
             "Все DC (автовыбор)",
             lambda: _on_dc_preset(preset="all"),
-            checked=len(current_dc_ip) >= 5),
+            checked=lambda _: len(current_dc_ip) >= 5),
     )
 
     # Compact menu - show only essential items
@@ -1735,7 +1735,7 @@ def _build_menu() -> pystray.Menu | None:
             _on_open_in_telegram,
             default=True),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem(status_text, enabled=False),
+        pystray.MenuItem(status_text, action=None, enabled=False),
         pystray.MenuItem("Статистика", _on_show_stats),
         pystray.MenuItem("Быстрые DC", dc_submenu),
         pystray.MenuItem("Перезапустить прокси", _on_restart),
@@ -1849,7 +1849,7 @@ def run_tray() -> None:
         APP_NAME,
         icon_image,
         "TG WS Proxy",
-        menu=pystray.Menu(lambda _: _build_menu()))
+        menu=pystray.Menu(_build_menu))
 
     log.info("Tray icon running")
 
