@@ -43,22 +43,39 @@ _is_wifi = True
 _last_heartbeat = 0
 _current_pool_size = WS_POOL_SIZE
 _session_id = None
+_current_best_dc = 2
+
+async def monitor_best_dc():
+    """Динамический выбор лучшего DC (Task 1)"""
+    global _current_best_dc, _custom_dc_opt
+    while not stop_event or not stop_event.is_set():
+        try:
+            dcs_to_check = _custom_dc_opt.keys() if _custom_dc_opt else DC_IP_MAP.keys()
+            best_latency = float('inf')
+            best_id = _current_best_dc
+            
+            for dc_id in dcs_to_check:
+                latency, _ = await _measure_dc_ping(dc_id, timeout=2.0)
+                if latency and latency < best_latency:
+                    best_latency = latency
+                    best_id = dc_id
+            
+            if best_id != _current_best_dc:
+                logger.info(f"Dynamic DC Switch: DC{_current_best_dc} -> DC{best_id} (Ping: {best_latency:.1f}ms)")
+                _current_best_dc = best_id
+                
+        except Exception as e:
+            logger.debug(f"DC Monitoring error: {e}")
+        await asyncio.sleep(300) # Проверка каждые 5 минут
 
 def tune_tcp_socket(sock):
     """Низкоуровневая настройка TCP для мобильных сетей (Task 8)"""
     try:
-        # Включаем Keep-Alive
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        
-        # Настройка параметров Keep-Alive для Android
-        # (интервал проверки при простое)
         if hasattr(socket, "TCP_KEEPIDLE"):
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
-        
-        # Увеличиваем буферы для компенсации лагов мобильной сети
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 128 * 1024)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 128 * 1024)
-        
         logger.debug("TCP Socket tuned for mobile network")
     except Exception as e:
         logger.error(f"Failed to tune socket: {e}")
@@ -96,6 +113,10 @@ def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
     def run_loop():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
+        # Запускаем мониторинг лучшего DC в фоне asyncio (Task 1)
+        loop.create_task(monitor_best_dc())
+        
         try:
             loop.run_until_complete(_run(
                 port=_proxy_port, dc_opt=dc_opt, stop_event=stop_event, host=host,
@@ -116,7 +137,7 @@ def get_proxy_stats_dict():
         stats = get_stats()
         stats["is_running"] = proxy_thread is not None and proxy_thread.is_alive()
         stats["port"] = _proxy_port
-        stats["tcp_tuning"] = True
+        stats["best_dc"] = _current_best_dc
         return stats
     except Exception as e: return {"error": str(e)}
 
