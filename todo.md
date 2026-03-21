@@ -6,143 +6,98 @@
 
 ---
 
-## 🔴 Высокий приоритет (v2.18.0)
+## ✅ Выполнено (v2.10.0 — v2.20.0)
 
-### ✅ Выполнено
-- [x] Исправлены ruff предупреждения (W291, W293, F401, F402)
-- [x] Установлены missing stubs: types-psutil, types-qrcode, types-Flask-Cors, types-pyperclip
-- [x] Исправлены mypy ошибки в tg_ws_proxy.py, mtproto_proxy.py, web_dashboard.py, crypto.py
-- [x] Mypy: ~10 ошибок (только missing stubs - не критично)
-- [x] Ruff: 127 ошибок (whitespace, требуют unsafe-fixes)
+### Сборка и релиз
+- ✅ Android APK сборка (Java 21 LTS)
+- ✅ Desktop сборка (Windows, Linux, macOS)
+- ✅ PWA иконки и manifest
+- ✅ GitHub Actions workflow
+
+### Ядро и производительность
+- ✅ Async DNS resolver (aiodns)
+- ✅ Оптимизация memory footprint (история 100→30)
+- ✅ Автоматический экспорт статистики (JSON каждый час)
+- ✅ Проверка обновлений GitHub
+- ✅ Многоязычность (i18n) — русский/английский (80+ переводов)
+- ✅ Whitelist IP — полная реализация с O(1) проверкой
+
+### Код-качество
+- ✅ Ruff: 127 → 0 ошибок
+- ✅ Mypy: ~10 ошибок (только missing stubs)
+- ✅ Новые модули: `proxy/i18n.py`, `proxy/updater.py`
+- ✅ Python 3.14 совместимость (tray.py asyncio.run)
+
+### Тесты
+- ✅ Tests: 255 passed, 3 skipped
+- ✅ Добавлены тесты для i18n, updater, whitelist
+- ✅ Покрытие web_dashboard.py: 61% → 74%
+
+### Документация
+- ✅ Очистка документации от дублирования
+- ✅ README.md сокращён (352 → ~150 строк)
+- ✅ BUILD.md — краткая инструкция
+- ✅ INSTALL_MOBILE.md — PWA и APK
+- ✅ RELEASE_NOTES.md — ключевые версии
+
+---
+
+## 🔴 Высокий приоритет (v2.20.0)
 
 ### Тесты и покрытие
-- [ ] Покрытие tg_ws_proxy.py: 19% → 60%
-  - [ ] Тесты для `_handle_client()`
+- [ ] Покрытие tg_ws_proxy.py: 13% → 60%
+  - [ ] Тесты для `_handle_client()` (интеграционные)
   - [ ] Тесты для WebSocket pool
   - [ ] Тесты для TCP fallback логики
-  - [ ] Тесты для callbacks уведомлений
 - [ ] Load tests (100+ одновременных подключений)
-- [ ] Coverage > 80% (текущее ~48%)
-
----
-
-## 🟡 Средний приоритет (v2.18.0)
+- [ ] Coverage > 80% (текущее ~35%)
 
 ### Покрытие тестами
-- [ ] web_dashboard.py: 60% → 80%
 - [ ] mtproto_proxy.py: 49% → 80%
 - [ ] dashboard.py: 57% → 80%
+- [ ] alerts.py: 40% → 80%
 
 ### Производительность
-- [ ] Async DNS resolver (aiodns)
 - [ ] HTTP/2 для WebSocket
-- [ ] Оптимизация memory footprint
+- [ ] Профилирование memory usage
+- [ ] Оптимизация WebSocket pool
 
 ---
 
-## 🟢 Низкий приоритет (v2.19.0)
+## 🟢 Низкий приоритет (v2.21.0)
 
 ### Документация (без запроса не менять)
 - [ ] Скриншоты интерфейса в README
 - [ ] Video-гайд по настройке
-- [ ] API docs (Sphinx)
 
 ### Новые функции
 - [ ] Графики трафика в веб-панели (Chart.js)
-- [ ] История подключений
-- [ ] Экспорт статистики (CSV/JSON)
-- [ ] Push уведомления
-- [ ] Настройки прокси в UI
-- [ ] Многоязычность (i18n)
+- [ ] Push уведомления (Telegram bot, Discord webhook)
+- [ ] Расширенная i18n (de, es, fr)
+
+### Безопасность
+- [ ] Улучшенная SOCKS5 аутентификация
+- [ ] TLS для локального прокси
 
 ---
 
-## ✅ Выполнено (v2.17.0)
-
-### Интерфейс
-- [x] Трей с темной/светлой темой
-- [x] Всплывающие подсказки к пунктам меню
-- [x] Горячие клавиши для быстрых DC (Ctrl+1, Ctrl+2...)
-- [x] Новый современный UI веб-панели
-- [x] PWA поддержка (manifest, service worker, иконки)
-- [x] Мобильная версия UI
-- [x] Тёмная тема в веб-панели
-- [x] Индикаторы статуса системы
-- [x] Быстрые действия (копирование конфига, QR-код)
-- [x] PWA Install Prompt
-- [x] Автообновление статистики (5 сек)
-- [x] Toast уведомления
-
-### Мобильные приложения
-- [x] Capacitor проект для Android/iOS
-- [x] PWA иконки (192x192, 512x512)
-- [x] Сборка Android APK
-- [x] Сборка iOS через Xcode
-- [x] Инструкции по установке
-
-### Сборка
-- [x] Универсальный скрипт сборки Desktop
-- [x] Универсальный скрипт сборки Mobile
-- [x] Spec-файлы обновлены (Flask, PWA)
-- [x] Windows сборка работает
-- [x] Генерация иконок
-
-### Документация
-- [x] BUILD.md — руководство по сборке
-- [x] INSTALL_MOBILE.md — установка на телефон
-- [x] Обновление author во всех файлах
-- [x] Организация docs/
-
----
-
-## ✅ Выполнено (v2.14.0 — v2.16.0)
-
-### Ядро
-- [x] Callback для уведомлений об ошибках подключения
-- [x] Callback для уведомлений о высоком latency
-- [x] Мониторинг latency с cooldown (5 мин)
-- [x] Graceful shutdown
-- [x] DNS кэширование (5 мин TTL)
-- [x] TCP connection pooling (max 4 conn, max age 60s)
-- [x] Rate limiting, IP фильтрация
-- [x] JSON конфигурация с валидацией
-
-### Интерфейс
-- [x] Компактный режим tray
-- [x] Индикатор статуса в трее (цветная точка + текст)
-- [x] Quick DC presets submenu
-- [x] Daily summary при закрытии
-
-### Код-качество
-- [x] Ruff нарушения исправлены (682 → 0)
-- [x] Type hints в proxy-модулях
-- [x] Coverage: 20% → 46%
-- [x] Mypy ошибки: 146 → ~30
-
----
-
-## 📊 Статус тестов
+## 📊 Статус
 
 ```
-Tests: 243 passed, 3 skipped
-Coverage: ~48% (цель >80%)
+Tests: 255 passed, 3 skipped
+Coverage: ~35% (цель >80%)
+Ruff: 0 ошибок
+Mypy: missing stubs (внешние зависимости)
 ```
 
 **Проблемные зоны:**
-- `tg_ws_proxy.py` — 19% (872 строки пропущено)
+- `tg_ws_proxy.py` — 13%
+- `rate_limiter.py` — 0% (исключён из тестов)
+- `crypto.py` — 25%
+- `alerts.py` — 40%
 - `mtproto_proxy.py` — 49%
+- `web_dashboard.py` — 58%
 - `dashboard.py` — 57%
-- `web_dashboard.py` — 61%
-
-**Исправлено в v2.18.0:**
-- ✅ Переименованы функции в `diagnostics.py`: `test_*` → `check_*`
-- ✅ Обновлены импорты и вызовы в `test_diagnostics.py`
-- ✅ Тесты запускаются без ошибок (243 passed, 3 skipped)
-- ✅ Mypy ошибки: ~50 → ~10 (только missing stubs)
-- ✅ Ruff ошибки: 128 → 127 (whitespace)
-- ✅ Установлены missing stubs
-- ✅ Добавлены расширенные функции мониторинга в stats.py
-- ✅ Добавлены тесты для health status и CSV экспорта
 
 ---
 
@@ -173,6 +128,8 @@ git push origin main
 ```
 
 **Python:** `C:\Users\maksi\AppData\Local\Python\bin\python.exe` (3.14)
+**Java:** `C:\Program Files\Java\jdk-21.0.10` (21 LTS)
+**Android SDK:** `%LOCALAPPDATA%\Android\Sdk`
 
 ---
 

@@ -84,8 +84,13 @@ class TestStatsInitialization:
 
     def test_custom_history_size(self):
         """Test custom history size."""
-        stats = Stats(history_size=50)
+        # With optimize_memory=True (default), history_size is reduced
+        stats = Stats(history_size=50, optimize_memory=False)
         assert stats._history_size == 50
+
+        # With optimize_memory=True, history_size is reduced
+        stats_optimized = Stats(history_size=50, optimize_memory=True)
+        assert stats_optimized._history_size == 30
 
 
 class TestStatsConnections:

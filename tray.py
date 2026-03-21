@@ -17,6 +17,7 @@ import threading
 import time
 import urllib.request
 import webbrowser
+from asyncio import Event as asyncio_Event
 from pathlib import Path
 from typing import Callable
 
@@ -485,15 +486,15 @@ def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
         log.warning("IPv6 is enabled. If you experience connection issues, "
                     "try disabling IPv6 in Telegram settings.")
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    stop_ev = asyncio.Event()
-    _async_stop = (loop, stop_ev)
+    # Create stop event for graceful shutdown
+    stop_ev = asyncio_Event()
+    _async_stop = (None, stop_ev)
 
     try:
         # Proxy started - set status to running
         _set_proxy_status("running")
-        loop.run_until_complete(
+        # Use asyncio.run() for Python 3.14+ compatibility
+        asyncio.run(
             tg_ws_proxy._run(port, dc_opt, stop_event=stop_ev, host=host))  # type: ignore[arg-type]
     except Exception as exc:
         log.error("Proxy thread crashed: %s", exc)
@@ -504,7 +505,6 @@ def _run_proxy_thread(port: int, dc_opt: dict[int, str], verbose: bool,
         if "ipv6" in err_str or "af_inet6" in err_str:
             log.error("IPv6-related error. Consider disabling IPv6 in Telegram settings.")
     finally:
-        loop.close()
         _async_stop = None
 
 
@@ -543,8 +543,8 @@ def stop_proxy() -> None:
     """Stop the proxy server."""
     global _proxy_thread, _async_stop
     if _async_stop:
-        loop, stop_ev = _async_stop
-        loop.call_soon_threadsafe(stop_ev.set)
+        _, stop_ev = _async_stop
+        stop_ev.set()
         if _proxy_thread:
             _proxy_thread.join(timeout=2)
     _proxy_thread = None

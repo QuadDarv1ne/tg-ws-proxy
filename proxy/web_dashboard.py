@@ -2319,6 +2319,79 @@ class WebDashboard:
                 log.error(f"QR generation error: {e}")
                 return jsonify({'error': str(e)}), 500
 
+        @self.app.route('/api/update/check')
+        def api_check_update() -> Response:
+            """Check for available updates on GitHub."""
+            try:
+                import asyncio
+
+                from .updater import check_for_updates
+
+                # Run async function in executor
+                loop = asyncio.get_event_loop()
+                update_info = loop.run_until_complete(check_for_updates(force=True))
+
+                if update_info:
+                    return jsonify({
+                        'update_available': True,
+                        'current_version': update_info['current_version'],
+                        'latest_version': update_info['latest_version'],
+                        'release_url': update_info['release_url'],
+                        'release_notes': update_info['release_notes'],
+                    })
+                else:
+                    return jsonify({'update_available': False})
+
+            except Exception as e:
+                log.error("Update check failed: %s", e)
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/i18n')
+        def api_i18n() -> Response:
+            """Get i18n translations."""
+            try:
+                from .i18n import TRANSLATIONS, get_i18n
+
+                language = request.args.get('lang', 'ru')
+                if language not in TRANSLATIONS:
+                    language = 'ru'
+
+                i18n = get_i18n()
+                i18n.set_language(language)  # type: ignore[arg-type]
+
+                return jsonify({
+                    'language': language,
+                    'translations': TRANSLATIONS.get(language, {}),
+                    'available_languages': [
+                        {'code': lang, 'name': i18n.get_language_name(lang)}  # type: ignore[arg-type]
+                        for lang in TRANSLATIONS.keys()
+                    ],
+                })
+            except Exception as e:
+                log.error("i18n error: %s", e)
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/i18n/set', methods=['POST'])
+        def api_set_language() -> Response:
+            """Set current language."""
+            try:
+                from .i18n import TRANSLATIONS, set_language
+
+                data = request.get_json()
+                if not data:
+                    return jsonify({'error': 'Invalid JSON'}), 400
+
+                language = data.get('language', 'ru')
+                if language not in TRANSLATIONS:
+                    return jsonify({'error': 'Unsupported language'}), 400
+
+                set_language(language)  # type: ignore[arg-type]
+
+                return jsonify({'status': 'success', 'language': language})
+            except Exception as e:
+                log.error("Set language error: %s", e)
+                return jsonify({'error': str(e)}), 500
+
         @self.app.route('/api/health')
         def api_health() -> Response:
             """Health check endpoint with detailed diagnostics."""
