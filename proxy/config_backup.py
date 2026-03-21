@@ -95,11 +95,11 @@ class ConfigBackup:
     ) -> str | None:
         """
         Create a backup of configuration.
-        
+
         Args:
             config: Configuration dictionary to backup
             label: Optional label for the backup
-            
+
         Returns:
             Path to backup file or None if failed
         """
@@ -134,10 +134,10 @@ class ConfigBackup:
     def restore(self, backup_path: str) -> dict[str, Any] | None:
         """
         Restore configuration from backup.
-        
+
         Args:
             backup_path: Path to backup file
-            
+
         Returns:
             Configuration dictionary or None if failed
         """
@@ -165,7 +165,7 @@ class ConfigBackup:
     def list_backups(self) -> list[dict[str, Any]]:
         """
         List all available backups.
-        
+
         Returns:
             List of backup info dictionaries
         """
@@ -194,7 +194,7 @@ class ConfigBackup:
     def get_latest_backup(self) -> str | None:
         """
         Get path to latest backup.
-        
+
         Returns:
             Path to latest backup or None if no backups exist
         """
@@ -206,10 +206,10 @@ class ConfigBackup:
     def delete_backup(self, backup_path: str) -> bool:
         """
         Delete a specific backup.
-        
+
         Args:
             backup_path: Path to backup file
-            
+
         Returns:
             True if deleted, False otherwise
         """
@@ -227,7 +227,7 @@ class ConfigBackup:
     def _cleanup_old_backups(self) -> int:
         """
         Remove old backups exceeding max_backups limit.
-        
+
         Returns:
             Number of deleted backups
         """
@@ -252,12 +252,12 @@ class ConfigBackup:
     ) -> bool:
         """
         Export backup to different format.
-        
+
         Args:
             backup_path: Path to source backup
             output_path: Path for exported file
             format: Export format ('json', 'txt')
-            
+
         Returns:
             True if exported successfully
         """

@@ -53,7 +53,7 @@ class CachedConnection(Generic[T]):
 class ConnectionCache(Generic[T]):
     """
     LRU connection cache with TTL support.
-    
+
     Features:
     - Automatic eviction of expired connections
     - Max size limit
@@ -132,7 +132,7 @@ class ConnectionCache(Generic[T]):
     async def get(self, key: str) -> T | None:
         """
         Get connection from cache.
-        
+
         Returns None if not found or expired.
         """
         async with self._lock:
@@ -163,7 +163,7 @@ class ConnectionCache(Generic[T]):
     ) -> None:
         """
         Put connection into cache.
-        
+
         If cache is full, evicts least recently used connection.
         """
         async with self._lock:
@@ -232,7 +232,7 @@ class ConnectionCache(Generic[T]):
 class ConnectionPool(Generic[T]):
     """
     Connection pool with automatic sizing.
-    
+
     Similar to ConnectionCache but designed for pooling
     multiple connections to the same endpoint.
     """
