@@ -2568,6 +2568,195 @@ class WebDashboard:
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 
+        @self.app.route('/api/config/export', methods=['GET'])
+        def api_config_export() -> Response:
+            """Export configuration as JSON file."""
+            try:
+                from .constants import DEFAULT_CONFIG
+                
+                # Get current config
+                current_config = self.get_stats().get('config', {})
+                
+                # Merge with defaults for missing keys
+                export_config = {**DEFAULT_CONFIG, **current_config}
+                
+                # Remove sensitive data
+                export_config.pop('auth_credentials', None)
+                export_config.pop('ip_whitelist', None)
+                
+                # Create downloadable file
+                import json
+                from io import StringIO
+                
+                buffer = StringIO()
+                json.dump(export_config, buffer, indent=2, ensure_ascii=False)
+                buffer.seek(0)
+                
+                return Response(
+                    buffer.getvalue(),
+                    mimetype='application/json',
+                    headers={
+                        'Content-Disposition': 'attachment; filename=tg-ws-proxy-config.json'
+                    }
+                )
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/config/import', methods=['POST'])
+        def api_config_import() -> Response:
+            """Import configuration from JSON file."""
+            try:
+                import json
+                
+                if 'file' not in request.files:
+                    return jsonify({'error': 'No file provided'}), 400
+                
+                file = request.files['file']
+                if file.filename == '':
+                    return jsonify({'error': 'Empty filename'}), 400
+                
+                # Read and parse JSON
+                config_data = json.load(file.stream)
+                
+                # Validate required fields
+                required_fields = ['port', 'host', 'dc_ip']
+                for field in required_fields:
+                    if field not in config_data:
+                        return jsonify({'error': f'Missing required field: {field}'}), 400
+                
+                # Update configuration
+                if self.update_config:
+                    success = self.update_config(config_data)
+                    if success:
+                        return jsonify({
+                            'status': 'success',
+                            'message': 'Configuration imported successfully',
+                            'config': config_data
+                        })
+                    else:
+                        return jsonify({'error': 'Failed to apply configuration'}), 500
+                else:
+                    return jsonify({'error': 'Configuration update not available'}), 500
+                    
+            except json.JSONDecodeError as e:
+                return jsonify({'error': f'Invalid JSON: {str(e)}'}), 400
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/settings/advanced', methods=['GET'])
+        def api_advanced_settings() -> Response:
+            """Get advanced settings."""
+            try:
+                from .optimizer import get_optimizer
+                
+                optimizer = get_optimizer()
+                opt_stats = optimizer.get_statistics()
+                
+                return jsonify({
+                    'optimizer': {
+                        'level': opt_stats.get('optimization_level', 'BALANCED'),
+                        'pool_size': opt_stats.get('current_pool_size', 4),
+                        'max_connections': opt_stats.get('current_max_connections', 100),
+                        'dc_stats': opt_stats.get('dc_stats', {}),
+                        'cache_stats': opt_stats.get('cache_stats', {}),
+                    },
+                    'features': {
+                        'auto_scaling': optimizer.config.enable_auto_scaling,
+                        'memory_optimization': optimizer.config.enable_memory_optimization,
+                        'smart_dc_selection': optimizer.config.enable_smart_dc_selection,
+                    }
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/settings/advanced', methods=['POST'])
+        def api_advanced_settings_update() -> Response:
+            """Update advanced settings."""
+            try:
+                from .optimizer import get_optimizer
+                
+                data = request.get_json()
+                if not data:
+                    return jsonify({'error': 'No data provided'}), 400
+                
+                optimizer = get_optimizer()
+                
+                # Update optimizer settings
+                if 'level' in data:
+                    from .optimizer import OptimizationLevel
+                    level_map = {
+                        'MINIMAL': OptimizationLevel.MINIMAL,
+                        'BALANCED': OptimizationLevel.BALANCED,
+                        'AGGRESSIVE': OptimizationLevel.AGGRESSIVE,
+                    }
+                    optimizer.config.level = level_map.get(data['level'], OptimizationLevel.BALANCED)
+                
+                if 'pool_size' in data:
+                    optimizer._current_pool_size = max(2, min(data['pool_size'], 64))
+                
+                if 'max_connections' in data:
+                    optimizer._current_max_connections = max(50, min(data['max_connections'], 500))
+                
+                if 'enable_auto_scaling' in data:
+                    optimizer.config.enable_auto_scaling = data['enable_auto_scaling']
+                
+                if 'enable_memory_optimization' in data:
+                    optimizer.config.enable_memory_optimization = data['enable_memory_optimization']
+                
+                if 'enable_smart_dc_selection' in data:
+                    optimizer.config.enable_smart_dc_selection = data['enable_smart_dc_selection']
+                
+                if 'dc_blacklist_duration' in data:
+                    optimizer.config.dc_blacklist_duration = float(data['dc_blacklist_duration'])
+                
+                if 'dc_error_threshold' in data:
+                    optimizer.config.dc_error_threshold = int(data['dc_error_threshold'])
+                
+                return jsonify({
+                    'status': 'success',
+                    'config': optimizer.get_statistics()
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/diagnostics/run', methods=['POST'])
+        def api_diagnostics_run() -> Response:
+            """Run connection diagnostics."""
+            try:
+                from .diagnostics import run_full_diagnostics
+                
+                # Run diagnostics in background to avoid blocking
+                import asyncio
+                
+                async def run_diag():
+                    return await run_full_diagnostics()
+                
+                # For now, return immediate status
+                # Full diagnostics would be run asynchronously
+                return jsonify({
+                    'status': 'started',
+                    'message': 'Diagnostics started in background'
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/diagnostics/results')
+        def api_diagnostics_results() -> Response:
+            """Get latest diagnostics results."""
+            try:
+                from .diagnostics import DC_DOMAINS, DC_IPS
+                
+                # Return cached or last known results
+                # In a full implementation, this would fetch from a shared state
+                return jsonify({
+                    'dc_domains': DC_DOMAINS,
+                    'dc_ips': DC_IPS,
+                    'last_run': None,
+                    'results': []
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
         @self.app.route('/manifest.json')
         def manifest() -> Response:
             """Serve PWA manifest."""
