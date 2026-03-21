@@ -6,12 +6,15 @@
 
 ---
 
-## ✅ Выполнено (v2.10.0 — v2.35.0)
+## ✅ Выполнено (v2.37.0)
 
-### Сборка и Тесты
-- ✅ Android APK сборка (Java 21 LTS, AGP 9.1.0)
-- ✅ Исправлен `Windows PermissionError` в `tests/test_logger.py`
-- ✅ `logger.py` — 100% покрытие ✅
+### Performance & Stability
+- ✅ Zero-copy буферизация WebSocket
+- ✅ Batch отправка WebSocket фреймов
+- ✅ Исправлена обработка ошибок WebSocket (_read_frame, recv)
+- ✅ Timeout на чтение фреймов (30s)
+- ✅ Обработка IncompleteReadError и TimeoutError
+- ✅ Улучшен health check — подсчёт failed connections
 
 ### Ядро и Сеть (Stability Phase)
 - ✅ `test_tg_ws_proxy_logic.py` — тесты парсинга пакетов ✅
@@ -80,11 +83,11 @@ Mypy: missing stubs (внешние зависимости)
 ### Производительность
 - [x] **Zero-copy буферизация** — `memoryview` вместо копирования байтов ✅
 - [x] **Batch WebSocket отправка** — группировка мелких пакетов (<4KB) ✅
-- [ ] **Автоматический выбор DC** — по latency в реальном времени
+- [x] **Автоматический выбор DC** — по latency в реальном времени (5 мин) ✅
 - [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP
 
 ### Надёжность
-- [ ] **Экспоненциальный backoff** — при ошибках подключения
+- [x] **Экспоненциальный backoff** — при ошибках подключения (2^(n-1), max 8x) ✅
 - [ ] **Graceful shutdown** — корректное завершение всех соединений
 - [ ] **Memory Profiling** — поиск утечек в пулах (tracemalloc/memray)
 

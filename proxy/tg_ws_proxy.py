@@ -2246,41 +2246,81 @@ async def _run(
 
     asyncio.create_task(log_stats())
 
-    # Background task for periodic DC ping monitoring
+    # Background task for periodic DC ping monitoring with auto-switch
     _last_latency_alert: dict[int, float] = {}  # dc_id -> last alert time
+    _last_dc_switch: float = 0.0
+    _switch_cooldown = 300.0  # 5 minutes between DC switches
     _high_latency_threshold = 200.0  # ms
     _alert_cooldown = 300.0  # 5 minutes between alerts for same DC
+    _current_best_dc: int | None = None
 
     async def monitor_dc_latency() -> None:
-        """Periodically re-measure DC latency to adapt to network changes."""
-        nonlocal _last_latency_alert
+        """Periodically re-measure DC latency and auto-switch to best DC."""
+        nonlocal _last_latency_alert, _last_dc_switch, _current_best_dc
+        
         while True:
-            await asyncio.sleep(600)  # Check every 10 minutes
+            await asyncio.sleep(300)  # Check every 5 minutes
             log.debug("Re-checking DC latency...")
             dc_pings = await _measure_all_dc_pings(dc_opt)
             now = time.monotonic()
 
+            if not dc_pings:
+                continue
+
+            # Find best DC by latency
+            best_dc = min(dc_pings, key=lambda x: dc_pings[x])
+            best_latency = dc_pings[best_dc]
+            
+            # Store latency in stats
             for dc_id, latency_ms in dc_pings.items():
                 server_instance.stats.record_latency(dc_id, latency_ms)
 
-                # Check for high latency and notify
+            # Auto-switch to best DC if conditions met
+            if _current_best_dc != best_dc:
+                # Check if we should switch
+                should_switch = False
+                
+                # Always switch on first measurement
+                if _current_best_dc is None:
+                    should_switch = True
+                    log.info("Initial DC selection: DC%d (%.1fms)", best_dc, best_latency)
+                # Switch if current DC has high latency and best is significantly better
+                elif best_dc in dc_pings and _current_best_dc in dc_pings:
+                    current_latency = dc_pings.get(_current_best_dc, float('inf'))
+                    latency_diff = current_latency - best_latency
+                    
+                    # Switch if difference > 50ms and cooldown passed
+                    if latency_diff > 50 and (now - _last_dc_switch) > _switch_cooldown:
+                        should_switch = True
+                        log.info("DC switch: DC%d (%.1fms) -> DC%d (%.1fms) [diff: %.1fms]",
+                                _current_best_dc, current_latency, best_dc, best_latency, latency_diff)
+                
+                if should_switch and best_dc in dc_opt:
+                    # Update dc_opt to prioritize best DC
+                    # Move best DC to first position in routing
+                    current_ip = dc_opt[best_dc]
+                    dc_opt.pop(best_dc)
+                    dc_opt = {best_dc: current_ip, **dc_opt}
+                    server_instance.dc_opt = dc_opt
+                    _current_best_dc = best_dc
+                    _last_dc_switch = now
+                    
+                    # Warmup WS pool for new best DC
+                    asyncio.create_task(server_instance.ws_pool.warmup({best_dc: current_ip}))
+                    log.info("DC switched to DC%d (new primary)", best_dc)
+
+            # Check for high latency and notify
+            for dc_id, latency_ms in dc_pings.items():
                 if latency_ms > _high_latency_threshold:
-                    # Check cooldown
                     last_alert = _last_latency_alert.get(dc_id, 0)
                     if now - last_alert > _alert_cooldown:
                         _last_latency_alert[dc_id] = now
-                        # Notify via callback
-                        if _on_high_latency_callback:
-                            try:
-                                _on_high_latency_callback(dc_id, latency_ms)
-                            except Exception:
-                                pass
                         log.warning("DC%d: HIGH LATENCY %.1fms (threshold: %.1fms)",
                                    dc_id, latency_ms, _high_latency_threshold)
 
-            if dc_pings:
-                best_dc = min(dc_pings, key=lambda x: dc_pings[x])
-                log.info("DC latency updated - best: DC%d (%.1fms)", best_dc, dc_pings[best_dc])
+            log.info("DC latency: best=DC%d (%.1fms), current=%s",
+                    best_dc, best_latency,
+                    f"DC{_current_best_dc}" if _current_best_dc else "none")
 
     asyncio.create_task(monitor_dc_latency())
 
