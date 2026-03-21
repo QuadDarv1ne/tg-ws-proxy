@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -103,10 +104,6 @@ public class ProxyForegroundService extends Service {
                 isPythonRunning = true;
                 ProxyPlugin.onStatusChanged(true);
                 Log.i(TAG, "Python Proxy started on port: " + actualPort);
-                
-                // Watchdog: ждем завершения потока
-                // В данной архитектуре поток Python живет пока работает asyncio loop.
-                // Если он завершится, нам нужно обновить статус.
             } catch (Exception e) {
                 Log.e(TAG, "Error starting Python Proxy: " + e.getMessage());
                 isPythonRunning = false;
@@ -120,7 +117,6 @@ public class ProxyForegroundService extends Service {
         statsRunnable = new Runnable() {
             @Override
             public void run() {
-                // Проверяем живой ли поток Python
                 if (isPythonRunning && (proxyThread == null || !proxyThread.isAlive())) {
                     Log.w(TAG, "Watchdog: Python thread died, restarting...");
                     startProxy();
@@ -172,6 +168,10 @@ public class ProxyForegroundService extends Service {
         PendingIntent stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, 
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
+        Intent openTgIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("tg://socks?server=127.0.0.1&port=1080"));
+        PendingIntent openTgPendingIntent = PendingIntent.getActivity(this, 1, openTgIntent, 
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
         Intent notificationIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 
                 PendingIntent.FLAG_IMMUTABLE);
@@ -184,6 +184,7 @@ public class ProxyForegroundService extends Service {
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.proxy_stop), stopPendingIntent)
+                .addAction(android.R.drawable.ic_menu_send, getString(R.string.proxy_open_tg), openTgPendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setOnlyAlertOnce(true)
                 .build();

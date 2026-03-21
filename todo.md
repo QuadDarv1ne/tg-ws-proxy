@@ -36,6 +36,7 @@
 - ✅ Создана fixtures для Windows (tmp_path_safe)
 - ✅ Добавлены тесты для rate_limiter.py (14 тестов)
 - ✅ Исправлены все ruff ошибки (I001, F401, W293)
+- ✅ Ruff: 0 ошибок во всех файлах
 
 ### Документация
 - ✅ Очистка документации от дублирования
@@ -82,10 +83,13 @@
 - ✅ MainActivity — улучшения
 - ✅ shortcuts.xml — добавлены ярлыки
 - ✅ AndroidManifest — обновления
+- ✅ strings.xml — English локализация (values-en)
+- ✅ backup_rules.xml — правила бэкапа
+- ✅ data_extraction_rules.xml — правила извлечения данных
 
 ---
 
-## 🔴 Высокий приоритет (v2.31.0)
+## 🔴 Высокий приоритет (v2.32.0)
 
 ### Тесты и покрытие
 - [ ] Покрытие tg_ws_proxy.py: 13% → 60%
@@ -99,7 +103,7 @@
 - [ ] rate_limiter.py: 14 тестов → 80% coverage
 - [ ] crypto.py: 25% → 80%
 - [ ] alerts.py: 40% → 80%
-- [ ] logger.py: 0% → 80%
+- [ ] logger.py: 9 тестов (fix Windows PermissionError) → 80%
 
 ### Производительность
 - [ ] HTTP/2 для WebSocket
@@ -108,7 +112,7 @@
 
 ---
 
-## 🟢 Низкий приоритет (v2.32.0)
+## 🟢 Низкий приоритет (v2.33.0)
 
 ### Документация (без запроса не менять)
 - [ ] Скриншоты интерфейса в README
@@ -124,6 +128,7 @@
 ### Android
 - [ ] Улучшения стабильности сервиса
 - [ ] Оптимизация батареи
+- [ ] Quick Settings Tile
 
 ---
 
@@ -141,9 +146,9 @@ Mypy: missing stubs (внешние зависимости)
 - `rate_limiter.py` — 14 тестов, покрытие ~40%
 - `crypto.py` — 25%
 - `alerts.py` — 40%
-- `logger.py` — 9 тестов (PermissionError на Windows)
+- `logger.py` — 9 тестов (Windows PermissionError)
 
-**Новые модули (требуют тестов):**
+**Новые модули (отличное покрытие):**
 - `optimizer.py` — 100% (17 тестов)
 - `plugins.py` — 100% (14 тестов)
 - `dc_monitor.py` — 100% (30 тестов)
@@ -151,7 +156,6 @@ Mypy: missing stubs (внешние зависимости)
 - `connection_cache.py` — 100% (27 тестов)
 - `client_stats.py` — 100% (39 тестов)
 - `config_backup.py` — 100% (24 тестов)
-- `logger.py` — 0% (9 тестов, Windows PermissionError)
 
 ---
 
