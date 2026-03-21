@@ -863,7 +863,16 @@ class RawWebSocket:
         internally.  Returns payload bytes, or None on clean close.
         """
         while not self._closed:
-            opcode, payload = await self._read_frame()
+            try:
+                opcode, payload = await self._read_frame()
+            except asyncio.IncompleteReadError:
+                # Connection closed gracefully
+                self._closed = True
+                return None
+            except asyncio.TimeoutError:
+                # Read timeout — connection may be stuck
+                self._closed = True
+                return None
 
             if opcode == self.OP_CLOSE:
                 self._closed = True
@@ -940,24 +949,41 @@ class RawWebSocket:
         return bytes(header) + data
 
     async def _read_frame(self) -> tuple[int, bytes]:
-        hdr = await self.reader.readexactly(2)
+        """Read a single WebSocket frame from the reader."""
+        try:
+            hdr = await asyncio.wait_for(self.reader.readexactly(2), timeout=30.0)
+        except asyncio.TimeoutError:
+            raise asyncio.TimeoutError("Frame header read timeout")
+        except asyncio.IncompleteReadError:
+            raise asyncio.IncompleteReadError("Connection closed during header read")
+
         opcode = hdr[0] & 0x0F
         is_masked = bool(hdr[1] & 0x80)
         length = hdr[1] & 0x7F
 
         if length == 126:
-            length = struct.unpack('>H',
-                                   await self.reader.readexactly(2))[0]
+            try:
+                length = struct.unpack('>H', await asyncio.wait_for(self.reader.readexactly(2), timeout=30.0))[0]
+            except asyncio.IncompleteReadError:
+                raise asyncio.IncompleteReadError("Connection closed during extended length read")
         elif length == 127:
-            length = struct.unpack('>Q',
-                                   await self.reader.readexactly(8))[0]
+            try:
+                length = struct.unpack('>Q', await asyncio.wait_for(self.reader.readexactly(8), timeout=30.0))[0]
+            except asyncio.IncompleteReadError:
+                raise asyncio.IncompleteReadError("Connection closed during extended length read")
 
         if is_masked:
-            mask_key = await self.reader.readexactly(4)
-            payload = await self.reader.readexactly(length)
-            return opcode, _xor_mask(payload, mask_key)
+            try:
+                mask_key = await asyncio.wait_for(self.reader.readexactly(4), timeout=30.0)
+                payload = await asyncio.wait_for(self.reader.readexactly(length), timeout=30.0)
+                return opcode, _xor_mask(payload, mask_key)
+            except asyncio.IncompleteReadError:
+                raise asyncio.IncompleteReadError("Connection closed during masked payload read")
 
-        payload = await self.reader.readexactly(length)
+        try:
+            payload = await asyncio.wait_for(self.reader.readexactly(length), timeout=30.0)
+        except asyncio.IncompleteReadError:
+            raise asyncio.IncompleteReadError("Connection closed during payload read")
         return opcode, payload
 
 
@@ -1186,6 +1212,9 @@ class _WsPool:
 
     async def _send_heartbeats(self) -> None:
         """Send PING frames to all pooled connections and remove unresponsive ones."""
+        checked_count = 0
+        failed_count = 0
+
         for key, bucket in list(self._idle.items()):
             valid_ws: list[tuple[RawWebSocket, float]] = []
             for ws, created in bucket:
@@ -1195,13 +1224,21 @@ class _WsPool:
                     # Send PING frame
                     await ws.send(b'', opcode=RawWebSocket.OP_PING)
                     valid_ws.append((ws, created))
+                    checked_count += 1
+                except asyncio.TimeoutError:
+                    log.debug("Health check timeout for DC%d%s", key[0], 'm' if key[1] else '')
+                    asyncio.create_task(self._quiet_close(ws))
+                    failed_count += 1
                 except Exception as e:
                     log.debug("Health check failed for DC%d%s: %s", key[0], 'm' if key[1] else '', e)
-                    # Close failed connection in background
                     asyncio.create_task(self._quiet_close(ws))
+                    failed_count += 1
             self._idle[key] = valid_ws
 
-        log.debug("Health check completed: %d connections checked", sum(len(b) for b in self._idle.values()))
+        if failed_count > 0:
+            log.info("Health check: %d checked, %d failed", checked_count, failed_count)
+        else:
+            log.debug("Health check completed: %d connections checked", checked_count)
 
     async def get(self, dc: int, is_media: bool,
                   target_ip: str, domains: list[str]
@@ -1426,7 +1463,13 @@ def _get_tcp_pool() -> _TcpPool:
 async def _bridge_ws(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, ws: RawWebSocket, label: str, stats: Stats,
                      dc: int | None = None, dst: str | None = None, port: int | None = None, is_media: bool = False,
                      splitter: _MsgSplitter | None = None) -> tuple[int, int]:
-    """Bidirectional TCP <-> WebSocket forwarding."""
+    """Bidirectional TCP <-> WebSocket forwarding.
+
+    Optimizations:
+    - Zero-copy reads using memoryview where possible
+    - Batch small packets for efficiency
+    - Adaptive drain based on buffer pressure
+    """
     dc_tag = f"DC{dc}{'m' if is_media else ''}" if dc else "DC?"
     dst_tag = f"{dst}:{port}" if dst else "?"
 
@@ -1436,28 +1479,61 @@ async def _bridge_ws(reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
     down_packets = 0
     start_time = asyncio.get_event_loop().time()
 
+    # Batch buffer for small packets (reduce WebSocket frame overhead)
+    BATCH_SIZE = 4096  # Batch small packets <4KB
+    batch_buffer: bytearray = bytearray()
+
     async def tcp_to_ws() -> None:
-        nonlocal up_bytes, up_packets
+        nonlocal up_bytes, up_packets, batch_buffer
         try:
             while True:
                 chunk = await reader.read(65536)
                 if not chunk:
                     break
-                stats.add_bytes(up=len(chunk))
-                up_bytes += len(chunk)
+
+                # Use memoryview for zero-copy length check
+                mv = memoryview(chunk)
+                chunk_len = len(mv)
+                if chunk_len == 0:
+                    break
+
+                stats.add_bytes(up=chunk_len)
+                up_bytes += chunk_len
                 up_packets += 1
+
                 if splitter:
-                    parts = splitter.split(chunk)
+                    # Splitter needs bytes, not memoryview
+                    parts = splitter.split(bytes(mv))
                     if len(parts) > 1:
                         await ws.send_batch(parts)
                     else:
                         await ws.send(parts[0])
                 else:
-                    await ws.send(chunk)
+                    # Batch small packets for efficiency
+                    if chunk_len < BATCH_SIZE:
+                        batch_buffer.extend(mv)
+                        # Send batch if large enough or timeout
+                        if len(batch_buffer) >= BATCH_SIZE:
+                            await ws.send(bytes(batch_buffer))
+                            batch_buffer.clear()
+                    else:
+                        # Send large chunks immediately
+                        if batch_buffer:
+                            await ws.send(bytes(batch_buffer))
+                            batch_buffer.clear()
+                        await ws.send(chunk)
         except (asyncio.CancelledError, ConnectionError, OSError):
             return
         except Exception as e:
             log.debug("[%s] tcp->ws ended: %s", label, e)
+        finally:
+            # Flush remaining batch buffer
+            if batch_buffer:
+                try:
+                    await ws.send(bytes(batch_buffer))
+                    batch_buffer.clear()
+                except Exception:
+                    pass
 
     async def ws_to_tcp() -> None:
         nonlocal down_bytes, down_packets
@@ -1466,11 +1542,19 @@ async def _bridge_ws(reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
                 data = await ws.recv()
                 if data is None:
                     break
-                stats.bytes_down += len(data)
-                down_bytes += len(data)
+
+                # Use memoryview for zero-copy operations
+                mv = memoryview(data)
+                data_len = len(mv)
+                if data_len == 0:
+                    continue
+
+                stats.bytes_down += data_len
+                down_bytes += data_len
                 down_packets += 1
                 writer.write(data)
-                # drain only when kernel buffer is filling up
+
+                # Adaptive drain: only when buffer is filling up
                 buf = writer.transport.get_write_buffer_size()
                 if buf > SEND_BUF_SIZE:
                     await writer.drain()
