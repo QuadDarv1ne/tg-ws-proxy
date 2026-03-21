@@ -24,7 +24,7 @@
 
 ### Код-качество
 - ✅ Ruff: 127 → 0 ошибок
-- ✅ Mypy: ~10 ошибок (только missing stubs)
+- ✅ Mypy: missing stubs (внешние зависимости)
 - ✅ Новые модули: `proxy/i18n.py`, `proxy/updater.py`
 - ✅ Python 3.14 совместимость (tray.py asyncio.run)
 
@@ -84,14 +84,14 @@
 ## 📊 Статус
 
 ```
-Tests: 255 passed, 3 skipped
-Coverage: ~35% (цель >80%)
+Tests: 255 passed, 3 skipped, 1 failed (test_tcp_connect_timeout)
+Coverage: 35% (цель >80%)
 Ruff: 0 ошибок
 Mypy: missing stubs (внешние зависимости)
 ```
 
 **Проблемные зоны:**
-- `tg_ws_proxy.py` — 13%
+- `tg_ws_proxy.py` — 12%
 - `rate_limiter.py` — 0% (исключён из тестов)
 - `crypto.py` — 25%
 - `alerts.py` — 40%
