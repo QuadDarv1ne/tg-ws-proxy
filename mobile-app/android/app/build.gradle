@@ -12,13 +12,14 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
 
         ndk {
-            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+            // Оптимизация размера: оставляем только самые популярные архитектуры
+            abiFilters "armeabi-v7a", "arm64-v8a"
         }
 
         python {
@@ -27,6 +28,12 @@ android {
                 install "cryptography"
                 install "psutil"
                 install "appdirs"
+            }
+            // Оптимизация Python: исключаем тесты и документацию из пакетов
+            staticProxy = true
+            pyc {
+                src false
+                pip true
             }
         }
     }
@@ -44,7 +51,6 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    // Автоматическое копирование Python файлов из папки /proxy в ресурсы приложения
     sourceSets {
         main {
             python {
@@ -74,12 +80,3 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
-
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.exists()) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
-}

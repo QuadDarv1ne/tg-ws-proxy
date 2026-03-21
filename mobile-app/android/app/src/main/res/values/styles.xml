@@ -1,20 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:build="http://schemas.android.com/apk/res/android">
 
-    <!-- Base application theme. -->
+    <!-- Base application theme with Material 3 -->
     <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorAccent">@color/colorAccent</item>
+
+        <!-- Нативные анимации Material 3 (Task 9) -->
+        <item name="android:windowActivityTransitions">true</item>
+        <item name="android:windowEnterTransition">@android:transition/fade</item>
+        <item name="android:windowExitTransition">@android:transition/fade</item>
     </style>
 
     <style name="AppTheme.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+
         <!-- Поддержка прозрачных системных панелей для Edge-to-Edge -->
         <item name="android:windowLayoutInDisplayCutoutMode" build:targetApi="28">shortEdges</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+
+        <!-- Material 3 Ripple effect & Highlights -->
+        <item name="android:colorControlHighlight">#40667eea</item>
     </style>
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">

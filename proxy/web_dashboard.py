@@ -2573,25 +2573,25 @@ class WebDashboard:
             """Export configuration as JSON file."""
             try:
                 from .constants import DEFAULT_CONFIG
-                
+
                 # Get current config
                 current_config = self.get_stats().get('config', {})
-                
+
                 # Merge with defaults for missing keys
                 export_config = {**DEFAULT_CONFIG, **current_config}
-                
+
                 # Remove sensitive data
                 export_config.pop('auth_credentials', None)
                 export_config.pop('ip_whitelist', None)
-                
+
                 # Create downloadable file
                 import json
                 from io import StringIO
-                
+
                 buffer = StringIO()
                 json.dump(export_config, buffer, indent=2, ensure_ascii=False)
                 buffer.seek(0)
-                
+
                 return Response(
                     buffer.getvalue(),
                     mimetype='application/json',
@@ -2607,23 +2607,23 @@ class WebDashboard:
             """Import configuration from JSON file."""
             try:
                 import json
-                
+
                 if 'file' not in request.files:
                     return jsonify({'error': 'No file provided'}), 400
-                
+
                 file = request.files['file']
                 if file.filename == '':
                     return jsonify({'error': 'Empty filename'}), 400
-                
+
                 # Read and parse JSON
                 config_data = json.load(file.stream)
-                
+
                 # Validate required fields
                 required_fields = ['port', 'host', 'dc_ip']
                 for field in required_fields:
                     if field not in config_data:
                         return jsonify({'error': f'Missing required field: {field}'}), 400
-                
+
                 # Update configuration
                 if self.update_config:
                     success = self.update_config(config_data)
@@ -2637,7 +2637,7 @@ class WebDashboard:
                         return jsonify({'error': 'Failed to apply configuration'}), 500
                 else:
                     return jsonify({'error': 'Configuration update not available'}), 500
-                    
+
             except json.JSONDecodeError as e:
                 return jsonify({'error': f'Invalid JSON: {str(e)}'}), 400
             except Exception as e:
@@ -2648,10 +2648,10 @@ class WebDashboard:
             """Get advanced settings."""
             try:
                 from .optimizer import get_optimizer
-                
+
                 optimizer = get_optimizer()
                 opt_stats = optimizer.get_statistics()
-                
+
                 return jsonify({
                     'optimizer': {
                         'level': opt_stats.get('optimization_level', 'BALANCED'),
@@ -2674,13 +2674,13 @@ class WebDashboard:
             """Update advanced settings."""
             try:
                 from .optimizer import get_optimizer
-                
+
                 data = request.get_json()
                 if not data:
                     return jsonify({'error': 'No data provided'}), 400
-                
+
                 optimizer = get_optimizer()
-                
+
                 # Update optimizer settings
                 if 'level' in data:
                     from .optimizer import OptimizationLevel
@@ -2690,28 +2690,28 @@ class WebDashboard:
                         'AGGRESSIVE': OptimizationLevel.AGGRESSIVE,
                     }
                     optimizer.config.level = level_map.get(data['level'], OptimizationLevel.BALANCED)
-                
+
                 if 'pool_size' in data:
                     optimizer._current_pool_size = max(2, min(data['pool_size'], 64))
-                
+
                 if 'max_connections' in data:
                     optimizer._current_max_connections = max(50, min(data['max_connections'], 500))
-                
+
                 if 'enable_auto_scaling' in data:
                     optimizer.config.enable_auto_scaling = data['enable_auto_scaling']
-                
+
                 if 'enable_memory_optimization' in data:
                     optimizer.config.enable_memory_optimization = data['enable_memory_optimization']
-                
+
                 if 'enable_smart_dc_selection' in data:
                     optimizer.config.enable_smart_dc_selection = data['enable_smart_dc_selection']
-                
+
                 if 'dc_blacklist_duration' in data:
                     optimizer.config.dc_blacklist_duration = float(data['dc_blacklist_duration'])
-                
+
                 if 'dc_error_threshold' in data:
                     optimizer.config.dc_error_threshold = int(data['dc_error_threshold'])
-                
+
                 return jsonify({
                     'status': 'success',
                     'config': optimizer.get_statistics()
@@ -2723,14 +2723,13 @@ class WebDashboard:
         def api_diagnostics_run() -> Response:
             """Run connection diagnostics."""
             try:
-                from .diagnostics import run_full_diagnostics
-                
                 # Run diagnostics in background to avoid blocking
-                import asyncio
-                
+
+                from .diagnostics import run_full_diagnostics
+
                 async def run_diag():
                     return await run_full_diagnostics()
-                
+
                 # For now, return immediate status
                 # Full diagnostics would be run asynchronously
                 return jsonify({
@@ -2745,7 +2744,7 @@ class WebDashboard:
             """Get latest diagnostics results."""
             try:
                 from .diagnostics import DC_DOMAINS, DC_IPS
-                
+
                 # Return cached or last known results
                 # In a full implementation, this would fetch from a shared state
                 return jsonify({
