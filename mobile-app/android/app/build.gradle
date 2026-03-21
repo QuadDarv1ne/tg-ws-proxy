@@ -49,6 +49,9 @@ dependencies {
     
     // LeakCanary для отладки утечек памяти
     debugImplementation libs.leakcanary
+
+    // Gemini AI
+    implementation libs.google.generativeai
 }
 
 apply from: 'capacitor.build.gradle'
