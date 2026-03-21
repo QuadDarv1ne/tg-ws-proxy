@@ -1,0 +1,57 @@
+# Android Gradle project .gitignore
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# Capacitor / Cordova specific
+# ----------------------------
+# We exclude the generated Cordova plugins folder
+capacitor-cordova-android-plugins/
+
+# We exclude the web assets that are copied by Capacitor
+app/src/main/assets/public/
+app/src/main/assets/capacitor.config.json
+app/src/main/assets/capacitor.plugins.json
+app/src/main/res/xml/config.xml
+
+# Confidential / Secret files
+# ----------------------------
+# NEVER check in your signing keys
+*.jks
+*.keystore
+*.p12
+
+# Google Services file (can contain API keys)
+# If you share this project publicly, uncomment the line below:
+google-services.json
+
+# If you have local API keys or secrets in properties
+secrets.properties
+
+# Build outputs
+# ----------------------------
+*.apk
+*.aar
+*.aab
+app/release/
+app/debug/
+
+# Android Studio Specific
+# ----------------------------
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+.navigation/
+.idea/workspace.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/navEditor.xml
+.idea/caches/
+.idea/modules.xml
+.idea/tasks.xml
+.idea/libraries/
+.idea/dictionaries/
