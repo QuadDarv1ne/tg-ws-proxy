@@ -2819,12 +2819,65 @@ class WebDashboard:
             """Clear DNS cache."""
             try:
                 from .tg_ws_proxy import clear_dns_cache
-
+                
                 clear_dns_cache()
-
+                
                 return jsonify({
                     'status': 'success',
                     'message': 'DNS cache cleared',
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/autotune/status')
+        def api_autotune_status() -> Response:
+            """Get auto-tuner status."""
+            try:
+                from .autotune import get_autotuner
+                
+                autotuner = get_autotuner()
+                stats = autotuner.get_statistics()
+                
+                return jsonify({
+                    'status': 'success',
+                    'autotune': stats,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/autotune/config', methods=['POST'])
+        def api_autotune_config() -> Response:
+            """Update auto-tuner configuration."""
+            try:
+                from .autotune import get_autotuner, TuningMode
+                
+                data = request.get_json()
+                if not data:
+                    return jsonify({'error': 'No data provided'}), 400
+                
+                autotuner = get_autotuner()
+                
+                if 'mode' in data:
+                    mode_map = {
+                        'CONSERVATIVE': TuningMode.CONSERVATIVE,
+                        'BALANCED': TuningMode.BALANCED,
+                        'AGGRESSIVE': TuningMode.AGGRESSIVE,
+                    }
+                    autotuner.config.mode = mode_map.get(data['mode'], TuningMode.BALANCED)
+                
+                if 'enable_pool_tuning' in data:
+                    autotuner.config.enable_pool_tuning = data['enable_pool_tuning']
+                
+                if 'enable_timeout_tuning' in data:
+                    autotuner.config.enable_timeout_tuning = data['enable_timeout_tuning']
+                
+                if 'enable_retry_tuning' in data:
+                    autotuner.config.enable_retry_tuning = data['enable_retry_tuning']
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Auto-tuner configuration updated',
+                    'config': autotuner.get_statistics(),
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
