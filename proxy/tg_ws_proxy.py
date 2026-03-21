@@ -431,6 +431,9 @@ class ProxyServer:
         self._log_stats_task: asyncio.Task | None = None
         self._dc_monitor_task: asyncio.Task | None = None
         self._optimize_pool_task: asyncio.Task | None = None
+        
+        # Memory profiler
+        self._memory_profiler: Any | None = None
 
         # Server instance for graceful shutdown
         self._server_instance: asyncio.Server | None = None
@@ -1203,6 +1206,13 @@ class _WsPool:
         self._heartbeat_timeout = 10.0   # Timeout for PONG response
         self._last_heartbeat = 0.0
         self._health_check_task: asyncio.Task | None = None
+        
+        # Memory profiling
+        try:
+            from .profiler import get_profiler
+            self._profiler = get_profiler().register_component('WsPool')
+        except Exception:
+            self._profiler = None
 
     async def start_health_checker(self) -> None:
         """Start background health check task."""
@@ -2369,6 +2379,15 @@ async def _run(
     await server_instance.ws_pool.start_health_checker()
     log.info("WS pool health checker started (interval: %.1fs)", server_instance.ws_pool._heartbeat_interval)
 
+    # Start memory profiler (optional, enabled via config)
+    try:
+        from .profiler import get_profiler
+        server_instance._memory_profiler = get_profiler(check_interval=300.0)  # 5 min
+        server_instance._memory_profiler.start()
+        log.info("Memory profiler started (interval: 300s)")
+    except Exception as e:
+        log.debug("Memory profiler not started: %s", e)
+
     if stop_event:
         async def wait_stop() -> None:
             await stop_event.wait()
@@ -2434,6 +2453,16 @@ async def _run(
                 except asyncio.CancelledError:
                     pass
                 log.info("Health checker stopped")
+
+            # Stop memory profiler
+            if server_instance._memory_profiler:
+                server_instance._memory_profiler.stop()
+                log.info("Memory profiler stopped")
+                
+                # Log final memory report
+                report = server_instance._memory_profiler.get_leak_report()
+                if report != "No memory leaks detected":
+                    log.info("Final memory report:\n%s", report)
 
             log.info("Graceful shutdown completed")
 
