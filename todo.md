@@ -6,7 +6,7 @@
 
 ---
 
-## ✅ Выполнено (v2.10.0 — v2.19.0)
+## ✅ Выполнено (v2.10.0 — v2.20.0)
 
 ### Сборка и релиз
 - ✅ Android APK сборка (Java 21 LTS)
@@ -26,9 +26,10 @@
 - ✅ Ruff: 127 → 0 ошибок
 - ✅ Mypy: ~10 ошибок (только missing stubs)
 - ✅ Новые модули: `proxy/i18n.py`, `proxy/updater.py`
+- ✅ Python 3.14 совместимость (tray.py asyncio.run)
 
 ### Тесты
-- ✅ Tests: 243 → 255 passed
+- ✅ Tests: 255 passed, 3 skipped
 - ✅ Добавлены тесты для i18n, updater, whitelist
 - ✅ Покрытие web_dashboard.py: 61% → 74%
 
@@ -44,12 +45,12 @@
 ## 🔴 Высокий приоритет (v2.20.0)
 
 ### Тесты и покрытие
-- [ ] Покрытие tg_ws_proxy.py: 23% → 60%
+- [ ] Покрытие tg_ws_proxy.py: 13% → 60%
   - [ ] Тесты для `_handle_client()` (интеграционные)
   - [ ] Тесты для WebSocket pool
   - [ ] Тесты для TCP fallback логики
 - [ ] Load tests (100+ одновременных подключений)
-- [ ] Coverage > 80% (текущее ~42%)
+- [ ] Coverage > 80% (текущее ~35%)
 
 ### Покрытие тестами
 - [ ] mtproto_proxy.py: 49% → 80%
@@ -84,14 +85,19 @@
 
 ```
 Tests: 255 passed, 3 skipped
-Coverage: ~42% (цель >80%)
+Coverage: ~35% (цель >80%)
+Ruff: 0 ошибок
+Mypy: missing stubs (внешние зависимости)
 ```
 
 **Проблемные зоны:**
-- `tg_ws_proxy.py` — 23%
-- `mtproto_proxy.py` — 49%
-- `dashboard.py` — 57%
+- `tg_ws_proxy.py` — 13%
+- `rate_limiter.py` — 0% (исключён из тестов)
+- `crypto.py` — 25%
 - `alerts.py` — 40%
+- `mtproto_proxy.py` — 49%
+- `web_dashboard.py` — 58%
+- `dashboard.py` — 57%
 
 ---
 
@@ -121,8 +127,8 @@ git merge dev
 git push origin main
 ```
 
-**Python:** `C:\Users\maksi\AppData\Local\Python\bin\python.exe` (3.14)  
-**Java:** `C:\Program Files\Java\jdk-21.0.10` (21 LTS)  
+**Python:** `C:\Users\maksi\AppData\Local\Python\bin\python.exe` (3.14)
+**Java:** `C:\Program Files\Java\jdk-21.0.10` (21 LTS)
 **Android SDK:** `%LOCALAPPDATA%\Android\Sdk`
 
 ---

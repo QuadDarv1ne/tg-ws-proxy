@@ -1,3 +1,5 @@
+"""Telegram Desktop WebSocket Bridge Proxy."""
+
 from __future__ import annotations
 
 import argparse
@@ -1874,8 +1876,6 @@ async def _run(
 
     # Check for updates (non-blocking)
     try:
-        import asyncio
-
         from .updater import check_for_updates
 
         async def check_update_async():

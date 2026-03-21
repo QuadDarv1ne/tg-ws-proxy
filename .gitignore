@@ -36,13 +36,13 @@ generate_qr.py
 web_server.log
 
 # Mobile build
-mobile-app/android/
-mobile-app/ios/
-mobile-app/node_modules/
+#mobile-app/android/
+#mobile-app/ios/
+#mobile-app/node_modules/
 
 # Keep gradle.properties for build configuration
-!mobile-app/android/gradle.properties
-!mobile-app/android/variables.gradle
+#!mobile-app/android/gradle.properties
+#!mobile-app/android/variables.gradle
 
 # PWA cache
 *.cache
