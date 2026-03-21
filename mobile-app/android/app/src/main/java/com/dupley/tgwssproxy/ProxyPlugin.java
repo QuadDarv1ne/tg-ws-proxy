@@ -11,6 +11,8 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 @CapacitorPlugin(name = "ProxyControl")
@@ -43,6 +45,56 @@ public class ProxyPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("status", "stopping");
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void clearDNS(PluginCall call) {
+        try {
+            if (Python.isStarted()) {
+                Python py = Python.getInstance();
+                PyObject module = py.getModule("android_entry");
+                boolean success = module.callAttr("clear_dns").toBoolean();
+                JSObject ret = new JSObject();
+                ret.put("success", success);
+                call.resolve(ret);
+            } else {
+                call.reject("Python not started");
+            }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void setCustomDCs(PluginCall call) {
+        JSObject dcs = call.getObject("dcs");
+        if (dcs == null) {
+            call.reject("Missing 'dcs' object. Format: { '2': '1.2.3.4' }");
+            return;
+        }
+
+        try {
+            if (Python.isStarted()) {
+                Python py = Python.getInstance();
+                PyObject module = py.getModule("android_entry");
+                
+                Map<String, String> dcMap = new HashMap<>();
+                Iterator<String> keys = dcs.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    dcMap.put(key, dcs.getString(key));
+                }
+                
+                boolean success = module.callAttr("set_custom_dc_ips", dcMap).toBoolean();
+                JSObject ret = new JSObject();
+                ret.put("success", success);
+                call.resolve(ret);
+            } else {
+                call.reject("Python not started");
+            }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
     }
 
     @PluginMethod

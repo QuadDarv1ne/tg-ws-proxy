@@ -5,7 +5,7 @@ import socket
 import io
 
 from proxy.constants import DC_IP_MAP
-from proxy.tg_ws_proxy import _run, get_stats, get_stats_summary, _measure_dc_ping
+from proxy.tg_ws_proxy import _run, get_stats, get_stats_summary, _measure_dc_ping, _clear_dns_cache
 
 # Буфер для хранения логов в памяти
 log_stream = io.StringIO()
@@ -26,6 +26,7 @@ logger = logging.getLogger("python-proxy")
 stop_event = None
 proxy_thread = None
 _proxy_port = 1080
+_custom_dc_opt = None
 
 def find_free_port(start_port=1080):
     """Находит свободный порт, начиная с указанного"""
@@ -39,8 +40,20 @@ def find_free_port(start_port=1080):
                 port += 1
     return start_port
 
+def set_custom_dc_ips(dc_ips_dict):
+    """Позволяет установить кастомные IP для DC из Java/JS"""
+    global _custom_dc_opt
+    try:
+        # dc_ips_dict должен быть мапой {dc_id: ip}
+        _custom_dc_opt = {int(k): v for k, v in dc_ips_dict.items()}
+        logger.info(f"Custom DC IPs set: {_custom_dc_opt}")
+        return True
+    except Exception as e:
+        logger.error(f"Error setting custom DC IPs: {e}")
+        return False
+
 def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
-    global stop_event, proxy_thread, _proxy_port
+    global stop_event, proxy_thread, _proxy_port, _custom_dc_opt
     
     if auto_port:
         _proxy_port = find_free_port(port)
@@ -52,7 +65,9 @@ def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
         return {"status": "Already running", "port": _proxy_port}
 
     stop_event = asyncio.Event()
-    dc_opt = {dc_id: ip for dc_id, ip in DC_IP_MAP.items()}
+    
+    # Используем кастомные IP или дефолтные
+    dc_opt = _custom_dc_opt if _custom_dc_opt else {dc_id: ip for dc_id, ip in DC_IP_MAP.items()}
 
     def run_loop():
         logger.info(f"Starting proxy on {host}:{_proxy_port}")
@@ -84,6 +99,16 @@ def stop_proxy():
 def is_running():
     global proxy_thread
     return proxy_thread is not None and proxy_thread.is_alive()
+
+def clear_dns():
+    """Сбрасывает DNS кэш прокси"""
+    try:
+        _clear_dns_cache()
+        logger.info("DNS cache cleared by user")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to clear DNS cache: {e}")
+        return False
 
 def get_recent_logs():
     """Возвращает содержимое буфера логов и очищает его, если он слишком большой"""

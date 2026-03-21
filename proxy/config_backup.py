@@ -28,7 +28,7 @@ log = logging.getLogger('tg-config-backup')
 class ConfigBackup:
     """
     Automatic configuration backup system.
-    
+
     Features:
     - Scheduled automatic backups
     - Version history with timestamps

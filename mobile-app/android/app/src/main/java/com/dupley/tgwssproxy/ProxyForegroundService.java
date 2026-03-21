@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import com.chaquo.python.PyObject;
@@ -32,16 +33,34 @@ public class ProxyForegroundService extends Service {
     private boolean isPythonRunning = false;
     private Handler statsHandler = new Handler(Looper.getMainLooper());
     private Runnable statsRunnable;
+    private PowerManager.WakeLock wakeLock;
 
     @Override
     public void onCreate() {
         super.onCreate();
         initPython();
+        acquireWakeLock();
     }
 
     private void initPython() {
         if (!Python.isStarted()) {
             Python.start(new AndroidPlatform(this));
+        }
+    }
+
+    private void acquireWakeLock() {
+        PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (powerManager != null) {
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TGWSProxy:ServiceWakeLock");
+            wakeLock.acquire();
+            Log.i(TAG, "WakeLock acquired");
+        }
+    }
+
+    private void releaseWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+            Log.i(TAG, "WakeLock released");
         }
     }
 
@@ -73,11 +92,9 @@ public class ProxyForegroundService extends Service {
                 Python py = Python.getInstance();
                 PyObject proxyModule = py.getModule("android_entry");
                 
-                // Вызываем start_proxy с сохраненными параметрами
                 PyObject result = proxyModule.callAttr("start_proxy", "127.0.0.1", savedPort, autoPort);
                 int actualPort = result.asMap().get(py.getBuiltins().get("str").call("port")).toInt();
                 
-                // Если порт изменился (был авто-выбор), сохраним его
                 if (actualPort != savedPort) {
                     prefs.edit().putInt(KEY_PORT, actualPort).apply();
                 }
@@ -115,7 +132,7 @@ public class ProxyForegroundService extends Service {
             long bytesDown = stats.get(py.getBuiltins().get("str").call("bytes_down")).toLong();
             int port = stats.get(py.getBuiltins().get("str").call("port")).toInt();
 
-            String content = String.format("Прокси на порту %d | Соединений: %d", port, connections);
+            String content = String.format("Порт %d | Соединений: %d", port, connections);
             String subContent = String.format("↑ %s  ↓ %s", formatBytes(bytesUp), formatBytes(bytesDown));
 
             NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -172,6 +189,7 @@ public class ProxyForegroundService extends Service {
     @Override
     public void onDestroy() {
         stopProxy();
+        releaseWakeLock();
         super.onDestroy();
     }
 
