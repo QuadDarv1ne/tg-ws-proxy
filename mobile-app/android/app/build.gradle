@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.chaquo.python'
 
 android {
     namespace "com.dupley.tgwssproxy"
@@ -13,8 +14,20 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        }
+
+        python {
+            version "3.11"
+            pip {
+                install "cryptography"
+                install "psutil"
+                install "appdirs"
+            }
         }
     }
 
@@ -29,6 +42,15 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Автоматическое копирование Python файлов из папки /proxy в ресурсы приложения
+    sourceSets {
+        main {
+            python {
+                srcDirs = ["src/main/python", "../../../proxy"]
+            }
+        }
     }
 }
 
@@ -47,10 +69,7 @@ dependencies {
     androidTestImplementation libs.androidx.junit
     androidTestImplementation libs.androidx.espresso.core
     
-    // LeakCanary для отладки утечек памяти
     debugImplementation libs.leakcanary
-
-    // Gemini AI
     implementation libs.google.generativeai
 }
 
