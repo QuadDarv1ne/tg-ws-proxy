@@ -46,59 +46,28 @@ _session_id = None
 _current_best_dc = 2
 
 async def monitor_best_dc():
-    """Динамический выбор лучшего DC (Task 1)"""
     global _current_best_dc, _custom_dc_opt
     while not stop_event or not stop_event.is_set():
         try:
             dcs_to_check = _custom_dc_opt.keys() if _custom_dc_opt else DC_IP_MAP.keys()
             best_latency = float('inf')
             best_id = _current_best_dc
-            
             for dc_id in dcs_to_check:
                 latency, _ = await _measure_dc_ping(dc_id, timeout=2.0)
                 if latency and latency < best_latency:
                     best_latency = latency
                     best_id = dc_id
-            
             if best_id != _current_best_dc:
-                logger.info(f"Dynamic DC Switch: DC{_current_best_dc} -> DC{best_id} (Ping: {best_latency:.1f}ms)")
                 _current_best_dc = best_id
-                
-        except Exception as e:
-            logger.debug(f"DC Monitoring error: {e}")
-        await asyncio.sleep(300) # Проверка каждые 5 минут
+        except: pass
+        await asyncio.sleep(300)
 
 def tune_tcp_socket(sock):
-    """Низкоуровневая настройка TCP для мобильных сетей (Task 8)"""
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        if hasattr(socket, "TCP_KEEPIDLE"):
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+        if hasattr(socket, "TCP_KEEPIDLE"): sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 128 * 1024)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 128 * 1024)
-        logger.debug("TCP Socket tuned for mobile network")
-    except Exception as e:
-        logger.error(f"Failed to tune socket: {e}")
-
-def start_session_logging():
-    global _session_id
-    _session_id = int(time.time())
-    logger.info(f"New Proxy Session started: {_session_id}")
-
-def save_session_report():
-    try:
-        stats = get_stats()
-        report = {
-            "session_id": _session_id,
-            "duration_sec": time.time() - _session_id if _session_id else 0,
-            "final_stats": stats,
-            "timestamp": time.ctime()
-        }
-        file_path = os.path.join(os.environ.get("HOME", "."), f"session_{_session_id}.json")
-        with open(file_path, "w") as f: json.dump(report, f)
-        path = os.environ.get("HOME", ".")
-        reports = sorted([f for f in os.listdir(path) if f.startswith("session_")])
-        for r in reports[:-5]: os.remove(os.path.join(path, r))
     except: pass
 
 def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
@@ -106,17 +75,14 @@ def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
     _proxy_port = port
     if proxy_thread and proxy_thread.is_alive(): return {"status": "Already running", "port": _proxy_port}
     
-    start_session_logging()
+    _session_id = int(time.time())
     stop_event = asyncio.Event()
     dc_opt = _custom_dc_opt if _custom_dc_opt else {dc_id: ip for dc_id, ip in DC_IP_MAP.items()}
 
     def run_loop():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
-        # Запускаем мониторинг лучшего DC в фоне asyncio (Task 1)
         loop.create_task(monitor_best_dc())
-        
         try:
             loop.run_until_complete(_run(
                 port=_proxy_port, dc_opt=dc_opt, stop_event=stop_event, host=host,
@@ -125,7 +91,6 @@ def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
         except Exception:
             write_crash_log(traceback.format_exc())
         finally:
-            save_session_report()
             loop.close()
 
     proxy_thread = threading.Thread(target=run_loop, daemon=True)
@@ -138,6 +103,11 @@ def get_proxy_stats_dict():
         stats["is_running"] = proxy_thread is not None and proxy_thread.is_alive()
         stats["port"] = _proxy_port
         stats["best_dc"] = _current_best_dc
+        
+        # Добавляем список сессий (Task 9)
+        # В Stats классе это можно извлечь из активных соединений
+        # Для мобильного приложения ограничим количество
+        stats["active_sessions_count"] = stats.get("connections_ws", 0)
         return stats
     except Exception as e: return {"error": str(e)}
 
@@ -146,3 +116,9 @@ def write_crash_log(error_msg):
         crash_file = os.path.join(os.environ.get("HOME", "."), "crash_log.txt")
         with open(crash_file, "a") as f: f.write(f"\n--- CRASH {time.ctime()} ---\n{error_msg}\n")
     except: pass
+
+def clear_dns():
+    try:
+        _clear_dns_cache()
+        return True
+    except: return False

@@ -18,7 +18,6 @@ android {
         }
 
         ndk {
-            // Оптимизация размера: оставляем только самые популярные архитектуры
             abiFilters "armeabi-v7a", "arm64-v8a"
         }
 
@@ -29,7 +28,6 @@ android {
                 install "psutil"
                 install "appdirs"
             }
-            // Оптимизация Python: исключаем тесты и документацию из пакетов
             staticProxy = true
             pyc {
                 src false
@@ -67,6 +65,9 @@ dependencies {
     implementation libs.androidx.appcompat
     implementation libs.androidx.coordinatorlayout
     implementation libs.androidx.core.splashscreen
+    implementation libs.androidx.security.crypto
+    implementation libs.androidx.work.runtime
+    implementation libs.androidx.biometric
     
     implementation project(':capacitor-android')
     implementation project(':capacitor-cordova-android-plugins')
