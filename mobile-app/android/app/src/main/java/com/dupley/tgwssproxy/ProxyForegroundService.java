@@ -35,6 +35,7 @@ public class ProxyForegroundService extends Service {
     private static final String PREFS_NAME = "proxy_settings";
     private static final String KEY_PORT = "proxy_port";
     private static final String KEY_AUTO_PORT = "auto_port";
+    private static final String KEY_WIFI_ONLY = "wifi_only";
 
     private boolean isPythonRunning = false;
     private Handler statsHandler = new Handler(Looper.getMainLooper());
@@ -54,6 +55,20 @@ public class ProxyForegroundService extends Service {
         }
     };
 
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_MODERATE) {
+            Log.w(TAG, "Low memory detected (level: " + level + "). Clearing Python caches...");
+            if (isPythonRunning && Python.isStarted()) {
+                try {
+                    Python.getInstance().getModule("android_entry").callAttr("clear_dns");
+                    System.gc(); // Форсируем сборку мусора в Java
+                } catch (Exception e) { }
+            }
+        }
+    }
+
     private void checkBattery(Intent intent) {
         int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
         int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
@@ -70,15 +85,25 @@ public class ProxyForegroundService extends Service {
         ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo info = cm.getActiveNetworkInfo();
         boolean isWifi = info != null && info.getType() == ConnectivityManager.TYPE_WIFI;
+        boolean isConnected = info != null && info.isConnected();
+
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        boolean wifiOnly = prefs.getBoolean(KEY_WIFI_ONLY, false);
+
+        if (wifiOnly && !isWifi && isPythonRunning) {
+            stopProxy();
+            return;
+        }
+
+        if (wifiOnly && isWifi && !isPythonRunning && isConnected) {
+            startProxy();
+            return;
+        }
         
         if (isPythonRunning && Python.isStarted()) {
             try {
-                Python py = Python.getInstance();
-                PyObject module = py.getModule("android_entry");
-                module.callAttr("on_network_changed", isWifi);
-            } catch (Exception e) {
-                Log.e(TAG, "Error notifying network change: " + e.getMessage());
-            }
+                Python.getInstance().getModule("android_entry").callAttr("on_network_changed", isWifi);
+            } catch (Exception e) { }
         }
     }
 
@@ -91,7 +116,11 @@ public class ProxyForegroundService extends Service {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
-        registerReceiver(systemReceiver, filter);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(systemReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(systemReceiver, filter);
+        }
     }
 
     private void initPython() {
@@ -129,16 +158,24 @@ public class ProxyForegroundService extends Service {
     }
 
     private void startProxy() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        boolean wifiOnly = prefs.getBoolean(KEY_WIFI_ONLY, false);
+        
+        if (wifiOnly) {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo info = cm.getActiveNetworkInfo();
+            if (info == null || info.getType() != ConnectivityManager.TYPE_WIFI) return;
+        }
+
         if (isPythonRunning && proxyThread != null && proxyThread.isAlive()) return;
         proxyThread = new Thread(() -> {
             try {
-                SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 Python py = Python.getInstance();
                 PyObject proxyModule = py.getModule("android_entry");
                 proxyModule.callAttr("start_proxy", "127.0.0.1", prefs.getInt(KEY_PORT, 1080), prefs.getBoolean(KEY_AUTO_PORT, true));
                 isPythonRunning = true;
                 ProxyPlugin.onStatusChanged(true);
-                updateNetworkType(); // Сразу сообщаем тип сети
+                updateNetworkType();
             } catch (Exception e) {
                 isPythonRunning = false;
                 ProxyPlugin.onStatusChanged(false);
@@ -196,9 +233,20 @@ public class ProxyForegroundService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_LOW).setOnlyAlertOnce(true).build();
     }
 
+    private void stopProxy() {
+        statsHandler.removeCallbacks(statsRunnable);
+        try {
+            Python py = Python.getInstance();
+            PyObject proxyModule = py.getModule("android_entry");
+            proxyModule.callAttr("stop_proxy");
+            isPythonRunning = false;
+            ProxyPlugin.onStatusChanged(false);
+        } catch (Exception e) { }
+    }
+
     @Override
     public void onDestroy() {
-        unregisterReceiver(systemReceiver);
+        try { unregisterReceiver(systemReceiver); } catch (Exception e) { }
         stopProxy();
         releaseWakeLock();
         super.onDestroy();
