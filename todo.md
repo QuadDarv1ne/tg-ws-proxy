@@ -30,7 +30,7 @@
 - ✅ diagnostics_advanced.py — расширенная диагностика
 
 ### Тесты
-- ✅ Tests: 463 passed, 7 skipped, 9 errors (было 255 passed)
+- ✅ Tests: 472 passed, 7 skipped, 0 errors (было 255 passed)
 - ✅ Добавлены тесты для i18n, updater, whitelist
 - ✅ Покрытие web_dashboard.py: 61% → 74%
 - ✅ Исправлены тесты config_backup (Windows permissions)
