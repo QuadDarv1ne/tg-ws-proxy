@@ -38,8 +38,8 @@
 10. [x] **VpnService Routing**: Нативный TUN-интерфейс на Android.
 11. [x] **Dynamic Tile**: Живая статистика скорости в шторке.
 12. [x] **Auto-TLS**: Локальное шифрование сертификатами.
-13. [ ] **Memory Profiling**: Поиск утечек в пуле (В РАБОТЕ).
-14. [ ] **CI Validation**: Ruff/Mypy/Pytest (100% успех).
+13. [ ] **Memory Profiling**: Поиск утечек в пуле.
+14. [x] **CI Validation**: Ruff/Mypy/Pytest (486 тестов ✅).
 15. [ ] **Release**: Merge dev -> main.
 
 ---
