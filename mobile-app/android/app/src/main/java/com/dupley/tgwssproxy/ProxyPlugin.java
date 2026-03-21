@@ -18,6 +18,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import org.json.JSONObject;
 
 @CapacitorPlugin(name = "ProxyControl")
 public class ProxyPlugin extends Plugin {
@@ -25,6 +26,8 @@ public class ProxyPlugin extends Plugin {
     private static final String PREFS_NAME = "proxy_settings";
     private static final String KEY_PORT = "proxy_port";
     private static final String KEY_AUTO_PORT = "auto_port";
+    private static final String KEY_USER = "proxy_user";
+    private static final String KEY_PASS = "proxy_pass";
     
     private static ProxyPlugin instance;
 
@@ -43,16 +46,43 @@ public class ProxyPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void exportConfig(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        JSObject config = new JSObject();
+        config.put("port", prefs.getInt(KEY_PORT, 1080));
+        config.put("autoPort", prefs.getBoolean(KEY_AUTO_PORT, true));
+        config.put("username", prefs.getString(KEY_USER, ""));
+        config.put("password", prefs.getString(KEY_PASS, ""));
+        
+        JSObject ret = new JSObject();
+        ret.put("json", config.toString());
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void importConfig(PluginCall call) {
+        String jsonStr = call.getString("json");
+        try {
+            JSONObject json = new JSONObject(jsonStr);
+            SharedPreferences.Editor editor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+            if (json.has("port")) editor.putInt(KEY_PORT, json.getInt("port"));
+            if (json.has("autoPort")) editor.putBoolean(KEY_AUTO_PORT, json.getBoolean("autoPort"));
+            if (json.has("username")) editor.putString(KEY_USER, json.getString("username"));
+            if (json.has("password")) editor.putString(KEY_PASS, json.getString("password"));
+            editor.apply();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Invalid config format: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
     public void startProxy(PluginCall call) {
         saveSettings(call);
         vibrate(50);
-        
         Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            getContext().startForegroundService(serviceIntent);
-        } else {
-            getContext().startService(serviceIntent);
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(serviceIntent);
+        else getContext().startService(serviceIntent);
         JSObject ret = new JSObject();
         ret.put("status", "starting");
         call.resolve(ret);
@@ -61,8 +91,7 @@ public class ProxyPlugin extends Plugin {
     @PluginMethod
     public void stopProxy(PluginCall call) {
         vibrate(100);
-        Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class);
-        serviceIntent.setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
+        Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class).setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
         getContext().startService(serviceIntent);
         JSObject ret = new JSObject();
         ret.put("status", "stopping");
@@ -70,118 +99,57 @@ public class ProxyPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void shareLogs(PluginCall call) {
-        try {
-            if (Python.isStarted()) {
-                Python py = Python.getInstance();
-                PyObject module = py.getModule("android_entry");
-                String logs = module.callAttr("get_recent_logs").toString();
-                
-                Intent sendIntent = new Intent();
-                sendIntent.setAction(Intent.ACTION_SEND);
-                sendIntent.putExtra(Intent.EXTRA_TEXT, logs);
-                sendIntent.putExtra(Intent.EXTRA_TITLE, "TG WS Proxy Logs");
-                sendIntent.setType("text/plain");
-
-                Intent shareIntent = Intent.createChooser(sendIntent, "Share Logs via");
-                shareIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getContext().startActivity(shareIntent);
-                call.resolve();
-            } else {
-                call.reject("Python not started");
-            }
-        } catch (Exception e) {
-            call.reject("Error sharing logs: " + e.getMessage());
-        }
+    public void setAuth(PluginCall call) {
+        String user = call.getString("username");
+        String pass = call.getString("password");
+        SharedPreferences.Editor editor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        editor.putString(KEY_USER, user);
+        editor.putString(KEY_PASS, pass);
+        editor.apply();
+        if (Python.isStarted()) Python.getInstance().getModule("android_entry").callAttr("set_auth", user, pass);
+        call.resolve();
     }
 
     @PluginMethod
-    public void openTelegramProxy(PluginCall call) {
+    public void getProxyUrl(PluginCall call) {
         SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         int port = prefs.getInt(KEY_PORT, 1080);
-        String url = "tg://socks?server=127.0.0.1&port=" + port;
-        
-        try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(intent);
-            call.resolve();
-        } catch (Exception e) {
-            call.reject("Could not open Telegram: " + e.getMessage());
-        }
-    }
-
-    @PluginMethod
-    public void openSystemProxySettings(PluginCall call) {
-        try {
-            Intent intent = new Intent(Settings.ACTION_WIFI_SETTINGS);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(intent);
-            call.resolve();
-        } catch (Exception e) {
-            call.reject("Could not open settings: " + e.getMessage());
-        }
+        String user = prefs.getString(KEY_USER, null);
+        String pass = prefs.getString(KEY_PASS, null);
+        String url = (user != null && !user.isEmpty()) 
+            ? "https://t.me/socks?server=127.0.0.1&port=" + port + "&user=" + user + "&pass=" + pass
+            : "https://t.me/socks?server=127.0.0.1&port=" + port;
+        JSObject ret = new JSObject();
+        ret.put("url", url);
+        call.resolve(ret);
     }
 
     private void vibrate(long duration) {
         Vibrator v = (Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
         if (v != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                v.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
-            } else {
-                v.vibrate(duration);
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) v.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
+            else v.vibrate(duration);
         }
     }
 
     @PluginMethod
-    public void clearDNS(PluginCall call) {
+    public void getStats(PluginCall call) {
+        JSObject ret = new JSObject();
         try {
             if (Python.isStarted()) {
-                Python py = Python.getInstance();
-                PyObject module = py.getModule("android_entry");
-                boolean success = module.callAttr("clear_dns").toBoolean();
-                JSObject ret = new JSObject();
-                ret.put("success", success);
-                call.resolve(ret);
-            } else {
-                call.reject("Python not started");
-            }
-        } catch (Exception e) {
-            call.reject(e.getMessage());
-        }
-    }
-
-    @PluginMethod
-    public void setCustomDCs(PluginCall call) {
-        JSObject dcs = call.getObject("dcs");
-        if (dcs == null) {
-            call.reject("Missing 'dcs' object. Format: { '2': '1.2.3.4' }");
-            return;
-        }
-
-        try {
-            if (Python.isStarted()) {
-                Python py = Python.getInstance();
-                PyObject module = py.getModule("android_entry");
-                
-                Map<String, String> dcMap = new HashMap<>();
-                Iterator<String> keys = dcs.keys();
-                while (keys.hasNext()) {
-                    String key = keys.next();
-                    dcMap.put(key, dcs.getString(key));
+                PyObject statsObj = Python.getInstance().getModule("android_entry").callAttr("get_proxy_stats_dict");
+                Map<PyObject, PyObject> statsMap = statsObj.asMap();
+                for (Map.Entry<PyObject, PyObject> entry : statsMap.entrySet()) {
+                    String key = entry.getKey().toString();
+                    PyObject val = entry.getValue();
+                    if (val.isTrue() || val.isFalse()) ret.put(key, val.toBoolean());
+                    else if (val.isInstance(Python.getInstance().getBuiltins().get("int"))) ret.put(key, val.toInt());
+                    else if (val.isInstance(Python.getInstance().getBuiltins().get("float"))) ret.put(key, val.toDouble());
+                    else ret.put(key, val.toString());
                 }
-                
-                boolean success = module.callAttr("set_custom_dc_ips", dcMap).toBoolean();
-                JSObject ret = new JSObject();
-                ret.put("success", success);
-                call.resolve(ret);
-            } else {
-                call.reject("Python not started");
-            }
-        } catch (Exception e) {
-            call.reject(e.getMessage());
-        }
+            } else ret.put("error", "Python not started");
+        } catch (Exception e) { ret.put("error", e.getMessage()); }
+        call.resolve(ret);
     }
 
     @PluginMethod
@@ -190,118 +158,21 @@ public class ProxyPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("port", prefs.getInt(KEY_PORT, 1080));
         ret.put("autoPort", prefs.getBoolean(KEY_AUTO_PORT, true));
+        ret.put("username", prefs.getString(KEY_USER, ""));
+        ret.put("password", prefs.getString(KEY_PASS, ""));
         call.resolve(ret);
     }
 
     private void saveSettings(PluginCall call) {
         Integer port = call.getInt("port");
         Boolean autoPort = call.getBoolean("autoPort");
-        
+        String user = call.getString("username");
+        String pass = call.getString("password");
         SharedPreferences.Editor editor = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
         if (port != null) editor.putInt(KEY_PORT, port);
         if (autoPort != null) editor.putBoolean(KEY_AUTO_PORT, autoPort);
+        if (user != null) editor.putString(KEY_USER, user);
+        if (pass != null) editor.putString(KEY_PASS, pass);
         editor.apply();
-    }
-
-    @PluginMethod
-    public void getStatus(PluginCall call) {
-        JSObject ret = new JSObject();
-        try {
-            if (Python.isStarted()) {
-                Python py = Python.getInstance();
-                PyObject module = py.getModule("android_entry");
-                boolean running = module.callAttr("is_running").toBoolean();
-                ret.put("active", running);
-            } else {
-                ret.put("active", false);
-            }
-        } catch (Exception e) {
-            ret.put("active", false);
-            ret.put("error", e.getMessage());
-        }
-        call.resolve(ret);
-    }
-
-    @PluginMethod
-    public void getLogs(PluginCall call) {
-        JSObject ret = new JSObject();
-        try {
-            if (Python.isStarted()) {
-                Python py = Python.getInstance();
-                PyObject module = py.getModule("android_entry");
-                String logs = module.callAttr("get_recent_logs").toString();
-                ret.put("logs", logs);
-            } else {
-                ret.put("logs", "Python not started");
-            }
-        } catch (Exception e) {
-            ret.put("error", e.getMessage());
-        }
-        call.resolve(ret);
-    }
-
-    @PluginMethod
-    public void checkConnection(PluginCall call) {
-        new Thread(() -> {
-            try {
-                if (Python.isStarted()) {
-                    Python py = Python.getInstance();
-                    PyObject module = py.getModule("android_entry");
-                    PyObject resultObj = module.callAttr("test_connection_to_tg");
-                    Map<PyObject, PyObject> resultMap = resultObj.asMap();
-                    
-                    JSObject ret = new JSObject();
-                    for (Map.Entry<PyObject, PyObject> entry : resultMap.entrySet()) {
-                        String key = entry.getKey().toString();
-                        PyObject value = entry.getValue();
-                        if (value.isTrue() || value.isFalse()) {
-                            ret.put(key, value.toBoolean());
-                        } else if (value.isInstance(py.getBuiltins().get("float"))) {
-                            ret.put(key, value.toDouble());
-                        } else {
-                            ret.put(key, value.toString());
-                        }
-                    }
-                    call.resolve(ret);
-                } else {
-                    call.reject("Python not started");
-                }
-            } catch (Exception e) {
-                call.reject(e.getMessage());
-            }
-        }).start();
-    }
-
-    @PluginMethod
-    public void getStats(PluginCall call) {
-        JSObject ret = new JSObject();
-        try {
-            if (Python.isStarted()) {
-                Python py = Python.getInstance();
-                PyObject module = py.getModule("android_entry");
-                PyObject statsObj = module.callAttr("get_proxy_stats_dict");
-                Map<PyObject, PyObject> statsMap = statsObj.asMap();
-                
-                for (Map.Entry<PyObject, PyObject> entry : statsMap.entrySet()) {
-                    String key = entry.getKey().toString();
-                    PyObject value = entry.getValue();
-                    
-                    if (value.isTrue() || value.isFalse()) {
-                        ret.put(key, value.toBoolean());
-                    } else if (value.isInstance(py.getBuiltins().get("int"))) {
-                        ret.put(key, value.toInt());
-                    } else if (value.isInstance(py.getBuiltins().get("float"))) {
-                        ret.put(key, value.toDouble());
-                    } else {
-                        ret.put(key, value.toString());
-                    }
-                }
-            } else {
-                ret.put("error", "Python not started");
-            }
-        } catch (Exception e) {
-            ret.put("error", e.getMessage());
-        }
-        call.resolve(ret);
     }
 }

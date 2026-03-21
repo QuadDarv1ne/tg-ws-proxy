@@ -5,10 +5,15 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -37,11 +42,56 @@ public class ProxyForegroundService extends Service {
     private PowerManager.WakeLock wakeLock;
     private Thread proxyThread;
 
+    private final BroadcastReceiver systemReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (Intent.ACTION_BATTERY_CHANGED.equals(action)) {
+                checkBattery(intent);
+            } else if (ConnectivityManager.CONNECTIVITY_ACTION.equals(action)) {
+                updateNetworkType();
+            }
+        }
+    };
+
+    private void checkBattery(Intent intent) {
+        int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+        float batteryPct = level * 100 / (float)scale;
+        if (batteryPct <= 15 && isPythonRunning) {
+            Log.w(TAG, "Battery low, stopping service.");
+            stopProxy();
+            stopForeground(true);
+            stopSelf();
+        }
+    }
+
+    private void updateNetworkType() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo info = cm.getActiveNetworkInfo();
+        boolean isWifi = info != null && info.getType() == ConnectivityManager.TYPE_WIFI;
+        
+        if (isPythonRunning && Python.isStarted()) {
+            try {
+                Python py = Python.getInstance();
+                PyObject module = py.getModule("android_entry");
+                module.callAttr("on_network_changed", isWifi);
+            } catch (Exception e) {
+                Log.e(TAG, "Error notifying network change: " + e.getMessage());
+            }
+        }
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
         initPython();
         acquireWakeLock();
+        
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_BATTERY_CHANGED);
+        filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+        registerReceiver(systemReceiver, filter);
     }
 
     private void initPython() {
@@ -55,14 +105,12 @@ public class ProxyForegroundService extends Service {
         if (powerManager != null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TGWSProxy:ServiceWakeLock");
             wakeLock.acquire(10 * 60 * 1000L);
-            Log.i(TAG, "WakeLock acquired");
         }
     }
 
     private void releaseWakeLock() {
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
-            Log.i(TAG, "WakeLock released");
         }
     }
 
@@ -74,38 +122,24 @@ public class ProxyForegroundService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-
         startForeground(NOTIFICATION_ID, createNotification(getString(R.string.proxy_starting), ""));
         startProxy();
         startStatsUpdateLoop();
-        
         return START_STICKY;
     }
 
     private void startProxy() {
         if (isPythonRunning && proxyThread != null && proxyThread.isAlive()) return;
-        
         proxyThread = new Thread(() -> {
             try {
                 SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                int savedPort = prefs.getInt(KEY_PORT, 1080);
-                boolean autoPort = prefs.getBoolean(KEY_AUTO_PORT, true);
-
                 Python py = Python.getInstance();
                 PyObject proxyModule = py.getModule("android_entry");
-                
-                PyObject result = proxyModule.callAttr("start_proxy", "127.0.0.1", savedPort, autoPort);
-                int actualPort = result.asMap().get(py.getBuiltins().get("str").call("port")).toInt();
-                
-                if (actualPort != savedPort) {
-                    prefs.edit().putInt(KEY_PORT, actualPort).apply();
-                }
-
+                proxyModule.callAttr("start_proxy", "127.0.0.1", prefs.getInt(KEY_PORT, 1080), prefs.getBoolean(KEY_AUTO_PORT, true));
                 isPythonRunning = true;
                 ProxyPlugin.onStatusChanged(true);
-                Log.i(TAG, "Python Proxy started on port: " + actualPort);
+                updateNetworkType(); // Сразу сообщаем тип сети
             } catch (Exception e) {
-                Log.e(TAG, "Error starting Python Proxy: " + e.getMessage());
                 isPythonRunning = false;
                 ProxyPlugin.onStatusChanged(false);
             }
@@ -117,14 +151,8 @@ public class ProxyForegroundService extends Service {
         statsRunnable = new Runnable() {
             @Override
             public void run() {
-                if (isPythonRunning && (proxyThread == null || !proxyThread.isAlive())) {
-                    Log.w(TAG, "Watchdog: Python thread died, restarting...");
-                    startProxy();
-                }
-                
-                if (isPythonRunning) {
-                    updateNotificationWithStats();
-                }
+                if (isPythonRunning && (proxyThread == null || !proxyThread.isAlive())) startProxy();
+                if (isPythonRunning) updateNotificationWithStats();
                 statsHandler.postDelayed(this, 5000);
             }
         };
@@ -134,99 +162,55 @@ public class ProxyForegroundService extends Service {
     private void updateNotificationWithStats() {
         try {
             Python py = Python.getInstance();
-            PyObject module = py.getModule("android_entry");
-            PyObject statsObj = module.callAttr("get_proxy_stats_dict");
-            Map<PyObject, PyObject> stats = statsObj.asMap();
-
-            int connections = stats.get(py.getBuiltins().get("str").call("connections_ws")).toInt();
-            long bytesUp = stats.get(py.getBuiltins().get("str").call("bytes_up")).toLong();
-            long bytesDown = stats.get(py.getBuiltins().get("str").call("bytes_down")).toLong();
+            PyObject stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
             int port = stats.get(py.getBuiltins().get("str").call("port")).toInt();
-
-            String content = getString(R.string.proxy_status_template, port, connections);
-            String subContent = getString(R.string.proxy_traffic_template, formatBytes(bytesUp), formatBytes(bytesDown));
-
+            int conn = stats.get(py.getBuiltins().get("str").call("connections_ws")).toInt();
+            long up = stats.get(py.getBuiltins().get("str").call("bytes_up")).toLong();
+            long down = stats.get(py.getBuiltins().get("str").call("bytes_down")).toLong();
+            
             NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (manager != null) {
-                manager.notify(NOTIFICATION_ID, createNotification(content, subContent));
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to update notification stats: " + e.getMessage());
-        }
+            manager.notify(NOTIFICATION_ID, createNotification(
+                getString(R.string.proxy_status_template, port, conn),
+                getString(R.string.proxy_traffic_template, formatBytes(up), formatBytes(down))
+            ));
+        } catch (Exception e) { }
     }
 
     private String formatBytes(long bytes) {
         if (bytes < 1024) return bytes + " B";
         int exp = (int) (Math.log(bytes) / Math.log(1024));
-        String pre = "KMGTPE".charAt(exp - 1) + "";
-        return String.format(java.util.Locale.US, "%.1f %sB", bytes / Math.pow(1024, exp), pre);
+        return String.format(java.util.Locale.US, "%.1f %sB", bytes / Math.pow(1024, exp), "KMGTPE".charAt(exp - 1) + "");
     }
 
     private Notification createNotification(String content, String subContent) {
-        Intent stopIntent = new Intent(this, ProxyForegroundService.class);
-        stopIntent.setAction(ACTION_STOP_SERVICE);
-        PendingIntent stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, 
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-
+        Intent stopIntent = new Intent(this, ProxyForegroundService.class).setAction(ACTION_STOP_SERVICE);
+        PendingIntent stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Intent openTgIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("tg://socks?server=127.0.0.1&port=1080"));
-        PendingIntent openTgPendingIntent = PendingIntent.getActivity(this, 1, openTgIntent, 
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-
-        Intent notificationIntent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 
-                PendingIntent.FLAG_IMMUTABLE);
-
+        PendingIntent openTgPendingIntent = PendingIntent.getActivity(this, 1, openTgIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.proxy_running_title))
-                .setContentText(content)
-                .setSubText(subContent)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentIntent(pendingIntent)
-                .setOngoing(true)
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.proxy_stop), stopPendingIntent)
+                .setContentText(content).setSubText(subContent).setSmallIcon(R.mipmap.ic_launcher)
+                .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE))
+                .setOngoing(true).addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.proxy_stop), stopPendingIntent)
                 .addAction(android.R.drawable.ic_menu_send, getString(R.string.proxy_open_tg), openTgPendingIntent)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOnlyAlertOnce(true)
-                .build();
-    }
-
-    private void stopProxy() {
-        statsHandler.removeCallbacks(statsRunnable);
-        try {
-            Python py = Python.getInstance();
-            PyObject proxyModule = py.getModule("android_entry");
-            proxyModule.callAttr("stop_proxy");
-            isPythonRunning = false;
-            ProxyPlugin.onStatusChanged(false);
-        } catch (Exception e) {
-            Log.e(TAG, "Error stopping Python Proxy: " + e.getMessage());
-        }
+                .setPriority(NotificationCompat.PRIORITY_LOW).setOnlyAlertOnce(true).build();
     }
 
     @Override
     public void onDestroy() {
+        unregisterReceiver(systemReceiver);
         stopProxy();
         releaseWakeLock();
         super.onDestroy();
     }
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+    @Override public IBinder onBind(Intent intent) { return null; }
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel serviceChannel = new NotificationChannel(
-                    CHANNEL_ID,
-                    getString(R.string.proxy_service_channel_name),
-                    NotificationManager.IMPORTANCE_DEFAULT
-            );
+            NotificationChannel serviceChannel = new NotificationChannel(CHANNEL_ID, getString(R.string.proxy_service_channel_name), NotificationManager.IMPORTANCE_DEFAULT);
             serviceChannel.setDescription(getString(R.string.proxy_service_channel_desc));
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            if (manager != null) {
-                manager.createNotificationChannel(serviceChannel);
-            }
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).createNotificationChannel(serviceChannel);
         }
     }
 }
