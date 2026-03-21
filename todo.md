@@ -30,14 +30,14 @@
 - ✅ diagnostics_advanced.py — расширенная диагностика
 
 ### Тесты
-- ✅ Tests: 463 passed, 7 skipped, 9 errors (было 255 passed)
+- ✅ Tests: 472 passed, 7 skipped, 0 errors (было 255 passed)
 - ✅ Добавлены тесты для i18n, updater, whitelist
 - ✅ Покрытие web_dashboard.py: 61% → 74%
 - ✅ Исправлены тесты config_backup (Windows permissions)
 - ✅ Создана fixtures для Windows (tmp_path_safe)
 - ✅ Добавлены тесты для rate_limiter.py (14 тестов)
 - ✅ Исправлены все ruff ошибки (I001, F401, W293, B007, F821)
-- ✅ Ruff: 0 ошибок во всех файлах (53 ошибки исправлены в autotune.py, web_dashboard.py)
+- ✅ Ruff: 0 ошибок во всех файлах
 
 ### Документация
 - ✅ Очистка документации от дублирования
@@ -63,6 +63,11 @@
   - TCP connectivity проверки
   - WebSocket endpoint тесты
   - Автоматические рекомендации
+- ✅ `proxy/autotune.py` — автоматическая оптимизация производительности
+  - Adaptive pool sizing (2-16 соединений)
+  - Dynamic timeout adjustment (3-30 секунд)
+  - Smart retry logic (2-5 попыток)
+  - 3 режима: CONSERVATIVE, BALANCED, AGGRESSIVE
 
 ### Улучшения веб-панели
 - ✅ `/api/config/export` — экспорт конфигурации в JSON
@@ -70,6 +75,11 @@
 - ✅ `/api/settings/advanced` — расширенные настройки оптимизатора
 - ✅ `/api/diagnostics/run` — запуск диагностики
 - ✅ `/api/diagnostics/results` — получение результатов диагностики
+- ✅ `/api/optimization/config` — настройки оптимизации (GET/POST)
+- ✅ `/api/optimization/metrics` — метрики производительности
+- ✅ `/api/optimization/dns/cache` — очистка DNS кэша
+- ✅ `/api/autotune/status` — статус авто-тюнера
+- ✅ `/api/autotune/config` — настройка авто-тюнера
 
 ### Улучшения оптимизатора
 - ✅ `DCStats` — статистика по каждому DC (success rate, latency, errors)
@@ -77,6 +87,9 @@
 - ✅ `get_best_dc()` — автоматический выбор лучшего DC
 - ✅ LRU cache: `cache_get()`, `cache_put()`, `cache_remove()`
 - ✅ Настройка через API: pool size, max connections, blacklist duration
+- ✅ Thread-safe DNS кэширование с asyncio.Lock
+- ✅ Конфигурируемые параметры (_OPTIMIZATION_CONFIG)
+- ✅ Метрики оптимизации (DNS hits/misses, connection time)
 
 ### Rate Limiter
 - ✅ Allow-list поддержка для доверенных IP
@@ -89,7 +102,7 @@
 
 ---
 
-## 🔴 Высокий приоритет (v2.35.0)
+## 🔴 Высокий приоритет (v2.36.0)
 
 ### Тесты и покрытие
 - [ ] Покрытие tg_ws_proxy.py: 13% → 60%
