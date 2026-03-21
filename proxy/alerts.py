@@ -192,6 +192,8 @@ class AlertManager:
     async def _send_email_notification(self, alert: Alert) -> None:
         try:
             config = self._email_config
+            if not config:
+                return
             msg = MIMEMultipart()
             msg['From'] = config['from_email']
             msg['To'] = ', '.join(config['to_emails'])

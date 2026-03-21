@@ -147,7 +147,7 @@ class ClientSession:
 class ClientStatistics:
     """
     Per-client statistics tracker.
-    
+
     Features:
     - Track individual client connections
     - Session history

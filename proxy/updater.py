@@ -94,7 +94,7 @@ class UpdateChecker:
                         }
                     )
                     with urllib.request.urlopen(req, timeout=10) as response:
-                        return json.loads(response.read().decode())
+                        return json.loads(response.read().decode())  # type: ignore[no-any-return]
                 except Exception as e:
                     log.debug("Failed to fetch release info: %s", e)
                     return None

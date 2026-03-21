@@ -112,6 +112,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+tmp_path_retention_policy = "failed"
 
 [tool.coverage.run]
 source = ["proxy"]

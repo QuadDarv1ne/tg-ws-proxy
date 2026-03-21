@@ -206,11 +206,11 @@ class TestClientStatistics:
     def test_register_client_existing(self):
         """Test registering existing client."""
         stats = ClientStatistics()
-        
+
         stats.register_client('192.168.1.1', 8080)
         # Same IP:port should be treated as same client
         client = stats.get_client('192.168.1.1', 8080)
-        
+
         # Client exists with initial values
         assert client is not None
         assert client.ip == '192.168.1.1'
@@ -292,12 +292,12 @@ class TestClientStatistics:
     def test_get_active_clients(self):
         """Test getting active clients."""
         stats = ClientStatistics()
-        
+
         stats.register_client('192.168.1.1', 8080)
         stats.register_client('192.168.1.2', 8081)
-        
+
         active = stats.get_active_clients()
-        
+
         assert len(active) >= 1
 
     def test_get_statistics(self):

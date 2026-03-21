@@ -3,7 +3,11 @@ package com.dupley.tgwssproxy;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.provider.Settings;
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
 import com.getcapacitor.JSObject;
@@ -11,6 +15,8 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 @CapacitorPlugin(name = "ProxyControl")
@@ -23,6 +29,7 @@ public class ProxyPlugin extends Plugin {
     @PluginMethod
     public void startProxy(PluginCall call) {
         saveSettings(call);
+        vibrate(50);
         
         Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -37,12 +44,102 @@ public class ProxyPlugin extends Plugin {
 
     @PluginMethod
     public void stopProxy(PluginCall call) {
+        vibrate(100);
         Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class);
         serviceIntent.setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
         getContext().startService(serviceIntent);
         JSObject ret = new JSObject();
         ret.put("status", "stopping");
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openTelegramProxy(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        int port = prefs.getInt(KEY_PORT, 1080);
+        String url = "tg://socks?server=127.0.0.1&port=" + port;
+        
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not open Telegram: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void openSystemProxySettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_WIFI_SETTINGS); // Прямого пути к Proxy нет, это лучший вариант
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not open settings: " + e.getMessage());
+        }
+    }
+
+    private void vibrate(long duration) {
+        Vibrator v = (Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
+        if (v != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                v.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                v.vibrate(duration);
+            }
+        }
+    }
+
+    @PluginMethod
+    public void clearDNS(PluginCall call) {
+        try {
+            if (Python.isStarted()) {
+                Python py = Python.getInstance();
+                PyObject module = py.getModule("android_entry");
+                boolean success = module.callAttr("clear_dns").toBoolean();
+                JSObject ret = new JSObject();
+                ret.put("success", success);
+                call.resolve(ret);
+            } else {
+                call.reject("Python not started");
+            }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void setCustomDCs(PluginCall call) {
+        JSObject dcs = call.getObject("dcs");
+        if (dcs == null) {
+            call.reject("Missing 'dcs' object. Format: { '2': '1.2.3.4' }");
+            return;
+        }
+
+        try {
+            if (Python.isStarted()) {
+                Python py = Python.getInstance();
+                PyObject module = py.getModule("android_entry");
+                
+                Map<String, String> dcMap = new HashMap<>();
+                Iterator<String> keys = dcs.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    dcMap.put(key, dcs.getString(key));
+                }
+                
+                boolean success = module.callAttr("set_custom_dc_ips", dcMap).toBoolean();
+                JSObject ret = new JSObject();
+                ret.put("success", success);
+                call.resolve(ret);
+            } else {
+                call.reject("Python not started");
+            }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
     }
 
     @PluginMethod

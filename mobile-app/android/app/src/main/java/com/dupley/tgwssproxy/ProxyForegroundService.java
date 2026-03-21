@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import com.chaquo.python.PyObject;
@@ -32,16 +33,34 @@ public class ProxyForegroundService extends Service {
     private boolean isPythonRunning = false;
     private Handler statsHandler = new Handler(Looper.getMainLooper());
     private Runnable statsRunnable;
+    private PowerManager.WakeLock wakeLock;
 
     @Override
     public void onCreate() {
         super.onCreate();
         initPython();
+        acquireWakeLock();
     }
 
     private void initPython() {
         if (!Python.isStarted()) {
             Python.start(new AndroidPlatform(this));
+        }
+    }
+
+    private void acquireWakeLock() {
+        PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (powerManager != null) {
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TGWSProxy:ServiceWakeLock");
+            wakeLock.acquire(10 * 60 * 1000L /*10 minutes fallback*/);
+            Log.i(TAG, "WakeLock acquired");
+        }
+    }
+
+    private void releaseWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+            Log.i(TAG, "WakeLock released");
         }
     }
 
@@ -54,7 +73,7 @@ public class ProxyForegroundService extends Service {
             return START_NOT_STICKY;
         }
 
-        startForeground(NOTIFICATION_ID, createNotification("Инициализация...", ""));
+        startForeground(NOTIFICATION_ID, createNotification(getString(R.string.proxy_starting), ""));
         startProxy();
         startStatsUpdateLoop();
         
@@ -73,11 +92,9 @@ public class ProxyForegroundService extends Service {
                 Python py = Python.getInstance();
                 PyObject proxyModule = py.getModule("android_entry");
                 
-                // Вызываем start_proxy с сохраненными параметрами
                 PyObject result = proxyModule.callAttr("start_proxy", "127.0.0.1", savedPort, autoPort);
                 int actualPort = result.asMap().get(py.getBuiltins().get("str").call("port")).toInt();
                 
-                // Если порт изменился (был авто-выбор), сохраним его
                 if (actualPort != savedPort) {
                     prefs.edit().putInt(KEY_PORT, actualPort).apply();
                 }
@@ -115,8 +132,8 @@ public class ProxyForegroundService extends Service {
             long bytesDown = stats.get(py.getBuiltins().get("str").call("bytes_down")).toLong();
             int port = stats.get(py.getBuiltins().get("str").call("port")).toInt();
 
-            String content = String.format("Прокси на порту %d | Соединений: %d", port, connections);
-            String subContent = String.format("↑ %s  ↓ %s", formatBytes(bytesUp), formatBytes(bytesDown));
+            String content = getString(R.string.proxy_status_template, port, connections);
+            String subContent = getString(R.string.proxy_traffic_template, formatBytes(bytesUp), formatBytes(bytesDown));
 
             NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
@@ -131,7 +148,7 @@ public class ProxyForegroundService extends Service {
         if (bytes < 1024) return bytes + " B";
         int exp = (int) (Math.log(bytes) / Math.log(1024));
         String pre = "KMGTPE".charAt(exp - 1) + "";
-        return String.format("%.1f %sB", bytes / Math.pow(1024, exp), pre);
+        return String.format(java.util.Locale.US, "%.1f %sB", bytes / Math.pow(1024, exp), pre);
     }
 
     private Notification createNotification(String content, String subContent) {
@@ -145,13 +162,13 @@ public class ProxyForegroundService extends Service {
                 PendingIntent.FLAG_IMMUTABLE);
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("TG WS Proxy")
+                .setContentTitle(getString(R.string.proxy_running_title))
                 .setContentText(content)
                 .setSubText(subContent)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Остановить", stopPendingIntent)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.proxy_stop), stopPendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setOnlyAlertOnce(true)
                 .build();
@@ -172,6 +189,7 @@ public class ProxyForegroundService extends Service {
     @Override
     public void onDestroy() {
         stopProxy();
+        releaseWakeLock();
         super.onDestroy();
     }
 
@@ -184,10 +202,11 @@ public class ProxyForegroundService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel serviceChannel = new NotificationChannel(
                     CHANNEL_ID,
-                    "TG WS Proxy Service Channel",
+                    getString(R.string.proxy_service_channel_name),
                     NotificationManager.IMPORTANCE_DEFAULT
             );
-            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            serviceChannel.setDescription(getString(R.string.proxy_service_channel_desc));
+            NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(serviceChannel);
             }

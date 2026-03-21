@@ -25,12 +25,10 @@ public class ProxyTileService extends TileService {
         boolean isActive = isServiceRunning(ProxyForegroundService.class);
         
         if (isActive) {
-            // Stop the service
             Intent stopIntent = new Intent(this, ProxyForegroundService.class);
             stopIntent.setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
             startService(stopIntent);
         } else {
-            // Start the service
             Intent startIntent = new Intent(this, ProxyForegroundService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(startIntent);
@@ -39,7 +37,6 @@ public class ProxyTileService extends TileService {
             }
         }
         
-        // Give it a moment to change state then update UI
         updateTile();
     }
 
@@ -51,16 +48,14 @@ public class ProxyTileService extends TileService {
         
         if (isActive) {
             tile.setState(Tile.STATE_ACTIVE);
-            tile.setLabel("TG Proxy: ON");
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                tile.setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher));
-            }
+            tile.setLabel(getString(R.string.tile_on));
         } else {
             tile.setState(Tile.STATE_INACTIVE);
-            tile.setLabel("TG Proxy: OFF");
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                tile.setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher));
-            }
+            tile.setLabel(getString(R.string.tile_off));
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            tile.setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher));
         }
         
         tile.updateTile();
