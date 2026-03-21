@@ -75,4 +75,34 @@ Mypy: missing stubs (внешние зависимости)
 
 ---
 
+## 📋 План на v2.37.0: Performance & Mobile
+
+### Производительность
+- [ ] **Zero-copy буферизация** — `memoryview` вместо копирования байтов
+- [ ] **Batch WebSocket отправка** — группировка мелких пакетов
+- [ ] **Автоматический выбор DC** — по latency в реальном времени
+- [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP
+
+### Надёжность
+- [ ] **Экспоненциальный backoff** — при ошибках подключения
+- [ ] **Graceful shutdown** — корректное завершение всех соединений
+- [ ] **Memory Profiling** — поиск утечек в пулах (tracemalloc/memray)
+
+### Безопасность
+- [ ] **Rate limiting** — защита от злоупотреблений (requests/minute)
+- [ ] **IP whitelist/blacklist** — фильтрация подключений
+- [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
+
+### Android App
+- [ ] **Battery optimization** — фоновая работа без разряда (WorkManager)
+- [ ] **Quick Settings Tile** — быстрый старт/стоп из шторки
+- [ ] **Статистика в шторке** — скорость, трафик, активные подключения
+
+### Мониторинг
+- [ ] **Prometheus metrics** — endpoint `/metrics` для сбора метрик
+- [ ] **JSON логирование** — для интеграции с ELK/Grafana
+- [ ] **Alerting** — уведомления при высокой задержке DC (>200ms)
+
+---
+
 **© 2026 Dupley Maxim Igorevich. Все права защищены.**
