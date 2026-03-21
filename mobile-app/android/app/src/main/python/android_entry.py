@@ -10,10 +10,10 @@ import os
 import traceback
 from datetime import date
 
-from proxy.constants import DC_IP_MAP
+from proxy.constants import DC_IP_MAP, WS_POOL_SIZE, WS_POOL_MAX_SIZE
 from proxy.tg_ws_proxy import _run, get_stats, get_stats_summary, _measure_dc_ping, _clear_dns_cache
 
-# Провайдеры DoH (Task 2)
+# DoH Providers
 DOH_PROVIDERS = {
     "google": "https://dns.google/resolve",
     "cloudflare": "https://cloudflare-dns.com/dns-query",
@@ -41,77 +41,55 @@ _auth_creds = None
 _traffic_limit_mb = 0
 _is_wifi = True
 _last_heartbeat = 0
+_current_pool_size = WS_POOL_SIZE
+_session_id = None
 
-def ping():
-    global _last_heartbeat
-    _last_heartbeat = time.time()
-    return True
-
-def set_secure_dns(enabled, provider="google"):
-    """Настраивает расширенный DoH (Task 2)"""
-    global _use_doh, _doh_provider
-    _use_doh = enabled
-    if provider in DOH_PROVIDERS:
-        _doh_provider = provider
-    logger.info(f"Secure DNS (DoH) enabled: {enabled}, Provider: {_doh_provider}")
-    return True
-
-def resolve_doh(domain):
-    """Продвинутый резолвинг через DoH провайдеров"""
-    if not _use_doh: return None
-    
-    url = DOH_PROVIDERS.get(_doh_provider, DOH_PROVIDERS["google"])
-    params = f"?name={domain}&type=A"
-    
-    # Cloudflare/Quad9 требуют заголовок Accept
-    headers = {"Accept": "application/dns-json"}
-    
+def tune_tcp_socket(sock):
+    """Низкоуровневая настройка TCP для мобильных сетей (Task 8)"""
     try:
-        req = urllib.request.Request(url + params, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode())
-            if "Answer" in data:
-                return data["Answer"][0]["data"]
+        # Включаем Keep-Alive
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        
+        # Настройка параметров Keep-Alive для Android
+        # (интервал проверки при простое)
+        if hasattr(socket, "TCP_KEEPIDLE"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+        
+        # Увеличиваем буферы для компенсации лагов мобильной сети
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 128 * 1024)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 128 * 1024)
+        
+        logger.debug("TCP Socket tuned for mobile network")
     except Exception as e:
-        logger.error(f"DoH resolution failed ({_doh_provider}) for {domain}: {e}")
-        # Автоматический фоллбек на Google
-        if _doh_provider != "google":
-            logger.info("Retrying DoH with Google DNS...")
-            try:
-                with urllib.request.urlopen(DOH_PROVIDERS["google"] + params, timeout=5) as resp:
-                    data = json.loads(resp.read().decode())
-                    if "Answer" in data: return data["Answer"][0]["data"]
-            except: pass
-    return None
+        logger.error(f"Failed to tune socket: {e}")
 
-def on_network_changed(is_wifi):
-    global _is_wifi
-    _is_wifi = is_wifi
-    logger.info(f"Network type changed: {'WiFi' if is_wifi else 'Mobile'}")
+def start_session_logging():
+    global _session_id
+    _session_id = int(time.time())
+    logger.info(f"New Proxy Session started: {_session_id}")
 
-def save_daily_stats():
+def save_session_report():
     try:
         stats = get_stats()
-        today = str(date.today())
-        file_path = os.path.join(os.environ.get("HOME", "."), "daily_stats.json")
-        data = {}
-        if os.path.exists(file_path):
-            with open(file_path, "r") as f: data = json.load(f)
-        data[today] = {
-            "up": stats.get("bytes_up", 0),
-            "down": stats.get("bytes_down", 0),
-            "last_update": time.ctime()
+        report = {
+            "session_id": _session_id,
+            "duration_sec": time.time() - _session_id if _session_id else 0,
+            "final_stats": stats,
+            "timestamp": time.ctime()
         }
-        keys = sorted(data.keys())
-        if len(keys) > 30:
-            for k in keys[:-30]: del data[k]
-        with open(file_path, "w") as f: json.dump(data, f)
+        file_path = os.path.join(os.environ.get("HOME", "."), f"session_{_session_id}.json")
+        with open(file_path, "w") as f: json.dump(report, f)
+        path = os.environ.get("HOME", ".")
+        reports = sorted([f for f in os.listdir(path) if f.startswith("session_")])
+        for r in reports[:-5]: os.remove(os.path.join(path, r))
     except: pass
 
 def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
     global stop_event, proxy_thread, _proxy_port, _custom_dc_opt, _auth_creds
     _proxy_port = port
     if proxy_thread and proxy_thread.is_alive(): return {"status": "Already running", "port": _proxy_port}
+    
+    start_session_logging()
     stop_event = asyncio.Event()
     dc_opt = _custom_dc_opt if _custom_dc_opt else {dc_id: ip for dc_id, ip in DC_IP_MAP.items()}
 
@@ -126,7 +104,7 @@ def start_proxy(host="127.0.0.1", port=1080, auto_port=True):
         except Exception:
             write_crash_log(traceback.format_exc())
         finally:
-            save_daily_stats()
+            save_session_report()
             loop.close()
 
     proxy_thread = threading.Thread(target=run_loop, daemon=True)
@@ -138,14 +116,12 @@ def get_proxy_stats_dict():
         stats = get_stats()
         stats["is_running"] = proxy_thread is not None and proxy_thread.is_alive()
         stats["port"] = _proxy_port
-        stats["last_heartbeat"] = _last_heartbeat
-        stats["doh_provider"] = _doh_provider
-        if int(time.time()) % 60 == 0: save_daily_stats()
+        stats["tcp_tuning"] = True
         return stats
     except Exception as e: return {"error": str(e)}
 
 def write_crash_log(error_msg):
     try:
-        with open(os.path.join(os.environ.get("HOME", "."), "crash_log.txt"), "a") as f:
-            f.write(f"\n--- CRASH AT {time.ctime()} ---\n{error_msg}\n")
+        crash_file = os.path.join(os.environ.get("HOME", "."), "crash_log.txt")
+        with open(crash_file, "a") as f: f.write(f"\n--- CRASH {time.ctime()} ---\n{error_msg}\n")
     except: pass
