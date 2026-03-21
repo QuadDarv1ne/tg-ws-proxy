@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import pytest
 
 from proxy.rate_limiter import (
@@ -119,55 +118,55 @@ class TestRateLimiter:
     def test_rate_limiter_check_rate_limit_records(self):
         """Test check_rate_limit records requests."""
         limiter = RateLimiter()
-        
+
         limiter.check_rate_limit("192.168.1.1")
-        
+
         stats = limiter._ip_stats["192.168.1.1"]
         assert stats.total_requests >= 1
 
     def test_rate_limiter_get_ip_stats(self):
         """Test get_ip_stats method."""
         limiter = RateLimiter()
-        
+
         limiter.check_rate_limit("192.168.1.1")
-        
+
         stats = limiter.get_ip_stats("192.168.1.1")
-        
+
         assert isinstance(stats, dict)
         assert 'total_requests' in stats
 
     def test_rate_limiter_get_ip_stats_missing(self):
         """Test get_ip_stats for missing IP."""
         limiter = RateLimiter()
-        
+
         stats = limiter.get_ip_stats("192.168.1.1")
-        
+
         assert isinstance(stats, dict)
 
     def test_rate_limiter_get_global_stats(self):
         """Test get_global_stats method."""
         limiter = RateLimiter()
-        
+
         stats = limiter.get_global_stats()
-        
+
         assert 'total_active_connections' in stats
         assert 'unique_ips' in stats
 
     def test_rate_limiter_add_connection(self):
         """Test add_connection method."""
         limiter = RateLimiter()
-        
+
         limiter.add_connection("192.168.1.1")
-        
+
         assert limiter._active_connections["192.168.1.1"] == 1
         assert limiter._total_active == 1
 
     def test_rate_limiter_remove_connection(self):
         """Test remove_connection method."""
         limiter = RateLimiter()
-        
+
         limiter.add_connection("192.168.1.1")
         limiter.remove_connection("192.168.1.1")
-        
+
         assert limiter._active_connections["192.168.1.1"] == 0
         assert limiter._total_active == 0

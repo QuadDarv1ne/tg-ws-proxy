@@ -22,4 +22,10 @@
     <string name="tile_label">TG Proxy</string>
     <string name="tile_on">TG Proxy: ON</string>
     <string name="tile_off">TG Proxy: OFF</string>
+
+    <!-- App Shortcuts -->
+    <string name="shortcut_start_label">Запустить прокси</string>
+    <string name="shortcut_start_short_label">Пуск</string>
+    <string name="shortcut_stop_label">Остановить прокси</string>
+    <string name="shortcut_stop_short_label">Стоп</string>
 </resources>

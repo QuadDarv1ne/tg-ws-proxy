@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="start_proxy"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_start_short_label"
+        android:shortcutLongLabel="@string/shortcut_start_label">
+        <intent
+            android:action="com.dupley.tgwssproxy.ACTION_START_PROXY"
+            android:targetPackage="com.dupley.tgwssproxy"
+            android:targetClass="com.dupley.tgwssproxy.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="stop_proxy"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_stop_short_label"
+        android:shortcutLongLabel="@string/shortcut_stop_label">
+        <intent
+            android:action="com.dupley.tgwssproxy.ACTION_STOP_PROXY"
+            android:targetPackage="com.dupley.tgwssproxy"
+            android:targetClass="com.dupley.tgwssproxy.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

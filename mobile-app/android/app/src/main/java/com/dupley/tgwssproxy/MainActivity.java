@@ -19,6 +19,9 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
 
+    public static final String ACTION_START_PROXY = "com.dupley.tgwssproxy.ACTION_START_PROXY";
+    public static final String ACTION_STOP_PROXY = "com.dupley.tgwssproxy.ACTION_STOP_PROXY";
+
     private final ActivityResultLauncher<String> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
@@ -32,23 +35,36 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Регистрация кастомного плагина для управления прокси из JS
         registerPlugin(ProxyPlugin.class);
-
-        // Включает отображение контента "от края до края"
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
-        // Проверка разрешений на уведомления (Android 13+)
+        handleIntent(getIntent());
+
         checkNotificationPermission();
-
-        // Проверка и запрос на отключение оптимизации батареи
         checkBatteryOptimization();
-
-        // Запрос разрешения на автозапуск (для китайских прошивок)
         AutoStartHelper.requestAutoStart(this);
 
-        // Запуск фонового сервиса для стабильной работы прокси
-        startProxyService();
+        // По умолчанию запускаем сервис, если не было команды на остановку
+        if (!ACTION_STOP_PROXY.equals(getIntent().getAction())) {
+            startProxyService();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleIntent(intent);
+    }
+
+    private void handleIntent(Intent intent) {
+        if (intent == null || intent.getAction() == null) return;
+
+        String action = intent.getAction();
+        if (ACTION_START_PROXY.equals(action)) {
+            startProxyService();
+        } else if (ACTION_STOP_PROXY.equals(action)) {
+            stopProxyService();
+        }
     }
 
     private void checkNotificationPermission() {
@@ -67,6 +83,12 @@ public class MainActivity extends BridgeActivity {
         } else {
             startService(serviceIntent);
         }
+    }
+
+    private void stopProxyService() {
+        Intent serviceIntent = new Intent(this, ProxyForegroundService.class);
+        serviceIntent.setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
+        startService(serviceIntent);
     }
 
     @SuppressLint("BatteryLife")
