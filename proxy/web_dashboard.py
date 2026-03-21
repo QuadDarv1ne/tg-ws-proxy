@@ -2744,7 +2744,7 @@ class WebDashboard:
             """Get latest diagnostics results."""
             try:
                 from .diagnostics import DC_DOMAINS, DC_IPS
-                
+
                 # Return cached or last known results
                 # In a full implementation, this would fetch from a shared state
                 return jsonify({
@@ -2761,7 +2761,7 @@ class WebDashboard:
             """Get current optimization configuration."""
             try:
                 from .tg_ws_proxy import get_optimization_config
-                
+
                 config = get_optimization_config()
                 return jsonify({
                     'status': 'success',
@@ -2775,13 +2775,13 @@ class WebDashboard:
             """Update optimization configuration."""
             try:
                 from .tg_ws_proxy import update_optimization_config
-                
+
                 data = request.get_json()
                 if not data:
                     return jsonify({'error': 'No data provided'}), 400
-                
+
                 update_optimization_config(data)
-                
+
                 return jsonify({
                     'status': 'success',
                     'message': 'Optimization configuration updated',
@@ -2795,14 +2795,14 @@ class WebDashboard:
             """Get optimization metrics."""
             try:
                 from proxy.tg_ws_proxy import _server_instance
-                
+
                 if _server_instance is None:
                     return jsonify({
                         'status': 'warning',
                         'message': 'Proxy server not running',
                         'metrics': {}
                     })
-                
+
                 metrics = _server_instance.get_optimization_metrics()
                 return jsonify({
                     'status': 'success',
@@ -2816,9 +2816,9 @@ class WebDashboard:
             """Clear DNS cache."""
             try:
                 from .tg_ws_proxy import clear_dns_cache
-                
+
                 clear_dns_cache()
-                
+
                 return jsonify({
                     'status': 'success',
                     'message': 'DNS cache cleared',
