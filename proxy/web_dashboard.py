@@ -2774,7 +2774,10 @@ class WebDashboard:
         def api_optimization_config_update() -> Response:
             """Update optimization configuration."""
             try:
-                from .tg_ws_proxy import update_optimization_config
+                from .tg_ws_proxy import (
+                    get_optimization_config,
+                    update_optimization_config,
+                )
 
                 data = request.get_json()
                 if not data:

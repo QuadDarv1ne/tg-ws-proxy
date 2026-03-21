@@ -147,12 +147,12 @@ async def _resolve_domain_cached(domain: str, port: int = 443, timeout: float = 
 async def _resolve_domain_direct(domain: str, port: int = 443, timeout: float = 5.0) -> list[tuple[str, int]]:
     """
     Resolve domain without caching (for when cache is disabled).
-    
+
     Args:
         domain: Domain name to resolve
         port: Target port
         timeout: Resolution timeout
-        
+
     Returns:
         List of (ip, port) tuples
     """
@@ -184,7 +184,7 @@ def _clear_dns_cache() -> None:
 def update_optimization_config(config: dict) -> None:
     """
     Update optimization configuration at runtime.
-    
+
     Args:
         config: Dictionary with optimization settings
     """
