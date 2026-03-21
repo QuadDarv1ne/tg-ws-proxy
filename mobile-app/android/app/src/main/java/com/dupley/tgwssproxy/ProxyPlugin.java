@@ -3,7 +3,11 @@ package com.dupley.tgwssproxy;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.provider.Settings;
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
 import com.getcapacitor.JSObject;
@@ -25,6 +29,7 @@ public class ProxyPlugin extends Plugin {
     @PluginMethod
     public void startProxy(PluginCall call) {
         saveSettings(call);
+        vibrate(50);
         
         Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -39,12 +44,52 @@ public class ProxyPlugin extends Plugin {
 
     @PluginMethod
     public void stopProxy(PluginCall call) {
+        vibrate(100);
         Intent serviceIntent = new Intent(getContext(), ProxyForegroundService.class);
         serviceIntent.setAction(ProxyForegroundService.ACTION_STOP_SERVICE);
         getContext().startService(serviceIntent);
         JSObject ret = new JSObject();
         ret.put("status", "stopping");
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openTelegramProxy(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        int port = prefs.getInt(KEY_PORT, 1080);
+        String url = "tg://socks?server=127.0.0.1&port=" + port;
+        
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not open Telegram: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void openSystemProxySettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_WIFI_SETTINGS); // Прямого пути к Proxy нет, это лучший вариант
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not open settings: " + e.getMessage());
+        }
+    }
+
+    private void vibrate(long duration) {
+        Vibrator v = (Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
+        if (v != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                v.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                v.vibrate(duration);
+            }
+        }
     }
 
     @PluginMethod

@@ -9,6 +9,52 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+        </intent>
+        <intent>
+            <component android:name="com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.letv.android.letvsafe/com.letv.android.letvsafe.AutobootManageActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.huawei.systemmanager/com.huawei.systemmanager.optimize.process.ProtectActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.huawei.systemmanager/com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.coloros.safecenter/com.coloros.safecenter.permission.startup.StartupAppListActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.coloros.safecenter/com.coloros.safecenter.startupapp.StartupAppListActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.oppo.safe/com.oppo.safe.permission.startup.StartupAppListActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.BgStartUpManager" />
+        </intent>
+        <intent>
+            <component android:name="com.vivo.permissionmanager/com.vivo.permissionmanager.activity.BgStartUpManagerActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.htc.pitroad/com.htc.pitroad.landingpage.activity.LandingPageActivity" />
+        </intent>
+        <intent>
+            <component android:name="com.asus.mobilemanager/com.asus.mobilemanager.autostart.AutoStartActivity" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -45,7 +91,7 @@
         <service
             android:name=".ProxyTileService"
             android:icon="@mipmap/ic_launcher"
-            android:label="TG Proxy"
+            android:label="@string/tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
             <intent-filter>

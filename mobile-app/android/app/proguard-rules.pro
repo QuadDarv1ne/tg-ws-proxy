@@ -1,4 +1,4 @@
-# Специфические правила для Capacitor
+# Capacitor Specific Rules
 -keep class com.getcapacitor.** { *; }
 -keep @com.getcapacitor.NativePlugin public class *
 -keep @com.getcapacitor.CapacitorPlugin public class *
@@ -6,16 +6,23 @@
     @com.getcapacitor.PluginMethod public void *(com.getcapacitor.PluginCall);
 }
 
-# Для работы WebView и JavaScript интерфейсов
+# WebView & JS Interface
 -keepattributes JavascriptInterface
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Предотвращение удаления классов моста
+# Bridge Classes
 -keep class com.getcapacitor.Bridge { *; }
 -keep class com.getcapacitor.MessageHandler { *; }
 
-# Стандартные настройки для отладки (стек-трейсы)
+# Chaquopy Rules (though mostly automatic, these ensure bridge stability)
+-keep class com.chaquo.python.** { *; }
+-keepattributes *Annotation*, EnclosingMethod, InnerClasses, Signature
+
+# App Specific Classes (to prevent obfuscation of our bridge)
+-keep class com.dupley.tgwssproxy.** { *; }
+
+# Stacktrace Debugging
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

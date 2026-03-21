@@ -153,7 +153,7 @@ class ConfigBackup:
             config = backup_data.get('config')
             if config:
                 log.info("Config restored from: %s", backup_path)
-                return config
+                return config  # type: ignore[no-any-return]
 
             log.error("Invalid backup file format: %s", backup_path)
             return None
@@ -200,7 +200,7 @@ class ConfigBackup:
         """
         backups = self.list_backups()
         if backups:
-            return backups[0]['path']
+            return backups[0]['path']  # type: ignore[no-any-return]
         return None
 
     def delete_backup(self, backup_path: str) -> bool:

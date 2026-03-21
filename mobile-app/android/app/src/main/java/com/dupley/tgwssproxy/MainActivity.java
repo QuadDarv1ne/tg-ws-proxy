@@ -24,7 +24,7 @@ public class MainActivity extends BridgeActivity {
                 if (isGranted) {
                     startProxyService();
                 } else {
-                    Toast.makeText(this, "Разрешение на уведомления необходимо для работы прокси в фоне", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, getString(R.string.notification_permission_needed), Toast.LENGTH_LONG).show();
                 }
             });
 
@@ -80,7 +80,7 @@ public class MainActivity extends BridgeActivity {
                     intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
                     intent.setData(Uri.parse("package:" + packageName));
                     startActivity(intent);
-                    Toast.makeText(this, "Для стабильной работы прокси отключите оптимизацию батареи", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, getString(R.string.battery_optimization_toast), Toast.LENGTH_LONG).show();
                 } catch (Exception e) {
                     Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
                     startActivity(intent);
