@@ -2744,7 +2744,7 @@ class WebDashboard:
             """Get latest diagnostics results."""
             try:
                 from .diagnostics import DC_DOMAINS, DC_IPS
-
+                
                 # Return cached or last known results
                 # In a full implementation, this would fetch from a shared state
                 return jsonify({
@@ -2752,6 +2752,76 @@ class WebDashboard:
                     'dc_ips': DC_IPS,
                     'last_run': None,
                     'results': []
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/optimization/config', methods=['GET'])
+        def api_optimization_config_get() -> Response:
+            """Get current optimization configuration."""
+            try:
+                from .tg_ws_proxy import get_optimization_config
+                
+                config = get_optimization_config()
+                return jsonify({
+                    'status': 'success',
+                    'config': config,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/optimization/config', methods=['POST'])
+        def api_optimization_config_update() -> Response:
+            """Update optimization configuration."""
+            try:
+                from .tg_ws_proxy import update_optimization_config
+                
+                data = request.get_json()
+                if not data:
+                    return jsonify({'error': 'No data provided'}), 400
+                
+                update_optimization_config(data)
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Optimization configuration updated',
+                    'config': get_optimization_config(),
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/optimization/metrics')
+        def api_optimization_metrics() -> Response:
+            """Get optimization metrics."""
+            try:
+                from proxy.tg_ws_proxy import _server_instance
+                
+                if _server_instance is None:
+                    return jsonify({
+                        'status': 'warning',
+                        'message': 'Proxy server not running',
+                        'metrics': {}
+                    })
+                
+                metrics = _server_instance.get_optimization_metrics()
+                return jsonify({
+                    'status': 'success',
+                    'metrics': metrics,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/optimization/dns/cache', methods=['DELETE'])
+        def api_dns_cache_clear() -> Response:
+            """Clear DNS cache."""
+            try:
+                from .tg_ws_proxy import clear_dns_cache
+                
+                clear_dns_cache()
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'DNS cache cleared',
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
