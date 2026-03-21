@@ -22,7 +22,6 @@ import ssl
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Literal
 
 log = logging.getLogger('tg-diagnostics')
 
@@ -37,7 +36,7 @@ class TestResult:
     error: str | None = None
     details: str | None = None
     timestamp: float = field(default_factory=time.time)
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {
@@ -61,21 +60,21 @@ class DiagnosticsReport:
     failed_tests: int = 0
     results: list[TestResult] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
-    
+
     @property
     def success_rate(self) -> float:
         """Calculate success rate percentage."""
         if self.total_tests == 0:
             return 0.0
         return (self.passed_tests / self.total_tests) * 100
-    
+
     @property
     def duration_ms(self) -> float:
         """Get test duration in milliseconds."""
         if self.end_time is None:
             return 0.0
         return (self.end_time - self.start_time) * 1000
-    
+
     def add_result(self, result: TestResult) -> None:
         """Add test result and update counters."""
         self.results.append(result)
@@ -84,12 +83,12 @@ class DiagnosticsReport:
             self.passed_tests += 1
         else:
             self.failed_tests += 1
-    
+
     def add_recommendation(self, recommendation: str) -> None:
         """Add recommendation to the report."""
         if recommendation not in self.recommendations:
             self.recommendations.append(recommendation)
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {
@@ -115,7 +114,7 @@ async def test_dns_resolution(hostname: str) -> TestResult:
         )
         latency = (time.perf_counter() - start) * 1000
         ips = list({addr[4][0] for addr in addrs})
-        
+
         return TestResult(
             test_name="DNS Resolution",
             target=hostname,
@@ -143,7 +142,7 @@ async def test_tcp_connect(host: str, port: int, timeout: float = 5.0) -> TestRe
         latency = (time.perf_counter() - start) * 1000
         writer.close()
         await writer.wait_closed()
-        
+
         return TestResult(
             test_name="TCP Connect",
             target=f"{host}:{port}",
@@ -267,7 +266,7 @@ DC_IPS = {
 async def run_full_diagnostics() -> DiagnosticsReport:
     """Run full diagnostic suite."""
     report = DiagnosticsReport()
-    
+
     log.info("Starting diagnostics...")
 
     # Test DNS
@@ -280,7 +279,7 @@ async def run_full_diagnostics() -> DiagnosticsReport:
 
     # Test TCP connectivity to DC IPs
     log.info("Testing TCP connectivity...")
-    for dc, ips in DC_IPS.items():
+    for _dc, ips in DC_IPS.items():
         for ip in ips:
             result = await test_tcp_connect(ip, 443)
             report.add_result(result)
@@ -299,9 +298,9 @@ async def run_full_diagnostics() -> DiagnosticsReport:
     _generate_recommendations(report)
 
     # Summary
-    log.info("Diagnostics complete: %d/%d tests passed (%.1f%%)", 
+    log.info("Diagnostics complete: %d/%d tests passed (%.1f%%)",
              report.passed_tests, report.total_tests, report.success_rate)
-    
+
     report.end_time = time.time()
     return report
 
@@ -312,22 +311,22 @@ def _generate_recommendations(report: DiagnosticsReport) -> None:
     dns_failures = [r for r in report.results if r.test_name == "DNS Resolution" and not r.success]
     if dns_failures:
         report.add_recommendation("⚠️ DNS resolution failures detected. Try changing your DNS server to Google DNS (8.8.8.8) or Cloudflare (1.1.1.1).")
-    
+
     # Check TCP connectivity
     tcp_failures = [r for r in report.results if r.test_name == "TCP Connect" and not r.success]
     if len(tcp_failures) > len(DC_IPS):
         report.add_recommendation("⚠️ Multiple TCP connection failures. Check your firewall and internet connection.")
-    
+
     # Check WebSocket issues
     ws_failures = [r for r in report.results if r.test_name == "WebSocket Connect" and not r.success]
     ws_redirects = [r for r in ws_failures if "302" in (r.error or "")]
-    
+
     if ws_redirects:
         report.add_recommendation("⚠️ WebSocket endpoints returning 302 redirects. This DC may not support WebSocket connections - TCP fallback will be used.")
-    
+
     if len(ws_failures) > len(DC_DOMAINS) and not ws_redirects:
         report.add_recommendation("⚠️ Multiple WebSocket failures. Consider using TCP fallback or checking your network configuration.")
-    
+
     # Check latency
     successful_ws = [r for r in report.results if r.test_name == "WebSocket Connect" and r.success and r.latency_ms]
     if successful_ws:
@@ -338,7 +337,7 @@ def _generate_recommendations(report: DiagnosticsReport) -> None:
             report.add_recommendation(f"⚡ Moderate latency ({avg_latency:.1f}ms). Performance should be acceptable.")
         else:
             report.add_recommendation(f"✅ Excellent latency ({avg_latency:.1f}ms). Network connection is optimal.")
-    
+
     # Overall success rate
     if report.success_rate < 50:
         report.add_recommendation("🔴 Low success rate. Major connectivity issues detected. Check your internet connection and firewall settings.")
@@ -397,7 +396,7 @@ def run_diagnostics_cli() -> int:
 
     report = asyncio.run(run_full_diagnostics())
     print_diagnostics_report(report)
-    
+
     # Optionally save to file
     if len(sys.argv) > 1 and sys.argv[1] == '--json':
         output_file = 'diagnostics_report.json'
