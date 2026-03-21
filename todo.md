@@ -30,13 +30,13 @@
 - ✅ diagnostics_advanced.py — расширенная диагностика
 
 ### Тесты
-- ✅ Tests: 451 passed, 7 skipped, 12 failed (было 255 passed)
+- ✅ Tests: 463 passed, 7 skipped, 9 errors (было 255 passed)
 - ✅ Добавлены тесты для i18n, updater, whitelist
 - ✅ Покрытие web_dashboard.py: 61% → 74%
 - ✅ Исправлены тесты config_backup (Windows permissions)
 - ✅ Создана fixtures для Windows (tmp_path_safe)
 - ✅ Добавлены тесты для rate_limiter.py (14 тестов)
-- ✅ Исправлены все ruff ошибки (I001, F401, W293, B007)
+- ✅ Исправлены все ruff ошибки (I001, F401, W293, B007, F821)
 - ✅ Ruff: 0 ошибок во всех файлах
 
 ### Документация
@@ -89,7 +89,7 @@
 
 ---
 
-## 🔴 Высокий приоритет (v2.34.0)
+## 🔴 Высокий приоритет (v2.35.0)
 
 ### Тесты и покрытие
 - [ ] Покрытие tg_ws_proxy.py: 13% → 60%
@@ -98,7 +98,7 @@
   - [ ] Тесты для TCP fallback логики
 - [ ] Load tests (100+ одновременных подключений)
 - [ ] Coverage > 80% (текущее ~35%)
-- [ ] Fix failed tests (12 failed → 0)
+- [ ] Fix failed tests (9 errors → 0)
 
 ### Покрытие тестами
 - [ ] rate_limiter.py: 14 тестов → 80% coverage
@@ -114,7 +114,7 @@
 
 ---
 
-## 🟢 Низкий приоритет (v2.34.0)
+## 🟢 Низкий приоритет (v2.35.0)
 
 ### Документация (без запроса не менять)
 - [ ] Скриншоты интерфейса в README
@@ -141,7 +141,7 @@
 ## 📊 Статус
 
 ```
-Tests: 451 passed, 7 skipped, 12 failed
+Tests: 463 passed, 7 skipped, 9 errors
 Coverage: ~35% (цель >80%)
 Ruff: 0 ошибок
 Mypy: missing stubs (внешние зависимости)
