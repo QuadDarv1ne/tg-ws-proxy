@@ -2383,14 +2383,52 @@ async def _run(
             log.info("Server socket closed")
 
             # Close all idle WebSocket connections in pool
+            ws_count = 0
             for key, bucket in server_instance.ws_pool._idle.items():
                 dc, is_media = key
                 for ws, _ in bucket:
                     try:
                         await ws.close()
+                        ws_count += 1
                     except Exception:
                         pass
-            log.info("WebSocket pool closed")
+            log.info("WebSocket pool closed (%d connections)", ws_count)
+
+            # Stop DC latency monitor
+            if hasattr(server_instance, '_dc_monitor_task') and server_instance._dc_monitor_task:
+                server_instance._dc_monitor_task.cancel()
+                try:
+                    await server_instance._dc_monitor_task
+                except asyncio.CancelledError:
+                    pass
+                log.info("DC monitor stopped")
+
+            # Stop log stats task
+            if hasattr(server_instance, '_log_stats_task') and server_instance._log_stats_task:
+                server_instance._log_stats_task.cancel()
+                try:
+                    await server_instance._log_stats_task
+                except asyncio.CancelledError:
+                    pass
+                log.info("Log stats stopped")
+
+            # Stop pool optimization task
+            if hasattr(server_instance, '_optimize_pool_task') and server_instance._optimize_pool_task:
+                server_instance._optimize_pool_task.cancel()
+                try:
+                    await server_instance._optimize_pool_task
+                except asyncio.CancelledError:
+                    pass
+                log.info("Pool optimization stopped")
+
+            # Stop health checker
+            if hasattr(server_instance.ws_pool, '_health_check_task') and server_instance.ws_pool._health_check_task:
+                server_instance.ws_pool._health_check_task.cancel()
+                try:
+                    await server_instance.ws_pool._health_check_task
+                except asyncio.CancelledError:
+                    pass
+                log.info("Health checker stopped")
 
             log.info("Graceful shutdown completed")
 
