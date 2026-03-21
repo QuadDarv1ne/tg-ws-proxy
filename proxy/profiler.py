@@ -1,340 +1,317 @@
 """
-Performance profiler for TG WS Proxy.
+Memory Profiling Module for TG WS Proxy.
 
-Provides tools for profiling and analyzing proxy performance.
+Provides memory usage tracking and leak detection:
+- Per-component memory tracking
+- Object count monitoring
+- Memory leak detection
+- Periodic snapshots and reporting
+
+Author: Dupley Maxim Igorevich
+© 2026 Dupley Maxim Igorevich. All rights reserved.
 """
 
 from __future__ import annotations
 
-import cProfile
-import io
+import asyncio
+import gc
 import logging
-import pstats
-import time
-from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+import tracemalloc
+import weakref
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
 
-from typing_extensions import ParamSpec
-
-P = ParamSpec("P")
-R = TypeVar("R")
-
-log = logging.getLogger("tg-ws-proxy-profiler")
+log = logging.getLogger('tg-ws-profiler')
 
 
-class PerformanceProfiler:
-    """
-    Performance profiler for measuring function execution time.
-
-    Usage:
-        profiler = PerformanceProfiler()
-
-        # Profile a function
-        result = profiler.profile(my_function, *args, **kwargs)
-
-        # Get statistics
-        stats = profiler.get_stats()
-        profiler.print_stats()
-    """
-
-    def __init__(self) -> None:
-        self._profiler: cProfile.Profile | None = None
-        self._stats: pstats.Stats | None = None
-        self._profile_data: bytes | None = None
-        self._is_profiling = False
-
-    def start(self) -> None:
-        """Start profiling."""
-        if self._is_profiling:
-            log.warning("Profiling already in progress")
-            return
-
-        self._profiler = cProfile.Profile()
-        self._profiler.enable()
-        self._is_profiling = True
-        log.info("Profiling started")
-
-    def stop(self) -> None:
-        """Stop profiling and collect statistics."""
-        if not self._is_profiling or not self._profiler:
-            return
-
-        self._profiler.disable()
-        self._is_profiling = False
-
-        # Save profile data
-        stream = io.StringIO()
-        self._stats = pstats.Stats(self._profiler, stream=stream)
-        self._stats.sort_stats(pstats.SortKey.TIME)
-
-        log.info("Profiling completed")
-
-    def profile(self, func: Callable[..., R], *args: Any, **kwargs: Any) -> R:
-        """
-        Profile a function execution.
-
-        Args:
-            func: Function to profile
-            *args: Positional arguments for the function
-            **kwargs: Keyword arguments for the function
-
-        Returns:
-            Function result
-        """
-        self.start()
-        try:
-            result = func(*args, **kwargs)
-            return result
-        finally:
-            self.stop()
-
-    async def profile_async(
-        self, func: Callable[..., Awaitable[R]], *args: Any, **kwargs: Any
-    ) -> R:
-        """
-        Profile an async function execution.
-
-        Args:
-            func: Async function to profile
-            *args: Positional arguments for the function
-            **kwargs: Keyword arguments for the function
-
-        Returns:
-            Function result
-        """
-        self.start()
-        try:
-            result = await func(*args, **kwargs)
-            return result
-        finally:
-            self.stop()
-
-    def get_stats(self) -> dict[str, Any]:
-        """
-        Get profiling statistics.
-
-        Returns:
-            Dictionary with profiling statistics
-        """
-        if not self._stats:
-            return {}
-
-        # Extract key statistics
-        total_calls: int = self._stats.total_calls  # type: ignore[attr-defined]
-        total_time: float = self._stats.total_tt  # type: ignore[attr-defined]
-        file_stats: list[dict[str, Any]] = []
-
-        # Get top 20 functions by time
-        for func_key, func_stats in list(self._stats.stats.items())[:20]:  # type: ignore[attr-defined]
-            filename, line_no, func_name = func_key
-            cc, nc, tt, ct, callers = func_stats
-
-            file_stats.append({
-                "function": func_name,
-                "filename": filename,
-                "line_no": line_no,
-                "call_count": nc,
-                "total_time": tt,
-                "cumulative_time": ct,
-                "time_per_call": tt / nc if nc > 0 else 0,
-            })
-
-        return {
-            "total_calls": total_calls,
-            "total_time": total_time,
-            "functions": file_stats,
-        }
-
-    def print_stats(self, top_n: int = 20) -> None:
-        """
-        Print profiling statistics to log.
-
-        Args:
-            top_n: Number of top functions to display
-        """
-        if not self._stats:
-            return
-
-        stream = io.StringIO()
-        print_stats = pstats.Stats(self._profiler, stream=stream)
-        print_stats.sort_stats(pstats.SortKey.TIME)
-        print_stats.print_stats(top_n)
-
-        log.info("Profiling results:\n%s", stream.getvalue())
-
-    def get_profile_string(self, top_n: int = 20) -> str:
-        """
-        Get profiling statistics as a formatted string.
-
-        Args:
-            top_n: Number of top functions to display
-
-        Returns:
-            Formatted profiling statistics string
-        """
-        if not self._stats:
-            return "No profiling data available"
-
-        stream = io.StringIO()
-        print_stats = pstats.Stats(self._profiler, stream=stream)
-        print_stats.sort_stats(pstats.SortKey.TIME)
-        print_stats.print_stats(top_n)
-
-        return stream.getvalue()
-
-
-class AsyncPerformanceProfiler:
-    """
-    Async-aware performance profiler for measuring async function execution time.
-
-    Usage:
-        profiler = AsyncPerformanceProfiler()
-
-        # Profile an async function
-        result = await profiler.profile_async(my_async_function, *args, **kwargs)
-
-        # Get statistics
-        stats = profiler.get_stats()
-    """
-
-    def __init__(self) -> None:
-        self._timings: dict[str, list[float]] = {}
-        self._call_counts: dict[str, int] = {}
-
-    async def profile_async(
-        self,
-        func: Callable[..., Awaitable[R]],
-        name: str | None = None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> R:
-        """
-        Profile an async function execution.
-
-        Args:
-            func: Async function to profile
-            name: Optional name for the function (defaults to func.__name__)
-            *args: Positional arguments for the function
-            **kwargs: Keyword arguments for the function
-
-        Returns:
-            Function result
-        """
-        func_name = name or func.__name__
-
-        start_time = time.perf_counter()
-        try:
-            result = await func(*args, **kwargs)
-            return result
-        finally:
-            elapsed = time.perf_counter() - start_time
-            self._record_timing(func_name, elapsed)
-
-    def _record_timing(self, name: str, elapsed: float) -> None:
-        """Record a timing measurement."""
-        if name not in self._timings:
-            self._timings[name] = []
-            self._call_counts[name] = 0
-
-        self._timings[name].append(elapsed)
-        self._call_counts[name] += 1
-
-        # Keep only last 1000 measurements
-        if len(self._timings[name]) > 1000:
-            self._timings[name].pop(0)
-
-    def get_stats(self) -> dict[str, dict[str, float | int]]:
-        """
-        Get timing statistics for all profiled functions.
-
-        Returns:
-            Dictionary mapping function names to statistics
-        """
-        result = {}
-
-        for name, timings in self._timings.items():
-            if not timings:
-                continue
-
-            result[name] = {
-                "calls": self._call_counts.get(name, 0),
-                "total_time": sum(timings),
-                "avg_time": sum(timings) / len(timings),
-                "min_time": min(timings),
-                "max_time": max(timings),
-                "last_time": timings[-1] if timings else 0,
-            }
-
-        return result
-
-    def print_stats(self) -> None:
-        """Print timing statistics to log."""
-        stats = self.get_stats()
-
-        if not stats:
-            log.info("No profiling data available")
-            return
-
-        log.info("Performance Profiling Results:")
-        log.info("=" * 80)
-        log.info(f"{'Function':<40} {'Calls':>8} {'Total(s)':>10} {'Avg(ms)':>10} {'Min(ms)':>10} {'Max(ms)':>10}")
-        log.info("=" * 80)
-
-        # Sort by total time
-        sorted_stats = sorted(
-            stats.items(),
-            key=lambda x: x[1]["total_time"],
-            reverse=True
+@dataclass
+class MemorySnapshot:
+    """Memory snapshot at a point in time."""
+    timestamp: float
+    total_bytes: int
+    total_count: int
+    top_allocations: list[tuple[str, int, int]]  # (traceback, size, count)
+    component_stats: dict[str, dict[str, Any]] = field(default_factory=dict)
+    
+    def diff(self, other: 'MemorySnapshot') -> 'MemoryDiff':
+        """Calculate difference between two snapshots."""
+        return MemoryDiff(
+            timestamp_delta=other.timestamp - self.timestamp,
+            bytes_delta=other.total_bytes - self.total_bytes,
+            count_delta=other.total_count - self.total_count,
+            top_grows=other.top_allocations[:10],
         )
 
-        for name, stat in sorted_stats:
-            log.info(
-                f"{name:<40} {stat['calls']:>8} {stat['total_time']:>10.3f} "
-                f"{stat['avg_time']*1000:>10.2f} {stat['min_time']*1000:>10.2f} {stat['max_time']*1000:>10.2f}"
-            )
 
-        log.info("=" * 80)
+@dataclass
+class MemoryDiff:
+    """Difference between two memory snapshots."""
+    timestamp_delta: float
+    bytes_delta: int
+    count_delta: int
+    top_grows: list[tuple[str, int, int]]
+    
+    @property
+    def bytes_per_second(self) -> float:
+        if self.timestamp_delta <= 0:
+            return 0.0
+        return self.bytes_delta / self.timestamp_delta
+    
+    def is_leak_suspected(self, threshold_bytes_per_sec: float = 1024) -> bool:
+        """Check if memory leak is suspected (>1KB/s growth)."""
+        return self.bytes_per_second > threshold_bytes_per_sec
 
-    def clear(self) -> None:
-        """Clear all profiling data."""
-        self._timings.clear()
-        self._call_counts.clear()
-        log.info("Profiling data cleared")
+
+class ComponentTracker:
+    """Track memory usage per component."""
+    
+    def __init__(self, name: str):
+        self.name = name
+        self._objects: weakref.WeakSet = weakref.WeakSet()
+        self._created_count = 0
+        self._destroyed_count = 0
+    
+    def track(self, obj: Any) -> None:
+        """Track an object."""
+        self._objects.add(obj)
+        self._created_count += 1
+    
+    def untrack(self, obj: Any) -> None:
+        """Untrack an object."""
+        self._destroyed_count += 1
+    
+    @property
+    def live_count(self) -> int:
+        """Get count of live objects."""
+        return len(self._objects)
+    
+    @property
+    def stats(self) -> dict[str, Any]:
+        """Get component statistics."""
+        return {
+            'name': self.name,
+            'live_objects': self.live_count,
+            'created_total': self._created_count,
+            'destroyed_total': self._destroyed_count,
+            'leak_suspected': self._created_count - self._destroyed_count > self.live_count + 10,
+        }
+
+
+class MemoryProfiler:
+    """Memory profiler with leak detection."""
+    
+    def __init__(self, check_interval: float = 60.0):
+        self.check_interval = check_interval
+        self._snapshots: list[MemorySnapshot] = []
+        self._component_trackers: dict[str, ComponentTracker] = {}
+        self._running = False
+        self._task: asyncio.Task | None = None
+        self._max_snapshots = 100
+        self._leak_alerts: list[dict[str, Any]] = []
+        self._baseline_snapshot: MemorySnapshot | None = None
+    
+    def register_component(self, name: str) -> ComponentTracker:
+        """Register a component for tracking."""
+        if name not in self._component_trackers:
+            self._component_trackers[name] = ComponentTracker(name)
+        return self._component_trackers[name]
+    
+    def start(self) -> None:
+        """Start memory profiling."""
+        if not tracemalloc.is_tracing():
+            tracemalloc.start(25)  # Store 25 frames
+            log.info("Tracemalloc started (25 frames)")
+        
+        self._running = True
+        self._task = asyncio.create_task(self._profiling_loop())
+        self._baseline_snapshot = self.take_snapshot()
+        log.info("Memory profiler started (interval: %.1fs)", self.check_interval)
+    
+    def stop(self) -> None:
+        """Stop memory profiling."""
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                asyncio.get_event_loop().run_until_complete(self._task)
+            except asyncio.CancelledError:
+                pass
+        tracemalloc.stop()
+        log.info("Memory profiler stopped")
+    
+    async def _profiling_loop(self) -> None:
+        """Background profiling loop."""
+        while self._running:
+            await asyncio.sleep(self.check_interval)
+            try:
+                await self._check_memory()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.debug("Memory check error: %s", e)
+    
+    async def _check_memory(self) -> None:
+        """Check memory usage and detect leaks."""
+        snapshot = self.take_snapshot()
+        
+        # Store snapshot
+        self._snapshots.append(snapshot)
+        if len(self._snapshots) > self._max_snapshots:
+            self._snapshots.pop(0)
+        
+        # Check for leaks if we have baseline
+        if self._baseline_snapshot and len(self._snapshots) >= 2:
+            diff = self._snapshots[-2].diff(snapshot)
+            
+            if diff.is_leak_suspected():
+                alert = {
+                    'timestamp': datetime.now().isoformat(),
+                    'bytes_per_second': diff.bytes_per_second,
+                    'total_growth': diff.bytes_delta,
+                    'top_allocations': diff.top_grows[:5],
+                }
+                self._leak_alerts.append(alert)
+                log.warning(
+                    "MEMORY LEAK SUSPECTED: %.1f KB/s growth (%.1f KB total) | Top: %s",
+                    diff.bytes_per_second / 1024,
+                    diff.bytes_delta / 1024,
+                    diff.top_grows[0][0] if diff.top_grows else "unknown"
+                )
+        
+        # Log component stats
+        for name, tracker in self._component_trackers.items():
+            stats = tracker.stats
+            if stats['leak_suspected']:
+                log.warning(
+                    "Component '%s' leak suspected: created=%d, destroyed=%d, live=%d",
+                    name, stats['created_total'], stats['destroyed_total'], stats['live_objects']
+                )
+        
+        # Log summary
+        current, peak = tracemalloc.get_traced_memory()
+        log.debug(
+            "Memory: current=%.1f MB, peak=%.1f MB, snapshots=%d",
+            current / 1024 / 1024,
+            peak / 1024 / 1024,
+            len(self._snapshots)
+        )
+    
+    def take_snapshot(self) -> MemorySnapshot:
+        """Take a memory snapshot."""
+        snapshot = tracemalloc.take_snapshot()
+        stats = snapshot.statistics('lineno')
+        
+        top_allocations = [
+            (str(entry.traceback), entry.size, entry.count)
+            for entry in stats[:20]
+        ]
+        
+        # Force garbage collection
+        gc.collect()
+        
+        return MemorySnapshot(
+            timestamp=asyncio.get_event_loop().time(),
+            total_bytes=tracemalloc.get_traced_memory()[0],
+            total_count=len(gc.get_objects()),
+            top_allocations=top_allocations,
+            component_stats={
+                name: tracker.stats
+                for name, tracker in self._component_trackers.items()
+            },
+        )
+    
+    def get_stats(self) -> dict[str, Any]:
+        """Get current memory statistics."""
+        current, peak = tracemalloc.get_traced_memory()
+        
+        return {
+            'current_bytes': current,
+            'peak_bytes': peak,
+            'current_mb': current / 1024 / 1024,
+            'peak_mb': peak / 1024 / 1024,
+            'object_count': len(gc.get_objects()),
+            'snapshot_count': len(self._snapshots),
+            'leak_alerts': len(self._leak_alerts),
+            'components': {
+                name: tracker.stats
+                for name, tracker in self._component_trackers.items()
+            },
+            'last_leak_alert': self._leak_alerts[-1] if self._leak_alerts else None,
+        }
+    
+    def force_gc(self) -> int:
+        """Force garbage collection and return freed objects count."""
+        before = len(gc.get_objects())
+        gc.collect()
+        gc.collect()
+        gc.collect()
+        after = len(gc.get_objects())
+        freed = before - after
+        if freed > 0:
+            log.debug("GC freed %d objects", freed)
+        return freed
+    
+    def get_leak_report(self) -> str:
+        """Generate leak report."""
+        if not self._leak_alerts:
+            return "No memory leaks detected"
+        
+        lines = ["Memory Leak Report", "=" * 50]
+        for alert in self._leak_alerts[-10:]:  # Last 10 alerts
+            lines.append(f"Time: {alert['timestamp']}")
+            lines.append(f"  Growth: {alert['bytes_per_second']:.1f} KB/s")
+            lines.append(f"  Total: {alert['total_growth'] / 1024:.1f} KB")
+            if alert['top_allocations']:
+                lines.append(f"  Top: {alert['top_allocations'][0][0][:100]}")
+            lines.append("")
+        
+        return "\n".join(lines)
 
 
 # Global profiler instance
-_profiler: PerformanceProfiler | None = None
-_async_profiler: AsyncPerformanceProfiler | None = None
+_profiler: MemoryProfiler | None = None
 
 
-def get_profiler() -> PerformanceProfiler:
-    """Get global profiler instance."""
+def get_profiler(check_interval: float = 60.0) -> MemoryProfiler:
+    """Get or create global memory profiler."""
     global _profiler
     if _profiler is None:
-        _profiler = PerformanceProfiler()
+        _profiler = MemoryProfiler(check_interval=check_interval)
     return _profiler
 
 
-def get_async_profiler() -> AsyncPerformanceProfiler:
-    """Get global async profiler instance."""
-    global _async_profiler
-    if _async_profiler is None:
-        _async_profiler = AsyncPerformanceProfiler()
-    return _async_profiler
-
-
-def start_profiling() -> None:
-    """Start global profiling."""
-    get_profiler().start()
+def start_profiling(check_interval: float = 60.0) -> MemoryProfiler:
+    """Start memory profiling."""
+    profiler = get_profiler(check_interval)
+    profiler.start()
+    return profiler
 
 
 def stop_profiling() -> None:
-    """Stop global profiling and print results."""
-    get_profiler().stop()
-    get_profiler().print_stats()
+    """Stop memory profiling."""
+    if _profiler:
+        _profiler.stop()
 
 
-def print_profiling_stats() -> None:
-    """Print profiling statistics."""
-    get_profiler().print_stats()
-    get_async_profiler().print_stats()
+def get_memory_stats() -> dict[str, Any]:
+    """Get current memory statistics."""
+    return get_profiler().get_stats() if _profiler else {}
+
+
+def force_gc() -> int:
+    """Force garbage collection."""
+    return get_profiler().force_gc() if _profiler else 0
+
+
+__all__ = [
+    'MemoryProfiler',
+    'MemorySnapshot',
+    'MemoryDiff',
+    'ComponentTracker',
+    'get_profiler',
+    'start_profiling',
+    'stop_profiling',
+    'get_memory_stats',
+    'force_gc',
+]

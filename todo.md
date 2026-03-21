@@ -71,7 +71,7 @@ Mypy: missing stubs (внешние зависимости)
 ### Надёжность
 - [x] **Экспоненциальный backoff** — при ошибках подключения (2^(n-1), max 8x) ✅
 - [x] **Graceful shutdown** — корректное завершение всех соединений ✅
-- [ ] **Memory Profiling** — поиск утечек в пулах (tracemalloc/memray)
+- [x] **Memory Profiling** — поиск утечек в пулах (tracemalloc, weakref) ✅
 
 ### Безопасность
 - [x] **Rate limiting** — защита от злоупотреблений (10 req/s, 100 req/min) ✅
