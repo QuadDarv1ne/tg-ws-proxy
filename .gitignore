@@ -1,4 +1,4 @@
-# Python
+# --- Python & General Backend ---
 __pycache__/
 *.py[cod]
 *.pyo
@@ -6,54 +6,72 @@ __pycache__/
 dist/
 build/
 *.spec.bak
-
-# PyInstaller
-*.manifest
-*.log
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-Thumbs.db
-Desktop.ini
-.DS_Store
-
-# Project-specific (not for the repo)
-scan_ips.py
-scan.txt
-AyuGramDesktop-dev/
-tweb-master/
-
-# Generated files
-*.qr.png
-*.qr.svg
-qr_code.*
-generate_qr.py
-web_server.log
-
-# Mobile build
-#mobile-app/android/
-#mobile-app/ios/
-#mobile-app/node_modules/
-
-# Keep gradle.properties for build configuration
-#!mobile-app/android/gradle.properties
-#!mobile-app/android/variables.gradle
-
-# PWA cache
-*.cache
-
-# Test coverage
-.coverage
-htmlcov/
-.pytest_cache/
-
-# Environment
+*.spec
 .env
 .venv/
 venv/
 ENV/
+.coverage
+htmlcov/
+.pytest_cache/
+web_server.log
+requirements-*.txt.bak
+
+# --- PyInstaller & Desktop Build ---
+*.manifest
+*.log
+icon.ico
+packaging/*.spec
+build_desktop.py.bak
+# If you want to keep final executables out of Git:
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+
+# --- Mobile App (Capacitor) ---
+mobile-app/node_modules/
+mobile-app/www/
+mobile-app/android/.gradle/
+mobile-app/android/.idea/
+mobile-app/android/build/
+mobile-app/android/app/build/
+mobile-app/android/local.properties
+mobile-app/android/app/release/
+mobile-app/android/app/debug/
+mobile-app/android/capacitor-cordova-android-plugins/
+
+# Keep only essential Android config
+!mobile-app/android/gradle.properties
+!mobile-app/android/variables.gradle
+!mobile-app/android/gradle/wrapper/gradle-wrapper.properties
+
+# iOS (Xcode)
+mobile-app/ios/App/build/
+mobile-app/ios/App/Pods/
+mobile-app/ios/App/App.xcworkspace/xcuserdata/
+
+# --- IDE & OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Project Specific / Temporary ---
+scan_ips.py
+scan.txt
+AyuGramDesktop-dev/
+tweb-master/
+*.qr.png
+*.qr.svg
+qr_code.*
+generate_qr.py
+*.cache
+
+# --- Build scripts backups ---
+build_mobile.py.bak
+upload-release.bat.bak
