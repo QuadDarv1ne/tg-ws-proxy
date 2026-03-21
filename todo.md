@@ -47,10 +47,21 @@
 ## 📊 Статус
 
 ```
-Tests: 486 passed, 0 errors ✅
-Coverage: ~58% (цель >80%)
-Ruff: 0 ошибок
+Tests: 486 passed, 7 skipped, 0 errors ✅
+Coverage: ~38% (цель >80%)
+Ruff: 0 ошибок (требует fix в mobile-app/)
+Mypy: missing stubs (внешние зависимости)
 ```
+
+**Восстановлено после повреждения:**
+- `proxy/web_dashboard.py` — 2987 строк (веб-панель) ✅
+- `proxy/crypto.py` — 716 строк (шифрование) ✅
+- `proxy/tg_ws_proxy.py` — 2430 строк (ядро прокси) ✅
+
+**Новые тесты:**
+- `tests/test_socks5.py` — 5 тестов (SOCKS5 negotiation) ✅
+- `tests/test_ws_pool.py` — 4 теста (WebSocket pool) ✅
+- `tests/test_tg_ws_proxy_logic.py` — 6 тестов (core logic) ✅
 
 **Отличное покрытие:**
 - `logger.py`, `optimizer.py`, `dc_monitor.py` — 100% ✅
