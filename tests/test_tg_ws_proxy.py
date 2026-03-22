@@ -802,3 +802,187 @@ class TestProxyServerOptimizationMetrics:
 
         metrics = server.get_optimization_metrics()
         assert metrics['peak_connections'] == 100
+
+
+class TestDnsResolverFunctions:
+    """Tests for DNS resolver functions."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_domain_cached_with_cache(self):
+        """Test domain resolution with cache hit."""
+        from proxy.tg_ws_proxy import _dns_cache, _resolve_domain_cached
+        
+        # Clear cache first
+        from proxy.tg_ws_proxy import clear_dns_cache
+        clear_dns_cache()
+        
+        # Add entry to cache with proper format (ip, expiry_time)
+        import time
+        now = time.monotonic()
+        _dns_cache['test.example.com'] = [('192.0.2.1', now + 100)]
+        
+        # Should use cache
+        result = await _resolve_domain_cached('test.example.com')
+        
+        # Result should contain the cached IP with port 443
+        assert len(result) > 0
+        assert result[0][0] == '192.0.2.1'
+        assert result[0][1] == 443
+
+    @pytest.mark.asyncio
+    async def test_resolve_domain_cached_cache_disabled(self):
+        """Test domain resolution with cache disabled."""
+        from proxy.tg_ws_proxy import _OPTIMIZATION_CONFIG, _resolve_domain_cached
+        
+        # Disable cache
+        original = _OPTIMIZATION_CONFIG.get('enable_dns_cache', True)
+        _OPTIMIZATION_CONFIG['enable_dns_cache'] = False
+        
+        try:
+            # Should resolve directly (will fail for invalid domain)
+            result = await _resolve_domain_cached('invalid.domain.test')
+            assert result == []
+        finally:
+            # Restore
+            _OPTIMIZATION_CONFIG['enable_dns_cache'] = original
+
+    @pytest.mark.asyncio
+    async def test_resolve_domain_direct(self):
+        """Test direct domain resolution."""
+        from proxy.tg_ws_proxy import _resolve_domain_direct
+        
+        # Invalid domain should return empty
+        result = await _resolve_domain_direct('invalid.domain.test')
+        assert result == []
+
+    def test_clear_dns_cache_function(self):
+        """Test clearing DNS cache."""
+        from proxy.tg_ws_proxy import _clear_dns_cache, _dns_cache
+        
+        # Add entry
+        _dns_cache['test.com'] = [('1.2.3.4', 100)]
+        
+        # Clear
+        _clear_dns_cache()
+        
+        assert 'test.com' not in _dns_cache
+
+
+class TestOptimizationConfigFunctions:
+    """Tests for optimization config functions."""
+
+    def test_update_optimization_config_function(self):
+        """Test updating optimization config."""
+        from proxy.tg_ws_proxy import (
+            _OPTIMIZATION_CONFIG,
+            get_optimization_config,
+            update_optimization_config,
+        )
+        
+        # Update config
+        update_optimization_config({'enable_dns_cache': False})
+        
+        config = get_optimization_config()
+        assert config['enable_dns_cache'] is False
+        
+        # Restore
+        update_optimization_config({'enable_dns_cache': True})
+
+    def test_update_optimization_config_dns_ttl(self):
+        """Test updating DNS cache TTL."""
+        from proxy.tg_ws_proxy import (
+            _dns_cache_ttl,
+            get_optimization_config,
+            update_optimization_config,
+        )
+        
+        # Get original TTL
+        original_ttl = _dns_cache_ttl
+        
+        try:
+            # Update TTL
+            update_optimization_config({'dns_cache_ttl': 600.0})
+            
+            # Get config and check TTL was updated
+            config = get_optimization_config()
+            # dns_cache_ttl should be updated in the returned config
+            assert config.get('dns_cache_ttl') == 600.0
+        finally:
+            # Restore original
+            update_optimization_config({'dns_cache_ttl': original_ttl})
+
+
+class TestWsDomainFunctions:
+    """Tests for WebSocket domain functions."""
+
+    @pytest.mark.asyncio
+    async def test_check_ws_domain_available(self):
+        """Test checking WebSocket domain availability."""
+        from proxy.tg_ws_proxy import _check_ws_domain_available
+        
+        # Check domain (will likely fail for invalid DC)
+        is_available, error = await _check_ws_domain_available(dc_id=999)
+        
+        # Should return tuple
+        assert isinstance(is_available, bool)
+        assert error is None or isinstance(error, str)
+
+
+class TestSocks5ReplyFunction:
+    """Tests for SOCKS5 reply function."""
+
+    def test_socks5_reply_various_codes(self):
+        """Test SOCKS5 reply with various codes."""
+        from proxy.tg_ws_proxy import _socks5_reply
+        
+        # Test various reply codes
+        for code in [0, 1, 2, 3, 4, 5]:
+            reply = _socks5_reply(code)
+            assert isinstance(reply, bytes)
+            assert len(reply) >= 2
+
+
+class TestWsDomainsFunction:
+    """Tests for WebSocket domains function."""
+
+    def test_ws_domains_various_dc(self):
+        """Test WebSocket domains for various DCs."""
+        from proxy.tg_ws_proxy import _ws_domains
+        
+        for dc_id in [1, 2, 3, 4, 5]:
+            domains = _ws_domains(dc_id, is_media=False)
+            assert isinstance(domains, list)
+            assert len(domains) > 0
+            
+            # Media domains
+            media_domains = _ws_domains(dc_id, is_media=True)
+            assert isinstance(media_domains, list)
+            assert len(media_domains) > 0
+
+
+class TestXorMaskFunction:
+    """Tests for XOR mask function."""
+
+    def test_xor_mask_various_lengths(self):
+        """Test XOR masking with various data lengths."""
+        from proxy.tg_ws_proxy import _xor_mask
+        
+        mask = b'abcd'
+        
+        # Test various lengths
+        for length in [1, 10, 100, 1000]:
+            data = b'X' * length
+            masked = _xor_mask(data, mask)
+            unmasked = _xor_mask(masked, mask)
+            assert unmasked == data
+
+    def test_xor_mask_various_masks(self):
+        """Test XOR masking with various mask lengths."""
+        from proxy.tg_ws_proxy import _xor_mask
+        
+        data = b'Hello, World!'
+        
+        for mask in [b'a', b'ab', b'abcd', b'abcdefgh']:
+            masked = _xor_mask(data, mask)
+            unmasked = _xor_mask(masked, mask)
+            assert unmasked == data
