@@ -135,7 +135,8 @@ class RawWebSocket:
         domain: str,
         path: str = '/apiws',
         timeout: float = 10.0,
-        ssl_context: ssl.SSLContext | None = None
+        ssl_context: ssl.SSLContext | None = None,
+        compress: bool = False
     ) -> RawWebSocket:
         """
         Connect via TLS to the given IP and perform WebSocket upgrade.
@@ -146,6 +147,7 @@ class RawWebSocket:
             path: WebSocket path
             timeout: Connection timeout
             ssl_context: SSL context (creates default if None)
+            compress: Enable permessage-deflate compression
 
         Returns:
             Connected WebSocket instance
@@ -183,8 +185,14 @@ class RawWebSocket:
             f'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
             f'AppleWebKit/537.36 (KHTML, like Gecko) '
             f'Chrome/131.0.0.0 Safari/537.36\r\n'
-            f'\r\n'
         )
+        
+        # Add compression extension (RFC 7692)
+        if compress:
+            req += 'Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits; server_max_window_bits=15\r\n'
+        
+        req += '\r\n'
+        
         writer.write(req.encode())
         await writer.drain()
 
