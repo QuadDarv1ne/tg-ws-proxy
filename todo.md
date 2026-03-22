@@ -247,8 +247,8 @@ Version: v2.47.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
 
 ### Архитектура (обновлено 22.03.2026)
 - **Ядро:** `proxy/tg_ws_proxy.py` (~1400 строк) — основной SOCKS5 прокси с WebSocket мостом
-- **Модули:** 33 Python модуля в `proxy/`, отлично структурированы ✅
-- **Тесты:** 31 тестовый файл в `tests/`, покрытие ~50%
+- **Модули:** 34 Python модуля в `proxy/`, отлично структурированы ✅
+- **Тесты:** 32 тестовых файла в `tests/`, покрытие ~55%
 - **Платформы:** Windows (tray.py), Linux (linux.py), macOS (macos.py), Android (mobile-app/)
 
 ### Новые модули (v2.43.0)
@@ -273,7 +273,7 @@ Version: v2.47.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
 - ✅ Кроссплатформенность (Windows/Linux/macOS/Android)
 - ✅ Веб-панель управления с Flask + Prometheus metrics
 - ✅ Encryption support (AES-GCM, ChaCha20, MTProto IGE)
-- ✅ Модульная архитектура (33 модуля, хорошо разделены)
+- ✅ Модульная архитектура (34 модуля, хорошо разделены)
 
 ### Области для улучшения (приоритеты v2.44.0)
 - 🎯 **Покрытие тестами:** ~50% → цель >80% (HIGH PRIORITY)
@@ -297,7 +297,7 @@ Version: v2.47.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
    - Добавить performance тесты
 
 3. **Документация:**
-   - Обновить GITHUB_RELEASE.md до v2.38.0
+   - Обновить GITHUB_RELEASE.md до v2.47.0
    - Добавить архитектурную диаграмму
    - Документировать API веб-панели
 
