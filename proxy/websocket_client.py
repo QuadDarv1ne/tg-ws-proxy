@@ -256,6 +256,16 @@ class RawWebSocket:
         """
         if self._closed:
             raise ConnectionError("WebSocket closed")
+        
+        # Compress data if enabled
+        if self._compress and self._compressor and len(data) > 0:
+            # Compress with permessage-deflate (RFC 7692)
+            compressed = self._compressor.compress(data) + self._compressor.flush(zlib.Z_SYNC_FLUSH)
+            # Remove trailing 4 bytes (0x00 0x00 0xFF 0xFF) as per RFC 7692
+            if compressed.endswith(b'\x00\x00\xff\xff'):
+                compressed = compressed[:-4]
+            data = compressed
+        
         frame = self._build_frame(self.OP_BINARY, data, mask=True)
         self.writer.write(frame)
         await self.writer.drain()
@@ -273,6 +283,12 @@ class RawWebSocket:
         if self._closed:
             raise ConnectionError("WebSocket closed")
         for part in parts:
+            # Compress each part if enabled
+            if self._compress and self._compressor and len(part) > 0:
+                compressed = self._compressor.compress(part) + self._compressor.flush(zlib.Z_SYNC_FLUSH)
+                if compressed.endswith(b'\x00\x00\xff\xff'):
+                    compressed = compressed[:-4]
+                part = compressed
             frame = self._build_frame(self.OP_BINARY, part, mask=True)
             self.writer.write(frame)
         await self.writer.drain()
@@ -282,6 +298,7 @@ class RawWebSocket:
         Receive the next data frame.
 
         Handles ping/pong/close internally.
+        Decompresses payload if compression is enabled.
 
         Returns:
             Payload bytes, or None on clean close
@@ -329,6 +346,15 @@ class RawWebSocket:
                 continue
 
             if opcode in (self.OP_TEXT, self.OP_BINARY):
+                # Decompress if compression enabled
+                if self._compress and self._decompressor:
+                    try:
+                        # Add trailing 4 bytes (0x00 0x00 0xFF 0xFF) as per RFC 7692
+                        payload_with_trailer = payload + b'\x00\x00\xff\xff'
+                        payload = self._decompressor.decompress(payload_with_trailer)
+                    except Exception as e:
+                        log.debug("Decompression error: %s", e)
+                        # Fall back to uncompressed data
                 return payload
 
             # Unknown opcode — skip
@@ -341,6 +367,19 @@ class RawWebSocket:
         if self._closed:
             return
         self._closed = True
+        
+        # Reset compression state
+        if self._compressor:
+            try:
+                self._compressor.reset()
+            except Exception:
+                pass
+        if self._decompressor:
+            try:
+                self._decompressor.flush()
+            except Exception:
+                pass
+        
         try:
             self.writer.write(
                 self._build_frame(self.OP_CLOSE, b'', mask=True)
