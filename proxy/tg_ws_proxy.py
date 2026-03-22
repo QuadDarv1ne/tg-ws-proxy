@@ -388,7 +388,7 @@ class ProxyServer:
         self.ip_whitelist = set(ip_whitelist) if ip_whitelist else None
 
         # Rate limiting support
-        self.rate_limiter = None
+        self.rate_limiter: RateLimiter | None = None
         self._rate_limit_task: asyncio.Task | None = None
 
         if rate_limit_config:

@@ -96,6 +96,8 @@ class RawWebSocket:
     Connects directly to a target IP via TCP+TLS, performs HTTP Upgrade
     handshake, and provides send/recv for binary frames with proper masking,
     ping/pong, and close handling.
+    
+    Supports permessage-deflate compression (RFC 7692).
     """
 
     # WebSocket opcodes
@@ -109,7 +111,8 @@ class RawWebSocket:
     def __init__(
         self,
         reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter
+        writer: asyncio.StreamWriter,
+        compress: bool = False
     ):
         """
         Initialize WebSocket.
@@ -117,10 +120,14 @@ class RawWebSocket:
         Args:
             reader: Stream reader
             writer: Stream writer
+            compress: Enable permessage-deflate compression
         """
         self.reader = reader
         self.writer = writer
         self._closed = False
+        self._compress = compress
+        self._compressor = zlib.compressobj(level=6, wbits=-15) if compress else None
+        self._decompressor = zlib.decompressobj(wbits=-15) if compress else None
 
     @staticmethod
     async def connect(
