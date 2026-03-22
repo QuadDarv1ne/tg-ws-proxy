@@ -1,374 +1,456 @@
-# 📊 Система Мониторинга и Уведомлений
+# Мониторинг TG WS Proxy с Prometheus и Grafana
 
-## Обзор
-
-TG WS Proxy включает продвинутую систему мониторинга в реальном времени с автоматическими уведомлениями о критических событиях.
-
-## Компоненты
-
-### 1. **Stats Module** (`proxy/stats.py`)
-
-Собирает и анализирует метрики производительности:
-- Подключения (total, active, per minute)
-- Трафик (bytes up/down, per minute)
-- Ошибки (WebSocket errors, error rate)
-- Производительность (CPU, memory)
-- DC статистика (latency, connections)
-- Pool эффективность (hits/misses)
-
-### 2. **Alerts Module** (`proxy/alerts.py`)
-
-Генерирует уведомления при превышении порогов:
-- Мгновенные алерты
-- История событий
-- Уведомления по email
-- Webhook интеграция (Telegram, Discord, Slack)
-
-## Типы уведомлений
-
-| Тип | Описание | Порог Warning | Порог Critical |
-|-----|----------|---------------|----------------|
-| **CONNECTION_SPIKE** | Резкий рост подключений | 100/мин | 500/мин |
-| **ERROR_RATE_HIGH** | Высокий процент ошибок | 5% | 15% |
-| **CPU_HIGH** | Высокая загрузка CPU | 70% | 90% |
-| **MEMORY_HIGH** | Высокое потребление памяти | 70% | 90% |
-| **WS_ERRORS** | Ошибки WebSocket | 10/мин | 50/мин |
-| **TRAFFIC_LIMIT** | Превышение трафика | 50 GB/час | 100 GB/час |
-| **DC_UNAVAILABLE** | DC недоступен | - | - |
-| **SECURITY_EVENT** | Событие безопасности | - | - |
-| **KEY_ROTATION** | Ротация ключей шифрования | Info | - |
-
-## Настройка порогов
-
-```python
-from proxy.stats import Stats
-from proxy import alerts
-
-# Получить менеджер алертов
-alert_mgr = alerts.get_alert_manager()
-
-# Настроить пороги
-alert_mgr.update_threshold(
-    "connections_per_minute",
-    warning=150,      # Warning при 150 подключений/мин
-    critical=600,     # Critical при 600 подключений/мин
-    enabled=True
-)
-
-# Настроить cooldown (мин. время между алертами)
-alert_mgr.thresholds["error_rate_percent"].cooldown_seconds = 120
-```
-
-## Email уведомления
-
-```python
-from proxy import alerts
-
-alert_mgr = alerts.get_alert_manager()
-
-alert_mgr.configure_email(
-    smtp_server="smtp.gmail.com",
-    smtp_port=587,
-    username="your_email@gmail.com",
-    password="your_app_password",
-    from_email="your_email@gmail.com",
-    to_emails=["admin@example.com", "devops@example.com"],
-)
-```
-
-## Webhook уведомления
-
-### Telegram Bot
-
-```python
-from proxy import alerts
-
-alert_mgr = alerts.get_alert_manager()
-
-# Telegram Bot API
-telegram_url = "https://api.telegram.org/bot<BOT_TOKEN>/sendMessage"
-alert_mgr.configure_webhook([telegram_url])
-```
-
-### Discord Webhook
-
-```python
-discord_url = "https://discord.com/api/webhooks/<WEBHOOK_ID>/<TOKEN>"
-alert_mgr.configure_webhook([discord_url])
-```
-
-### Slack Webhook
-
-```python
-slack_url = "https://hooks.slack.com/services/<SLACK_WEBHOOK>"
-alert_mgr.configure_webhook([slack_url])
-```
-
-## Мониторинг в реальном времени
-
-### Автоматический запуск
-
-Мониторинг запускается автоматически при старте прокси:
-
-```python
-# В ProxyServer.__init__
-self.stats = Stats(enable_alerts=True)
-self.stats.start_realtime_monitoring(check_interval=30.0)  # Проверка каждые 30 сек
-```
-
-### Ручное управление
-
-```python
-from proxy.stats import Stats
-
-stats = Stats(enable_alerts=True)
-
-# Запуск мониторинга
-stats.start_realtime_monitoring(check_interval=10.0)  # Проверка каждые 10 сек
-
-# Остановка мониторинга
-stats.stop_realtime_monitoring()
-```
-
-## Получение статистики
-
-### Текущая статистика
-
-```python
-from proxy.stats import Stats
-
-stats = proxy_server.stats
-
-# Получить всю статистику
-all_stats = stats.to_dict()
-
-# Получить состояние здоровья
-health_status = stats.get_health_status()
-# Returns: ('healthy'|'degraded'|'unhealthy', message, color)
-
-# Получить производительность
-perf = stats.get_performance_stats()
-# Returns: {cpu_percent, memory_bytes, avg_cpu, avg_memory}
-
-# Получить статистику по DC
-dc_stats = stats.get_dc_stats()
-```
-
-### Статистика алертов
-
-```python
-from proxy import alerts
-
-alert_mgr = alerts.get_alert_manager()
-
-# Получить статистику
-alert_stats = alert_mgr.get_statistics()
-# Returns:
-# {
-#     "total_alerts": 150,
-#     "alerts_last_hour": 5,
-#     "alerts_last_day": 42,
-#     "alerts_sent": 150,
-#     "alerts_suppressed": 10,
-#     "by_severity": {...},
-#     "by_type": {...}
-# }
-
-# Получить последние алерты
-recent = alert_mgr.get_recent_alerts(limit=50)
-
-# Получить алерты по типу
-ws_errors = alert_mgr.get_alerts_by_type(AlertType.WS_ERRORS)
-
-# Получить критические алерты
-critical = alert_mgr.get_alerts_by_severity(AlertSeverity.CRITICAL)
-```
-
-## Интеграция с веб-панелью
-
-### API эндпоинты
-
-```
-GET /api/stats          - Получить статистику
-GET /api/alerts         - Получить последние алерты
-GET /api/alerts/stats   - Получить статистику алертов
-POST /api/alerts/clear  - Очистить текущие алерты
-```
-
-### Пример ответа /api/stats
-
-```json
-{
-    "connections_total": 1250,
-    "connections_ws": 1200,
-    "bytes_up": 524288000,
-    "bytes_down": 10737418240,
-    "ws_errors": 5,
-    "pool_hits": 980,
-    "pool_misses": 20,
-    "connections_per_minute": 45.5,
-    "performance": {
-        "cpu_percent": 12.5,
-        "memory_bytes": 52428800,
-        "avg_cpu_percent": 11.2,
-        "avg_memory_bytes": 50331648
-    },
-    "health": ["healthy", "Работает нормально", "green"],
-    "alerts_enabled": true,
-    "monitoring": {
-        "enabled": true,
-        "alert_manager": true,
-        "monitor_task": true
-    }
-}
-```
-
-## Логирование
-
-Алерты записываются в лог:
-
-```
-2026-03-20 21:15:00  WARNING  ALERT [CRITICAL] High error rate: 15.2%
-2026-03-20 21:15:00  WARNING  Error rate is above acceptable level. Current: 15.2%
-2026-03-20 21:16:00  INFO  ALERT [INFO] Encryption keys rotated: AES-256-GCM
-```
-
-## Примеры использования
-
-### Мониторинг трафика
-
-```python
-from proxy.stats import Stats
-from proxy import alerts
-
-stats = Stats(enable_alerts=True)
-
-# Установить лимит трафика
-alert_mgr = alerts.get_alert_manager()
-alert_mgr.update_threshold(
-    "traffic_gb_per_hour",
-    warning=30,    # 30 GB/час warning
-    critical=80,   # 80 GB/час critical
-)
-
-# Отправить уведомление при достижении лимита
-# (автоматически при превышении порога)
-```
-
-### Мониторинг ошибок
-
-```python
-# Автоматическое отслеживание ошибок
-# (встроено в stats.add_ws_error())
-
-# При добавлении ошибки автоматически проверяется порог
-stats.add_ws_error(dc=2)
-
-# Если ошибок > 10 в минуту -> отправляется алерт
-```
-
-### Кастомные алерты
-
-```python
-from proxy import alerts
-
-# Отправить кастомный алерт
-alerts.send_alert(
-    alert_type=alerts.AlertType.SECURITY_EVENT,
-    severity=alerts.AlertSeverity.WARNING,
-    title="Подозрительная активность",
-    message="Обнаружено множество подключений с одного IP",
-    metadata={"ip": "192.168.1.100", "attempts": 50},
-)
-```
-
-## Встроенные функции алертов
-
-```python
-from proxy import alerts
-
-# Быстрые функции для распространенных алертов
-alerts.alert_connection_spike(connections=150)
-alerts.alert_error_rate(error_rate=12.5)
-alerts.alert_ws_errors(count=25)
-alerts.alert_traffic_limit(traffic_gb=75.5)
-alerts.alert_key_rotation(algorithm="AES-256-GCM")
-alerts.alert_security_event(
-    event_type="Rate limit exceeded",
-    details="IP 192.168.1.100 exceeded rate limit"
-)
-```
-
-## Коoldown управление
-
-Для предотвращения спама алертами используется cooldown:
-
-```python
-alert_mgr = alerts.get_alert_manager()
-
-# Установить cooldown 5 минут для CPU алертов
-alert_mgr.thresholds["cpu_percent"].cooldown_seconds = 300
-
-# Проверить cooldown
-now = time.time()
-last_alert = alert_mgr._last_alert_time.get("cpu_percent", 0)
-if now - last_alert < 300:
-    print("Alert suppressed (cooldown)")
-```
-
-## Статистика мониторинга
-
-### Метрики для сбора
-
-1. **Доступность**: uptime, health status
-2. **Производительность**: CPU, memory, latency
-3. **Трафик**: bytes up/down, connections
-4. **Ошибки**: error rate, WS errors
-5. **Безопасность**: auth failures, rate limits
-
-### Рекомендуемые интервалы проверки
-
-| Метрика | Интервал проверки | Cooldown |
-|---------|-------------------|----------|
-| CPU | 10 сек | 600 сек |
-| Memory | 10 сек | 600 сек |
-| Connections | 30 сек | 300 сек |
-| Error rate | 30 сек | 180 сек |
-| Traffic | 60 сек | 3600 сек |
-
-## Устранение проблем
-
-### Проблема: Алерты не отправляются
-
-**Решение:**
-1. Проверьте `stats.enable_alerts = True`
-2. Убедитесь, что `alerts_module` импортирован
-3. Проверьте логи на наличие ошибок
-
-### Проблема: Слишком много алертов
-
-**Решение:**
-1. Увеличьте `cooldown_seconds` для порогов
-2. Увеличьте `check_interval` в `start_realtime_monitoring()`
-3. Настройте более высокие пороги warning/critical
-
-### Проблема: Email не отправляются
-
-**Решение:**
-1. Проверьте SMTP настройки
-2. Для Gmail используйте App Password
-3. Проверьте firewall для порта 587
-
-## Будущие улучшения
-
-- [ ] Интеграция с Prometheus/Grafana
-- [ ] Экспорт метрик в InfluxDB
-- [ ] Поддержка PagerDuty
-- [ ] Машинное обучение для аномалий
-- [ ] Прогнозирование трендов
-- [ ] Автоматическое масштабирование
+**Версия:** v2.40.0+  
+**Дата:** 22.03.2026
 
 ---
 
-**Dupley Maxim Igorevich**  
-© 2026 Dupley Maxim Igorevich. Все права защищены.
+## 📋 Обзор
+
+TG WS Proxy предоставляет endpoint `/metrics` в формате Prometheus для сбора метрик производительности и мониторинга.
+
+### Доступные метрики
+
+| Метрика | Тип | Описание |
+|---------|-----|----------|
+| `tg_ws_proxy_info` | Gauge | Информация о прокси (версия) |
+| `tg_ws_proxy_connections_total` | Counter | Общее количество подключений |
+| `tg_ws_proxy_connections_active` | Gauge | Активные подключения |
+| `tg_ws_proxy_bytes_received_total` | Counter | Байт получено от клиентов |
+| `tg_ws_proxy_bytes_sent_total` | Counter | Байт отправлено клиентам |
+| `tg_ws_proxy_bytes_forwarded_total` | Counter | Байт перенаправлено в Telegram |
+| `tg_ws_proxy_cpu_percent` | Gauge | Использование CPU (%) |
+| `tg_ws_proxy_memory_mb` | Gauge | Использование памяти (MB) |
+| `tg_ws_proxy_dc_latency_ms{dc_id}` | Gauge | Задержка до DC (ms) |
+| `tg_ws_proxy_dc_errors_total{dc_id}` | Counter | Ошибки по DC |
+| `tg_ws_proxy_circuit_breaker_state{name}` | Gauge | Состояние circuit breaker |
+| `tg_ws_proxy_circuit_breaker_failures_total{name}` | Counter | Failures circuit breaker |
+| `tg_ws_proxy_circuit_breaker_rejected_total{name}` | Counter | Отклонённые запросы |
+| `tg_ws_proxy_dns_queries_total` | Counter | DNS запросов |
+| `tg_ws_proxy_dns_cache_hits_total` | Counter | DNS cache hits |
+| `tg_ws_proxy_dns_cache_misses_total` | Counter | DNS cache misses |
+| `tg_ws_proxy_dns_cache_hit_rate` | Gauge | DNS cache hit rate |
+| `tg_ws_proxy_plugins_loaded` | Gauge | Загружено плагинов |
+
+---
+
+## 🚀 Быстрый старт
+
+### 1. Запуск Prometheus + Grafana
+
+**Docker Compose:**
+
+Создайте файл `docker-compose.monitoring.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:
+```
+
+### 2. Конфигурация Prometheus
+
+Создайте файл `prometheus.yml`:
+
+```yaml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'tg-ws-proxy'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+```
+
+**Для Linux замените `host.docker.internal` на IP хоста:**
+```yaml
+targets: ['172.17.0.1:8080']
+```
+
+### 3. Запуск
+
+```bash
+docker-compose -f docker-compose.monitoring.yml up -d
+```
+
+### 4. Доступ к панелям
+
+- **Prometheus:** http://localhost:9090
+- **Grafana:** http://localhost:3000 (admin/admin123)
+
+---
+
+## 📊 Настройка Grafana Dashboard
+
+### 1. Добавление DataSource
+
+1. Откройте Grafana
+2. Configuration → Data Sources → Add data source
+3. Выберите **Prometheus**
+4. URL: `http://prometheus:9090`
+5. Save & Test
+
+### 2. Импорт дашборда
+
+Создайте файл `grafana-dashboard.json` (см. ниже) и импортируйте:
+
+1. Dashboards → Import
+2. Upload JSON file
+3. Выберите Prometheus datasource
+4. Import
+
+---
+
+## 📈 Примеры PromQL запросов
+
+### Общая статистика
+
+```promql
+# Активные подключения
+tg_ws_proxy_connections_active
+
+# Трафик (байт/сек)
+rate(tg_ws_proxy_bytes_received_total[5m])
+rate(tg_ws_proxy_bytes_sent_total[5m])
+
+# CPU и память
+tg_ws_proxy_cpu_percent
+tg_ws_proxy_memory_mb
+```
+
+### DC метрики
+
+```promql
+# Latency по DC
+tg_ws_proxy_dc_latency_ms
+
+# Ошибки по DC
+rate(tg_ws_proxy_dc_errors_total[5m])
+
+# Top DC по ошибкам
+topk(3, rate(tg_ws_proxy_dc_errors_total[1h]))
+```
+
+### Circuit Breaker
+
+```promql
+# Состояние circuit breaker (0=closed, 1=open, 2=half_open)
+tg_ws_proxy_circuit_breaker_state
+
+# Failures rate
+rate(tg_ws_proxy_circuit_breaker_failures_total[5m])
+
+# Rejected запросы
+rate(tg_ws_proxy_circuit_breaker_rejected_total[5m])
+```
+
+### DNS метрики
+
+```promql
+# DNS запросов в секунду
+rate(tg_ws_proxy_dns_queries_total[5m])
+
+# Cache hit rate
+tg_ws_proxy_dns_cache_hit_rate
+
+# Cache hits vs misses
+tg_ws_proxy_dns_cache_hits_total
+tg_ws_proxy_dns_cache_misses_total
+```
+
+---
+
+## 🎨 Grafana Dashboard JSON
+
+Пример дашборда (сохраните как `grafana-dashboard.json`):
+
+```json
+{
+  "dashboard": {
+    "title": "TG WS Proxy Monitoring",
+    "tags": ["telegram", "proxy"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active Connections",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "tg_ws_proxy_connections_active",
+            "legendFormat": "Active"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Traffic",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(tg_ws_proxy_bytes_received_total[5m])",
+            "legendFormat": "Received"
+          },
+          {
+            "expr": "rate(tg_ws_proxy_bytes_sent_total[5m])",
+            "legendFormat": "Sent"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "CPU Usage",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "tg_ws_proxy_cpu_percent",
+            "legendFormat": "CPU %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 50},
+                {"color": "red", "value": 80}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Memory Usage",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "tg_ws_proxy_memory_mb",
+            "legendFormat": "Memory MB"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "DC Latency",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "tg_ws_proxy_dc_latency_ms",
+            "legendFormat": "DC {{dc_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "DNS Cache Hit Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "tg_ws_proxy_dns_cache_hit_rate",
+            "legendFormat": "Hit Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 0.5},
+                {"color": "green", "value": 0.8}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Circuit Breaker State",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "tg_ws_proxy_circuit_breaker_state",
+            "legendFormat": "{{name}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 16}
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 38,
+    "version": 1
+  }
+}
+```
+
+---
+
+## 🔔 Alerting
+
+### Prometheus Alert Rules
+
+Создайте файл `alerts.yml`:
+
+```yaml
+groups:
+  - name: tg-ws-proxy-alerts
+    rules:
+      - alert: HighCPUsage
+        expr: tg_ws_proxy_cpu_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% for more than 5 minutes"
+
+      - alert: HighMemoryUsage
+        expr: tg_ws_proxy_memory_mb > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value }}MB for more than 5 minutes"
+
+      - alert: DCHighLatency
+        expr: tg_ws_proxy_dc_latency_ms > 200
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High DC latency detected"
+          description: "DC {{ $labels.dc_id }} latency is {{ $value }}ms"
+
+      - alert: CircuitBreakerOpen
+        expr: tg_ws_proxy_circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker is OPEN"
+          description: "Circuit breaker {{ $labels.name }} is open"
+
+      - alert: LowDNSCacheHitRate
+        expr: tg_ws_proxy_dns_cache_hit_rate < 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low DNS cache hit rate"
+          description: "DNS cache hit rate is {{ $value | humanizePercentage }}"
+```
+
+Добавьте в `prometheus.yml`:
+
+```yaml
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+```
+
+---
+
+## 🧪 Тестирование
+
+### Проверка endpoint
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+Ожидаемый вывод:
+```
+# HELP tg_ws_proxy_info Proxy information
+# TYPE tg_ws_proxy_info gauge
+tg_ws_proxy_info{version="2.40.0"} 1
+# HELP tg_ws_proxy_connections_total Total number of connections
+# TYPE tg_ws_proxy_connections_total counter
+tg_ws_proxy_connections_total 150
+...
+```
+
+### Проверка scrape
+
+Откройте http://localhost:9090/targets и убедитесь, что target `tg-ws-proxy` в статусе UP.
+
+---
+
+## 📝 Рекомендации
+
+### Production настройка
+
+1. **Scrape interval:** 10-30s для баланса между детализацией и нагрузкой
+2. **Retention:** 15-30 дней истории метрик
+3. **Alerting:** Настройте уведомления в Telegram/Email/Slack
+4. **High Availability:** Репликация Prometheus для критичных систем
+
+### Оптимизация
+
+1. **Recording Rules:** Для сложных запросов
+2. **Service Discovery:** Для динамических окружений
+3. **Federation:** Для масштабирования
+
+---
+
+## 🔗 Полезные ссылки
+
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [Grafana Documentation](https://grafana.com/docs/)
+- [PromQL Tutorial](https://promlabs.com/promql-cheat-sheet/)
+- [Grafana Dashboards](https://grafana.com/grafana/dashboards/)
+
+---
+
+**Автор:** Dupley Maxim Igorevich  
+**© 2026 Dupley Maxim Igorevich. All rights reserved.**
