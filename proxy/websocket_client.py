@@ -16,6 +16,7 @@ import logging
 import os
 import ssl
 import struct
+import zlib
 
 log = logging.getLogger('tg-ws-client')
 
