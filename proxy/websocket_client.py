@@ -96,7 +96,7 @@ class RawWebSocket:
     Connects directly to a target IP via TCP+TLS, performs HTTP Upgrade
     handshake, and provides send/recv for binary frames with proper masking,
     ping/pong, and close handling.
-    
+
     Supports permessage-deflate compression (RFC 7692).
     """
 
