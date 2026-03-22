@@ -123,6 +123,12 @@ class IPStats:
     # Token bucket state
     tokens: float = 20.0  # Start with full bucket
     last_token_refill: float = 0.0
+    
+    # Connection metadata (for inspector)
+    first_seen: float = field(default_factory=time.time)
+    last_activity: float = field(default_factory=time.time)
+    user_agent: str = ""
+    geo_info: dict = field(default_factory=dict)
 
     # Connection scoring (suspicious activity)
     suspicious_score: float = 0.0
@@ -779,6 +785,173 @@ class RateLimiter:
         if ip in self._ip_stats:
             self._ip_stats[ip].ban_until = 0.0
             self._ip_stats[ip].violations = 0
+    
+    # =============================================================================
+    # Connection Inspector API
+    # =============================================================================
+    
+    def get_active_connections(self, limit: int = 100) -> list[dict]:
+        """
+        Get list of active connections.
+        
+        Args:
+            limit: Maximum connections to return
+            
+        Returns:
+            List of connection info dicts
+        """
+        now = time.time()
+        connections = []
+        
+        for ip, stats in self._ip_stats.items():
+            # Skip banned IPs
+            if stats.ban_until > now:
+                continue
+            
+            # Skip inactive (>5 minutes)
+            if now - stats.last_activity > 300:
+                continue
+            
+            connections.append({
+                'ip': ip,
+                'first_seen': stats.first_seen,
+                'last_activity': stats.last_activity,
+                'total_requests': stats.total_requests,
+                'blocked_requests': stats.blocked_requests,
+                'violations': stats.violations,
+                'suspicious_score': stats.suspicious_score,
+                'tokens_remaining': stats.tokens,
+                'subnet': stats.subnet,
+                'user_agent': stats.user_agent,
+                'geo_info': stats.geo_info,
+            })
+        
+        # Sort by last activity (most recent first)
+        connections.sort(key=lambda c: c['last_activity'], reverse=True)
+        
+        return connections[:limit]
+    
+    def get_connection_details(self, ip: str) -> dict | None:
+        """
+        Get detailed information about specific IP connection.
+        
+        Args:
+            ip: IP address to lookup
+            
+        Returns:
+            Connection details or None if not found
+        """
+        if ip not in self._ip_stats:
+            return None
+        
+        stats = self._ip_stats[ip]
+        now = time.time()
+        
+        return {
+            'ip': ip,
+            'first_seen': stats.first_seen,
+            'last_activity': stats.last_activity,
+            'total_requests': stats.total_requests,
+            'blocked_requests': stats.blocked_requests,
+            'violations': stats.violations,
+            'suspicious_score': stats.suspicious_score,
+            'tokens_remaining': stats.tokens,
+            'subnet': stats.subnet,
+            'user_agent': stats.user_agent,
+            'geo_info': stats.geo_info,
+            'is_banned': stats.ban_until > now,
+            'ban_until': stats.ban_until,
+            'ban_duration_remaining': max(0, stats.ban_until - now) if stats.ban_until > now else 0,
+            'requests_history': list(stats.requests)[-100:],  # Last 100 requests
+            'rps_history': list(stats.requests_per_second)[-50:],  # Last 50 RPS samples
+            'cps_history': list(stats.connections_per_second)[-50:],  # Last 50 CPS samples
+        }
+    
+    def get_connections_by_subnet(self, subnet: str) -> list[dict]:
+        """
+        Get all connections from specific subnet.
+        
+        Args:
+            subnet: Subnet in CIDR notation (e.g., "192.168.1.0/24")
+            
+        Returns:
+            List of connections from subnet
+        """
+        connections = []
+        for ip, stats in self._ip_stats.items():
+            if stats.subnet == subnet:
+                connections.append({
+                    'ip': ip,
+                    'last_activity': stats.last_activity,
+                    'total_requests': stats.total_requests,
+                    'violations': stats.violations,
+                })
+        
+        return connections
+    
+    def get_top_ips(self, by: str = 'requests', limit: int = 10) -> list[dict]:
+        """
+        Get top IPs by various metrics.
+        
+        Args:
+            by: Metric to sort by ('requests', 'violations', 'score')
+            limit: Maximum IPs to return
+            
+        Returns:
+            List of top IPs
+        """
+        now = time.time()
+        ips = []
+        
+        for ip, stats in self._ip_stats.items():
+            if stats.ban_until > now:
+                continue
+            
+            metric_value = 0
+            if by == 'requests':
+                metric_value = stats.total_requests
+            elif by == 'violations':
+                metric_value = stats.violations
+            elif by == 'score':
+                metric_value = stats.suspicious_score
+            
+            ips.append({
+                'ip': ip,
+                'metric': metric_value,
+                'total_requests': stats.total_requests,
+                'violations': stats.violations,
+                'suspicious_score': stats.suspicious_score,
+            })
+        
+        # Sort by metric descending
+        ips.sort(key=lambda x: x['metric'], reverse=True)
+        
+        return ips[:limit]
+    
+    def search_connections(self, query: str) -> list[dict]:
+        """
+        Search connections by IP or subnet.
+        
+        Args:
+            query: Search query (IP, subnet, or partial match)
+            
+        Returns:
+            List of matching connections
+        """
+        results = []
+        
+        for ip, stats in self._ip_stats.items():
+            # Check if query matches IP or subnet
+            if query in ip or query in stats.subnet:
+                results.append({
+                    'ip': ip,
+                    'subnet': stats.subnet,
+                    'last_activity': stats.last_activity,
+                    'total_requests': stats.total_requests,
+                    'is_banned': stats.ban_until > time.time(),
+                })
+        
+        return results
 
 
 _rate_limiter: RateLimiter | None = None
