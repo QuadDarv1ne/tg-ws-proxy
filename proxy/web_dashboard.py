@@ -3261,6 +3261,145 @@ class WebDashboard:
                 return jsonify({'status': 'success', 'ip': ip})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
+        
+        # =====================================================================
+        # Connection Inspector API
+        # =====================================================================
+        
+        @self.app.route('/api/connections')
+        def api_connections() -> Response:
+            """Get active connections."""
+            try:
+                from proxy.rate_limiter import get_rate_limiter
+                
+                limit = request.args.get('limit', 100, type=int)
+                limiter = get_rate_limiter()
+                
+                connections = limiter.get_active_connections(limit=limit)
+                return jsonify({
+                    'status': 'success',
+                    'count': len(connections),
+                    'connections': connections,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/connections/<ip>')
+        def api_connection_details(ip: str) -> Response:
+            """Get connection details for specific IP."""
+            try:
+                from proxy.rate_limiter import get_rate_limiter
+                
+                limiter = get_rate_limiter()
+                details = limiter.get_connection_details(ip)
+                
+                if details is None:
+                    return jsonify({'error': 'Connection not found'}), 404
+                
+                return jsonify({
+                    'status': 'success',
+                    'connection': details,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/connections/search')
+        def api_search_connections() -> Response:
+            """Search connections by IP or subnet."""
+            try:
+                from proxy.rate_limiter import get_rate_limiter
+                
+                query = request.args.get('q', '', type=str)
+                if not query:
+                    return jsonify({'error': 'Query parameter required'}), 400
+                
+                limiter = get_rate_limiter()
+                results = limiter.search_connections(query)
+                
+                return jsonify({
+                    'status': 'success',
+                    'count': len(results),
+                    'results': results,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/connections/top')
+        def api_top_connections() -> Response:
+            """Get top connections by metric."""
+            try:
+                from proxy.rate_limiter import get_rate_limiter
+                
+                by = request.args.get('by', 'requests', type=str)
+                limit = request.args.get('limit', 10, type=int)
+                
+                if by not in ('requests', 'violations', 'score'):
+                    return jsonify({'error': 'Invalid metric'}), 400
+                
+                limiter = get_rate_limiter()
+                top_ips = limiter.get_top_ips(by=by, limit=limit)
+                
+                return jsonify({
+                    'status': 'success',
+                    'metric': by,
+                    'top': top_ips,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        # =====================================================================
+        # Alerts API
+        # =====================================================================
+        
+        @self.app.route('/api/alerts')
+        def api_get_alerts() -> Response:
+            """Get alerts with optional filtering."""
+            try:
+                category = request.args.get('category', None, type=str)
+                severity = request.args.get('severity', None, type=str)
+                limit = request.args.get('limit', 50, type=int)
+                
+                alerts_mgr = get_alerts_manager()
+                alerts = alerts_mgr.get_alerts(
+                    category=category,
+                    severity=severity,
+                    limit=limit,
+                )
+                
+                return jsonify({
+                    'status': 'success',
+                    'count': len(alerts),
+                    'alerts': alerts,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/alerts/stats')
+        def api_alerts_stats() -> Response:
+            """Get alerts statistics."""
+            try:
+                alerts_mgr = get_alerts_manager()
+                stats = alerts_mgr.get_stats()
+                
+                return jsonify({
+                    'status': 'success',
+                    'stats': stats,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/alerts/<int:alert_id>/acknowledge', methods=['POST'])
+        def api_acknowledge_alert(alert_id: int) -> Response:
+            """Acknowledge an alert."""
+            try:
+                alerts_mgr = get_alerts_manager()
+                
+                if alerts_mgr.acknowledge_alert(alert_id):
+                    return jsonify({'status': 'success'})
+                else:
+                    return jsonify({'error': 'Alert not found'}), 404
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
 
     def start(self) -> None:
         """Start the web dashboard in a background thread."""
