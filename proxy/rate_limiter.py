@@ -207,9 +207,8 @@ class RateLimiter:
         return ip
 
     def _check_ddos(self, ip: str, stats: IPStats) -> tuple[bool, float]:
-        """
-        Check for DDoS attack patterns.
-        
+        """Check for DDoS attack patterns.
+
         Returns:
             Tuple of (is_ddos_detected, ban_duration)
         """
@@ -241,9 +240,8 @@ class RateLimiter:
         return False, 0.0
 
     def _check_connection_flood(self, ip: str, stats: IPStats) -> tuple[bool, float]:
-        """
-        Check for connection flood attacks.
-        
+        """Check for connection flood attacks.
+
         Returns:
             Tuple of (is_flood_detected, ban_duration)
         """
@@ -274,9 +272,8 @@ class RateLimiter:
         return False, 0.0
 
     def _check_subnet_limit(self, ip: str) -> tuple[bool, str]:
-        """
-        Check if IP's subnet has exceeded connection limit.
-        
+        """Check if IP's subnet has exceeded connection limit.
+
         Returns:
             Tuple of (is_limit_exceeded, subnet)
         """
