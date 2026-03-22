@@ -52,6 +52,7 @@ mobile-app/android/local.properties
 mobile-app/android/app/release/
 mobile-app/android/app/debug/
 mobile-app/android/capacitor-cordova-android-plugins/
+mobile-app/android/app/src/main/.venv/
 
 # Keep only essential Android config
 !mobile-app/android/gradle.properties
@@ -92,3 +93,7 @@ build/qr_code.*
 build_mobile.py.bak
 upload-release.bat.bak
 *.bak
+
+# --- Test artifacts ---
+tests/__pycache__/
+tests/*.pyc
