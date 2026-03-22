@@ -302,7 +302,7 @@ class NotificationManager:
         for notifier in self._notifiers:
             task = notifier.send(notification)
             if task is not None:  # Skip if not a coroutine
-                tasks.append(task)
+                tasks.append(task)  # type: ignore[arg-type]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

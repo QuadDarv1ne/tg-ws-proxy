@@ -545,7 +545,7 @@ class ProxyServer:
         try:
             from proxy.rate_limiter import RateLimitConfig, RateLimiter
 
-            self.rate_limiter: RateLimiter | None = RateLimiter(
+            self.rate_limiter = RateLimiter(
                 RateLimitConfig(
                     requests_per_second=config.get("requests_per_second", 10.0),
                     requests_per_minute=config.get("requests_per_minute", 100),

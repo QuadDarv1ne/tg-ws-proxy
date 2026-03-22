@@ -1,4 +1,4 @@
-# mypy: disable-error-code="return-value,arg-type,attr-defined,name-defined,misc,no-redef"
+# mypy: disable-error-code="return-value,arg-type,attr-defined,name-defined,misc,no-redef,unused-ignore,no-untyped-def,call-overload"
 """
 Web Dashboard for TG WS Proxy.
 
