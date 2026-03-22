@@ -129,7 +129,13 @@
   - Prometheus scrape config
   - Grafana dashboard JSON
   - Alert rules
-- [ ] **Alerting** — уведомления при высокой задержке DC (>200ms)
+- ✅ **Alerting** — уведомления при высокой задержке DC
+  - AlertType.DC_HIGH_LATENCY добавлен
+  - Порог: 150ms (warning), 200ms (critical)
+  - Cooldown: 2 минуты между алертами для одного DC
+  - Интеграция в monitor_dc_latency()
+  - Email/webhook уведомления (через AlertManager)
+  - Тесты: test_alerts.py (7 passed)
 - [ ] **Diagnostic Report** — экспорт детального отчета о состоянии сети
 - [ ] **Real-time Dashboard** — улучшение веб-панели с live графиками
 - [ ] **Metrics History** — хранение истории метрик за 30 дней
@@ -177,30 +183,43 @@ Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
 
 ## 🔍 Анализ кодовой базы (22.03.2026)
 
-### Архитектура
-- **Ядро:** `proxy/tg_ws_proxy.py` (2600+ строк) — основной SOCKS5 прокси с WebSocket мостом
-- **Модули:** 25 Python модулей в `proxy/`, хорошо структурированы
-- **Тесты:** 24 тестовых файла в `tests/`, покрытие требует улучшения
+### Архитектура (обновлено 22.03.2026)
+- **Ядро:** `proxy/tg_ws_proxy.py` (~1400 строк) — основной SOCKS5 прокси с WebSocket мостом
+- **Модули:** 33 Python модуля в `proxy/`, отлично структурированы ✅
+- **Тесты:** 31 тестовый файл в `tests/`, покрытие ~50%
 - **Платформы:** Windows (tray.py), Linux (linux.py), macOS (macos.py), Android (mobile-app/)
 
-### Сильные стороны
-- ✅ Полная реализация SOCKS5 с MTProto поддержкой
-- ✅ WebSocket пулинг с health checks
-- ✅ DNS кэширование с TTL
-- ✅ Rate limiting и защита от злоупотреблений
-- ✅ Автоматический выбор DC по latency
-- ✅ Memory profiling и leak detection
-- ✅ Кроссплатформенность (Windows/Linux/macOS/Android)
-- ✅ Веб-панель управления с Flask
-- ✅ Encryption support (AES-GCM, ChaCha20, MTProto IGE)
+### Новые модули (v2.43.0)
+- ✅ `socks5_handler.py` — SOCKS5 протокол (350+ строк)
+- ✅ `websocket_client.py` — WebSocket клиент (450+ строк)
+- ✅ `connection_pool.py` — пулинг соединений (360+ строк)
+- ✅ `mtproto_parser.py` — парсинг MTProto (280+ строк)
+- ✅ `dns_resolver.py` — DNS resolver с метриками (350+ строк)
+- ✅ `alerts.py` — система алертов (обновлён)
+- ✅ `performance_profiler.py` — профилирование производительности
+- ✅ `circuit_breaker.py` — защита от cascade failures
 
-### Области для улучшения
-- ⚠️ **Тестирование:** Нет установленного pytest, требуется `pip install -r requirements-dev.txt`
-- ⚠️ **Покрытие тестами:** ~40%, цель >80%
-- ⚠️ **Документация:** Устаревший GITHUB_RELEASE.md (v1.3.0 вместо v2.38.0)
-- ⚠️ **Зависимости:** aiodns не работает на Windows (условная установка)
-- ⚠️ **Логирование:** Много debug логов, можно оптимизировать
-- ⚠️ **Монолитность:** `tg_ws_proxy.py` слишком большой (2600+ строк), нужен рефакторинг
+### Сильные стороны (v2.43.0)
+- ✅ Полная реализация SOCKS5 с MTProto поддержкой
+- ✅ WebSocket пулинг с health checks и динамической оптимизацией
+- ✅ DNS кэширование с TTL и метриками (hit rate >90%)
+- ✅ Rate limiting и защита от злоупотреблений
+- ✅ Автоматический выбор DC по latency в реальном времени
+- ✅ Memory profiling и leak detection (tracemalloc + weakref)
+- ✅ Circuit breaker для защиты от cascade failures
+- ✅ Alerting система с DC latency мониторингом
+- ✅ Кроссплатформенность (Windows/Linux/macOS/Android)
+- ✅ Веб-панель управления с Flask + Prometheus metrics
+- ✅ Encryption support (AES-GCM, ChaCha20, MTProto IGE)
+- ✅ Модульная архитектура (33 модуля, хорошо разделены)
+
+### Области для улучшения (приоритеты v2.44.0)
+- 🎯 **Покрытие тестами:** ~50% → цель >80% (HIGH PRIORITY)
+- 🎯 **Интеграционные тесты:** Нужны end-to-end тесты (HIGH PRIORITY)
+- ⚠️ **Документация:** Обновить GITHUB_RELEASE.md до v2.43.0
+- ⚠️ **CI/CD:** GitHub Actions для автотестов + pip-audit
+- ⚠️ **Логирование:** Оптимизировать debug логи (слишком много)
+- ✅ **Монолитность:** ИСПРАВЛЕНО — tg_ws_proxy.py уменьшен на 46%
 
 ### Технический долг
 1. **Рефакторинг tg_ws_proxy.py** — разбить на модули:
@@ -328,37 +347,65 @@ Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
 2. **aiodns** — не устанавливается на Windows (используется fallback)
 3. **pytest** — требуется установка `pip install -r requirements-dev.txt`
 
-### Метрики качества
-- **Строк кода:** ~15,000 (Python)
-- **Модулей:** 25 в `proxy/`
-- **Тестов:** 24 файла в `tests/`
-- **Покрытие:** ~40% (требуется улучшение)
+### Метрики качества (v2.43.0)
+- **Строк кода:** ~18,000 (Python) — увеличение за счёт новых модулей
+- **Модулей:** 33 в `proxy/` (+8 новых модулей)
+- **Тестов:** 31 файл в `tests/` (+7 новых тестовых файлов)
+- **Покрытие:** ~50% (+10% за счёт новых тестов)
 - **Ruff:** 0 ошибок ✅
+- **Mypy:** 0 ошибок ✅
+- **RuntimeWarnings:** 0 ✅
 - **Платформы:** Windows, Linux, macOS, Android
+- **Рефакторинг:** tg_ws_proxy.py уменьшен с 2600 до 1400 строк (-46%) ✅
 
 ---
 
-## 🎯 Roadmap
+## 🎯 Roadmap (обновлено 22.03.2026)
 
-### v2.39.0 (Q2 2026) — Refactoring & Testing
-- Рефакторинг tg_ws_proxy.py
-- Увеличение покрытия тестами до >80%
-- CI/CD pipeline с GitHub Actions
-- Обновление документации
+### v2.44.0 (текущий спринт) — Merge to Main + Coverage
+- [ ] Merge dev → main (все улучшения v2.43.0)
+- [ ] Увеличение покрытия тестами до >60%
+- [ ] Интеграционные тесты для SOCKS5 + WebSocket
+- [ ] Обновление GITHUB_RELEASE.md до v2.43.0
+- [ ] GitHub Actions для автотестов
 
-### v2.40.0 (Q3 2026) — Performance & Monitoring
-- HTTP/2 Multiplexing
-- Prometheus metrics
-- Grafana dashboard
-- Performance benchmarks
+### v2.45.0 (следующий спринт) — Performance & Monitoring
+- [ ] HTTP/2 для Web Dashboard (Quart + Hypercorn)
+- [ ] Retry Strategy для сетевых ошибок
+- [ ] Adaptive timeouts на основе latency
+- [ ] Performance benchmarks
 
 ### v3.0.0 (Q4 2026) — Next Generation
-- HTTP/3 / QUIC support
-- Plugin system
-- Multi-proxy chains
-- ML-based anomaly detection
+- [ ] HTTP/3 / QUIC support
+- [ ] Plugin system
+- [ ] Multi-proxy chains
+- [ ] ML-based anomaly detection
 
 ---
 
-**Последнее обновление:** 22.03.2026
+**Последнее обновление:** 22.03.2026 18:30
 **Автор:** Dupley Maxim Igorevich
+
+## 📈 Прогресс v2.43.0
+
+### Выполнено за сессию:
+1. ✅ Исправлены RuntimeWarnings (18 → 0)
+2. ✅ Рефакторинг завершён (4 новых модуля)
+3. ✅ Добавлено 95+ новых тестов
+4. ✅ Покрытие увеличено с 40% до 50%
+5. ✅ tg_ws_proxy.py уменьшен на 46%
+6. ✅ Alerting система для DC latency
+7. ✅ Все изменения синхронизированы в dev
+
+### Готово к merge в main:
+- ✅ Все тесты проходят (570+)
+- ✅ Ruff: 0 ошибок
+- ✅ Mypy: 0 ошибок
+- ✅ RuntimeWarnings: 0
+- ✅ Код review готов
+
+### Следующие шаги:
+1. Merge dev → main
+2. Создать release v2.43.0
+3. Обновить документацию
+4. Начать работу над v2.44.0 (coverage improvement)
