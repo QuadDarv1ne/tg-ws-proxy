@@ -166,10 +166,13 @@ Version: v2.39.0 (sync complete ✅)
 14. [x] **CI Validation**: Ruff/Mypy/Pytest (476 тестов ✅).
 15. [x] **Release**: Merge dev -> main ✅ (v2.39.0).
 
-### ✅ Исправлено v2.38.0
-- [x] **test_profiler.py::test_start_stop** — добавлен @pytest.mark.asyncio
-- [x] **profiler.py stop()** — удалён get_event_loop().run_until_complete()
-- [x] **Синхронизация версий** — pyproject.toml: 2.38.0, proxy/__init__.py: 2.38.0
+### ✅ Исправлено v2.39.0
+- [x] **websocket_client.py** — выделен RawWebSocket и WsHandshakeError
+- [x] **socks5_handler.py** — выделен SOCKS5 handler
+- [x] **test_websocket_client.py** — тесты WebSocket клиента
+- [x] **test_socks5_handler.py** — тесты SOCKS5 handler
+- [x] **ruff check** — 0 ошибок ✅
+- [x] **Синхронизация версий** — pyproject.toml: 2.39.0, proxy/__init__.py: 2.39.0
 
 
 ---
