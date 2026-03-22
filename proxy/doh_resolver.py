@@ -133,30 +133,36 @@ class DNSOverHTTPSResolver:
         max_cache_size: int = 1000,
         enable_dnssec: bool = False,
         fallback_to_system: bool = True,
+        bootstrap_dns: list[str] | None = None,
     ):
         """
         Initialize DoH resolver.
-        
+
         Args:
             providers: List of DoH providers (uses defaults if None)
             cache_ttl: Default cache TTL in seconds
             max_cache_size: Maximum cache entries
             enable_dnssec: Enable DNSSEC validation
             fallback_to_system: Fallback to system DNS on DoH failure
+            bootstrap_dns: Initial DNS servers for DoH hostname resolution
         """
         self.providers = providers.copy() if providers else [p for p in self.DEFAULT_PROVIDERS]
         self.cache_ttl = cache_ttl
         self.max_cache_size = max_cache_size
         self.enable_dnssec = enable_dnssec
         self.fallback_to_system = fallback_to_system
-        
+        self.bootstrap_dns = bootstrap_dns or ['1.1.1.1', '8.8.8.8', '9.9.9.9']
+
         # Cache
         self._cache: dict[str, DNSCacheEntry] = {}
         self._cache_lock = asyncio.Lock()
-        
+
         # HTTP session (lazy initialized)
         self._session: Any = None
         
+        # Bootstrap DNS cache (pre-resolved DoH hostnames)
+        self._bootstrap_cache: dict[str, list[str]] = {}
+
         # Statistics
         self._total_queries = 0
         self._cache_hits = 0
@@ -164,12 +170,13 @@ class DNSOverHTTPSResolver:
         self._doh_failure = 0
         self._fallback_success = 0
         self._fallback_failure = 0
-        
+
         log.info(
-            "DoH resolver initialized: %d providers, DNSSEC=%s, fallback=%s",
+            "DoH resolver initialized: %d providers, DNSSEC=%s, fallback=%s, bootstrap=%s",
             len(self.providers),
             enable_dnssec,
-            fallback_to_system
+            fallback_to_system,
+            self.bootstrap_dns
         )
     
     async def _get_session(self) -> Any:
@@ -177,18 +184,61 @@ class DNSOverHTTPSResolver:
         if self._session is None:
             try:
                 import aiohttp  # type: ignore[import-not-found]
-                
+
                 # Create session with connection pooling
                 timeout = aiohttp.ClientTimeout(total=10)
                 self._session = aiohttp.ClientSession(timeout=timeout)
-                
+
                 log.debug("DoH aiohttp session created")
             except ImportError:
                 log.warning("aiohttp not available, DoH will use urllib")
                 self._session = None
-        
+
         return self._session
     
+    async def pre_resolve_hosts(self) -> dict[str, list[str]]:
+        """
+        Pre-resolve DoH provider hostnames.
+        
+        This helps avoid chicken-and-egg problem when you need DNS
+        to resolve the DoH provider hostname.
+        
+        Returns:
+            Dict mapping hostnames to IP addresses
+        """
+        import re
+        
+        hostnames = set()
+        for provider in self.providers:
+            # Extract hostname from URL
+            match = re.search(r'https?://([^/]+)', provider.url)
+            if match:
+                hostnames.add(match.group(1))
+        
+        results = {}
+        for hostname in hostnames:
+            try:
+                # Use bootstrap DNS
+                loop = asyncio.get_event_loop()
+                ips = await loop.getaddrinfo(hostname, 443, family=2)  # AF_INET
+                ip_list = list({r[4][0] for r in ips})
+                results[hostname] = ip_list
+                self._bootstrap_cache[hostname] = ip_list
+                log.debug("Pre-resolved %s -> %s", hostname, ip_list)
+            except Exception as e:
+                log.warning("Failed to pre-resolve %s: %s", hostname, e)
+        
+        return results
+    
+    def get_bootstrap_cache(self) -> dict[str, list[str]]:
+        """Get bootstrap DNS cache."""
+        return self._bootstrap_cache.copy()
+    
+    def clear_bootstrap_cache(self) -> None:
+        """Clear bootstrap DNS cache."""
+        self._bootstrap_cache.clear()
+        log.debug("Bootstrap DNS cache cleared")
+
     async def close(self) -> None:
         """Close HTTP session."""
         if self._session:
