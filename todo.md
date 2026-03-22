@@ -521,8 +521,10 @@ Version: v2.57.0 (Gaming Console ✅, i18n CN ✅, Proxy Chain ✅, Anti-censors
 
 ### 🔄 Последние улучшения
 - ✅ **tg_ws_proxy.py coverage**: 16% → 30% (+14%)
+- ✅ **websocket_client.py**: 28 тестов, coverage 53%
 - ✅ **Исправление update_optimization_config**: dns_cache_ttl теперь обновляется корректно
 - ✅ **11 новых тестов** для функций tg_ws_proxy.py
+- ✅ **10 новых тестов** для websocket_client.py
 
 ---
 
