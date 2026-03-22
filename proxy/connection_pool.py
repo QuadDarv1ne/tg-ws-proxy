@@ -346,6 +346,60 @@ class _WsPool:
         if avg_latency_ms > 0:
             asyncio.create_task(self._record_autotune_sample(avg_latency_ms, True))
 
+    def _calculate_adaptive_health_check_interval(self) -> float:
+        """
+        Calculate health check interval based on connection quality.
+
+        Returns:
+            Interval in seconds (15-60 seconds)
+        """
+        # Base interval
+        base_interval = 30.0
+        
+        # Adjust based on consecutive failures
+        total_failures = sum(self._consecutive_failures.values())
+        
+        if total_failures > 10:
+            # Many failures - check more frequently
+            return 15.0
+        elif total_failures > 5:
+            # Some failures - moderate frequency
+            return 20.0
+        elif total_failures == 0:
+            # No failures - check less frequently
+            return min(60.0, base_interval * 2)
+        
+        return base_interval
+
+    def _calculate_dc_reliability_score(self, dc: int) -> float:
+        """
+        Calculate reliability score for a DC (0-100).
+
+        Args:
+            dc: Datacenter ID
+
+        Returns:
+            Reliability score (higher = more reliable)
+        """
+        # Base score
+        score = 100.0
+        
+        # Penalty for consecutive failures
+        failures = self._consecutive_failures.get(dc, 0)
+        score -= failures * 10
+        
+        # Penalty for recent failed connections
+        recent_failed = sum(1 for _, t in self._failed_connections if time.monotonic() - t < 300)
+        score -= recent_failed * 5
+        
+        # Bonus for successful health checks
+        if dc in self._last_activity:
+            last_activity = self._last_activity[dc]
+            if time.monotonic() - last_activity < 60:
+                score += 10
+        
+        return max(0.0, min(100.0, score))
+
     async def _record_autotune_sample(
         self,
         latency_ms: float,

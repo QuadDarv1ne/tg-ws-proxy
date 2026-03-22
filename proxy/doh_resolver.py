@@ -30,18 +30,50 @@ class DoHProvider:
     priority: int = 0  # Lower = higher priority
     timeout: float = 5.0
     enabled: bool = True
-    
+
     # Statistics
     success_count: int = 0
     failure_count: int = 0
     last_success: float = 0.0
     last_failure: float = 0.0
     
+    # Latency tracking
+    latency_samples: list[float] = field(default_factory=list)
+    avg_latency_ms: float = 0.0
+
     @property
     def success_rate(self) -> float:
         """Calculate success rate."""
         total = self.success_count + self.failure_count
         return self.success_count / total if total > 0 else 1.0
+    
+    def record_latency(self, latency_ms: float) -> None:
+        """Record latency sample."""
+        self.latency_samples.append(latency_ms)
+        # Keep last 10 samples
+        if len(self.latency_samples) > 10:
+            self.latency_samples.pop(0)
+        # Calculate average
+        self.avg_latency_ms = sum(self.latency_samples) / len(self.latency_samples)
+    
+    def get_score(self) -> float:
+        """
+        Calculate provider score for selection.
+        
+        Lower score = better provider.
+        Combines success rate, latency, and priority.
+        """
+        # Base score from priority
+        score = self.priority * 10.0
+        
+        # Adjust by success rate (0-10 penalty)
+        score += (1.0 - self.success_rate) * 10.0
+        
+        # Adjust by latency (0-5 penalty for >100ms)
+        if self.avg_latency_ms > 100:
+            score += min(5.0, (self.avg_latency_ms - 100) / 100)
+        
+        return score
 
 
 @dataclass
@@ -163,7 +195,96 @@ class DNSOverHTTPSResolver:
             await self._session.close()
             self._session = None
             log.debug("DoH session closed")
+
+    def get_stats(self) -> dict[str, Any]:
+        """
+        Get resolver statistics.
+        
+        Returns:
+            Dict with statistics
+        """
+        # Calculate totals
+        total_doh = self._doh_success + self._doh_failure
+        doh_success_rate = self._doh_success / total_doh if total_doh > 0 else 1.0
+        
+        total_fallback = self._fallback_success + self._fallback_failure
+        fallback_success_rate = self._fallback_success / total_fallback if total_fallback > 0 else 1.0
+        
+        return {
+            'total_queries': self._total_queries,
+            'cache_hits': self._cache_hits,
+            'cache_hit_rate': self._cache_hits / self._total_queries if self._total_queries > 0 else 0.0,
+            'doh_success': self._doh_success,
+            'doh_failure': self._doh_failure,
+            'doh_success_rate': doh_success_rate,
+            'fallback_success': self._fallback_success,
+            'fallback_failure': self._fallback_failure,
+            'fallback_success_rate': fallback_success_rate,
+            'providers': len(self.providers),
+            'cache_size': len(self._cache),
+        }
     
+    def get_provider_stats(self) -> list[dict[str, Any]]:
+        """
+        Get statistics for each provider.
+        
+        Returns:
+            List of provider statistics
+        """
+        stats = []
+        for provider in self.providers:
+            stats.append({
+                'name': provider.name,
+                'url': provider.url,
+                'enabled': provider.enabled,
+                'priority': provider.priority,
+                'success_count': provider.success_count,
+                'failure_count': provider.failure_count,
+                'success_rate': provider.success_rate,
+                'avg_latency_ms': provider.avg_latency_ms,
+                'score': provider.get_score(),
+            })
+        return stats
+    
+    def add_provider(self, provider: DoHProvider) -> None:
+        """Add new DoH provider."""
+        self.providers.append(provider)
+        log.info("Added DoH provider: %s", provider.name)
+    
+    def remove_provider(self, name: str) -> bool:
+        """Remove provider by name."""
+        for i, p in enumerate(self.providers):
+            if p.name == name:
+                del self.providers[i]
+                log.info("Removed DoH provider: %s", name)
+                return True
+        return False
+    
+    def enable_provider(self, name: str) -> bool:
+        """Enable provider by name."""
+        for p in self.providers:
+            if p.name == name:
+                p.enabled = True
+                log.info("Enabled DoH provider: %s", name)
+                return True
+        return False
+    
+    def disable_provider(self, name: str) -> bool:
+        """Disable provider by name."""
+        for p in self.providers:
+            if p.name == name:
+                p.enabled = False
+                log.info("Disabled DoH provider: %s", name)
+                return True
+        return False
+    
+    def get_best_provider(self) -> DoHProvider | None:
+        """Get best provider by score."""
+        enabled = [p for p in self.providers if p.enabled]
+        if not enabled:
+            return None
+        return min(enabled, key=lambda p: p.get_score())
+
     async def resolve(
         self,
         domain: str,
@@ -195,39 +316,44 @@ class DNSOverHTTPSResolver:
                 self._cache_hits += 1
                 log.debug("DoH cache hit for %s: %s", domain, cached)
                 return [(ip, port) for ip in cached]
-        
-        # Try DoH providers in priority order
+
+        # Try DoH providers in score order (best first)
         sorted_providers = sorted(
             [p for p in self.providers if p.enabled],
-            key=lambda p: p.priority
+            key=lambda p: p.get_score()
         )
-        
+
         last_error: Exception | None = None
-        
+
         for provider in sorted_providers:
+            start_time = time.monotonic()
             try:
                 ips = await self._query_provider(provider, domain, timeout)
-                
+
                 if ips:
+                    # Record latency
+                    latency_ms = (time.monotonic() - start_time) * 1000
+                    provider.record_latency(latency_ms)
+                    
                     provider.success_count += 1
                     provider.last_success = time.monotonic()
                     self._doh_success += 1
-                    
+
                     # Cache results
                     await self._add_to_cache(domain, ips, self.cache_ttl)
-                    
+
                     log.debug(
-                        "DoH resolved %s via %s: %s",
-                        domain, provider.name, ips
+                        "DoH resolved %s via %s: %s (%.1fms)",
+                        domain, provider.name, ips, latency_ms
                     )
                     return [(ip, port) for ip in ips]
-                
+
             except Exception as e:
                 provider.failure_count += 1
                 provider.last_failure = time.monotonic()
                 self._doh_failure += 1
                 last_error = e
-                
+
                 log.debug(
                     "DoH provider %s failed for %s: %s",
                     provider.name, domain, e
