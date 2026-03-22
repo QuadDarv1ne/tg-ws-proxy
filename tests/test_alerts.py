@@ -37,32 +37,33 @@ class TestAlertManager:
     def test_check_threshold_warning(self):
         """Test threshold check with warning level."""
         manager = AlertManager()
-        alert = manager.check_threshold("cpu_percent", 75.0)
+        # Use existing threshold that maps to AlertType
+        alert = manager.check_threshold("ws_errors_per_minute", 15.0)
         assert alert is not None
         assert alert.severity == AlertSeverity.WARNING
 
     def test_check_threshold_critical(self):
         """Test threshold check with critical level."""
         manager = AlertManager()
-        alert = manager.check_threshold("cpu_percent", 95.0)
+        alert = manager.check_threshold("ws_errors_per_minute", 60.0)
         assert alert is not None
         assert alert.severity == AlertSeverity.CRITICAL
 
     def test_check_threshold_below_warning(self):
         """Test threshold check below warning level."""
         manager = AlertManager()
-        alert = manager.check_threshold("cpu_percent", 50.0)
+        alert = manager.check_threshold("ws_errors_per_minute", 5.0)
         assert alert is None
 
     def test_check_threshold_cooldown(self):
         """Test threshold cooldown."""
         manager = AlertManager()
         # First alert should trigger
-        alert1 = manager.check_threshold("cpu_percent", 95.0)
+        alert1 = manager.check_threshold("ws_errors_per_minute", 60.0)
         assert alert1 is not None
 
         # Second alert within cooldown should be suppressed
-        alert2 = manager.check_threshold("cpu_percent", 95.0)
+        alert2 = manager.check_threshold("ws_errors_per_minute", 60.0)
         assert alert2 is None
         assert manager.alerts_suppressed == 1
 
@@ -95,8 +96,8 @@ class TestAlertManager:
     def test_update_threshold(self):
         """Test updating threshold values."""
         manager = AlertManager()
-        manager.update_threshold("cpu_percent", warning=60.0, critical=80.0)
-        threshold = manager.thresholds["cpu_percent"]
+        manager.update_threshold("ws_errors_per_minute", warning=60.0, critical=80.0)
+        threshold = manager.thresholds["ws_errors_per_minute"]
         assert threshold.warning_value == 60.0
         assert threshold.critical_value == 80.0
 
@@ -109,7 +110,7 @@ class TestAlertManager:
     def test_get_statistics(self):
         """Test getting alert statistics."""
         manager = AlertManager()
-        manager.check_threshold("cpu_percent", 95.0)
+        manager.check_threshold("ws_errors_per_minute", 60.0)
         stats = manager.get_statistics()
         assert "total_alerts" in stats
         assert "alerts_last_hour" in stats
@@ -120,7 +121,8 @@ class TestAlertManager:
 class TestAlertHelpers:
     """Tests for alert helper functions."""
 
-    def test_alert_dc_latency_warning(self):
+    @pytest.mark.asyncio
+    async def test_alert_dc_latency_warning(self):
         """Test DC latency warning alert helper."""
         # Reset alert manager to avoid cooldown from other tests
         import proxy.alerts
@@ -136,7 +138,8 @@ class TestAlertHelpers:
         assert "DC2" in alert.title
         assert "175" in alert.message
 
-    def test_alert_dc_latency_critical(self):
+    @pytest.mark.asyncio
+    async def test_alert_dc_latency_critical(self):
         """Test DC latency critical alert helper."""
         # Reset alert manager
         import proxy.alerts
