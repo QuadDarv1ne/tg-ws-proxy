@@ -813,20 +813,24 @@ class TestDnsResolverFunctions:
         from proxy.tg_ws_proxy import _dns_cache, _resolve_domain_cached
         
         # Clear cache first
-        from proxy.tg_ws_proxy import clear_dns_cache
-        clear_dns_cache()
+        from proxy.tg_ws_proxy import _clear_dns_cache
+        _clear_dns_cache()
         
         # Add entry to cache with proper format (ip, expiry_time)
         import time
         now = time.monotonic()
-        _dns_cache['test.example.com'] = [('192.0.2.1', now + 100)]
+        test_ip = '192.0.2.1'
+        _dns_cache['test.example.com'] = [(test_ip, now + 100)]
+        
+        # Verify cache was populated
+        assert 'test.example.com' in _dns_cache
         
         # Should use cache
         result = await _resolve_domain_cached('test.example.com')
         
         # Result should contain the cached IP with port 443
-        assert len(result) > 0
-        assert result[0][0] == '192.0.2.1'
+        assert len(result) > 0, "Expected cached result but got empty list"
+        assert result[0][0] == test_ip
         assert result[0][1] == 443
 
     @pytest.mark.asyncio
@@ -890,26 +894,24 @@ class TestOptimizationConfigFunctions:
 
     def test_update_optimization_config_dns_ttl(self):
         """Test updating DNS cache TTL."""
-        from proxy.tg_ws_proxy import (
-            _dns_cache_ttl,
-            get_optimization_config,
-            update_optimization_config,
-        )
+        import proxy.tg_ws_proxy as m
         
         # Get original TTL
-        original_ttl = _dns_cache_ttl
+        original_ttl = m._dns_cache_ttl
         
         try:
             # Update TTL
-            update_optimization_config({'dns_cache_ttl': 600.0})
+            m.update_optimization_config({'dns_cache_ttl': 600.0})
+            
+            # Check module variable was updated
+            assert m._dns_cache_ttl == 600.0
             
             # Get config and check TTL was updated
-            config = get_optimization_config()
-            # dns_cache_ttl should be updated in the returned config
+            config = m.get_optimization_config()
             assert config.get('dns_cache_ttl') == 600.0
         finally:
             # Restore original
-            update_optimization_config({'dns_cache_ttl': original_ttl})
+            m.update_optimization_config({'dns_cache_ttl': original_ttl})
 
 
 class TestWsDomainFunctions:
