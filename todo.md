@@ -503,18 +503,18 @@
 ## 📊 Статус (23.03.2026 16:00)
 
 ```
-Модулей: 47 в proxy/ ✅ (добавлены: windows_proxy.py, cloudflare_warp.py, mtproxy.py, dpi_bypass.py, proxy_chain.py)
+Модулей: 45 в proxy/ ✅ (добавлены: system_proxy.py, cloudflare_tunnel.py, dpi_bypass.py)
 Тестов: 35 файлов в tests/ ✅
 Tests: 678 passed, 7 skipped ✅
 Coverage: ~59% (цель >80%)
-Ruff: 0 ошибок ✅
+Ruff: 13 warnings (whitespace in docstrings) ⚠️
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.55.0 (System Proxy ✅, Cloudflare WARP ✅, MTProxy ✅, DPI Bypass ✅, Proxy Chain ✅)
+Version: v2.55.0 (System Proxy ✅, Cloudflare Tunnel ✅, DPI Bypass ✅)
 ```
 
 **Актуальная версия:** v2.55.0 (dev) — ✅ synced
-**Следующая версия:** v2.56.0 (Integration Tests + Coverage)
+**Следующая версия:** v2.56.0 (Integration Tests + Coverage Improvement)
 **Последнее обновление:** 23.03.2026 (16:00)
 
 ---
