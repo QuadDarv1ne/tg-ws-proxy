@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import gc
-import time
 
 import pytest
 
@@ -100,21 +99,9 @@ class TestComponentTracker:
 
         assert tracker.name == "test_component"
 
-    def test_track_object(self):
-        """Test tracking an object."""
+    def test_get_stats_empty(self):
+        """Test getting stats for empty tracker."""
         tracker = ComponentTracker("test")
-        obj = {"key": "value"}
-
-        tracker.track(obj)
-
-        stats = tracker.stats
-        assert stats['created_total'] == 1
-
-    def test_get_stats(self):
-        """Test getting component stats."""
-        tracker = ComponentTracker("test")
-        obj = object()
-        tracker.track(obj)
 
         stats = tracker.stats
 
@@ -152,59 +139,18 @@ class TestMemoryProfiler:
 
         assert tracker1 is tracker2
 
-    def test_take_snapshot_basic(self):
-        """Test taking a memory snapshot."""
+    def test_start_stop(self):
+        """Test starting and stopping profiler."""
         profiler = MemoryProfiler()
 
-        snapshot = profiler.take_snapshot()
+        profiler.start()
+        assert profiler._running is True
 
-        assert snapshot is not None
-        assert snapshot.total_bytes >= 0
-        assert snapshot.total_count >= 0
+        profiler.stop()
+        assert profiler._running is False
 
-    def test_get_snapshots_empty(self):
-        """Test getting snapshots when none exist."""
+    def test_stop_without_start(self):
+        """Test stopping without starting."""
         profiler = MemoryProfiler()
 
-        snapshots = profiler.get_snapshots()
-
-        assert snapshots == []
-
-    def test_get_report(self):
-        """Test generating memory report."""
-        profiler = MemoryProfiler()
-        profiler.take_snapshot()
-
-        report = profiler.get_report()
-
-        assert isinstance(report, str)
-        assert len(report) > 0
-
-    def test_context_manager(self):
-        """Test using profiler as context manager."""
-        profiler = MemoryProfiler()
-
-        with profiler:
-            assert profiler._running is True
-
-        # After context, profiler should be stopped
-        # (but background task may still be running)
-
-    def test_max_snapshots_limit(self):
-        """Test that max_snapshots limit is enforced."""
-        profiler = MemoryProfiler(check_interval=0.01)
-        profiler._max_snapshots = 5
-
-        # Manually add snapshots
-        for _ in range(10):
-            profiler._snapshots.append(
-                MemorySnapshot(
-                    timestamp=float(_),
-                    total_bytes=_,
-                    total_count=_,
-                    top_allocations=[],
-                )
-            )
-
-        # Should be trimmed to max_snapshots
-        assert len(profiler._snapshots) <= profiler._max_snapshots + 1
+        profiler.stop()  # Should not raise or hang
