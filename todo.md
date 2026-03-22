@@ -136,20 +136,22 @@
 
 ---
 
-## 📊 Статус
+## 📊 Статус (22.03.2026 18:30)
 
 ```
-Tests: 560+ passed, 7 skipped, 0 errors ✅
-Coverage: ~48% (цель >80%)
+Модулей: 33 в proxy/ ✅
+Тестов: 31 файл в tests/ ✅
+Tests: 570+ passed, 7 skipped, 0 errors ✅
+Coverage: ~50% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.43.0 (MTProto Parser ✅, Refactoring Complete ✅)
+Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
 ```
 
-**Актуальная версия:** v2.43.0 (dev) — ✅ refactoring complete
-**Следующая версия:** v2.44.0 (coverage improvement)
-**Последнее обновление:** 22.03.2026 (18:00)
+**Актуальная версия:** v2.43.0 (dev) — ✅ refactoring complete, alerting added
+**Следующая версия:** v2.44.0 (merge to main + coverage improvement)
+**Последнее обновление:** 22.03.2026 (18:30)
 
 ---
 
