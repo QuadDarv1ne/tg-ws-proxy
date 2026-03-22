@@ -1,80 +1,55 @@
 # 📚 Документация TG WS Proxy
 
-## 📖 Основное
+## 📖 Основная документация
 
-| Документ | Описание |
-|----------|----------|
-| [README.md](../README.md) | Главная страница проекта |
-| [QUICKSTART.md](QUICKSTART.md) | Быстрый старт за 5 минут |
-| [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md) | Настройка Telegram Desktop |
-| [CONFIGURATION.md](CONFIGURATION.md) | Конфигурация и параметры |
+| Файл | Описание |
+|------|----------|
+| [QUICKSTART.md](QUICKSTART.md) | ⚡ Быстрый старт — установка и настройка за 5 минут |
+| [CONFIGURATION.md](CONFIGURATION.md) | ⚙️ Полная справка по конфигурации |
+| [GAMING_PROXY.md](GAMING_PROXY.md) | 🎮 Настройка PS4/PS5/Xbox/Switch |
+| [SECURITY_ADVANCED.md](SECURITY_ADVANCED.md) | 🔒 Безопасность: шифрование, rate limiting, DPI bypass |
+| [TESTING.md](TESTING.md) | 🧪 Тестирование и coverage |
+| [CHANGELOG.md](CHANGELOG.md) | 📋 История изменений |
 
-## 🎮 Игровые консоли
+## 🔗 Дополнительные ресурсы
 
-| Документ | Описание |
-|----------|----------|
-| [GAMING_PROXY.md](GAMING_PROXY.md) | Настройка PS4/PS5/Xbox/Switch |
-
-## 🔒 Безопасность
-
-| Документ | Описание |
-|----------|----------|
-| [SECURITY.md](../SECURITY.md) | Политика безопасности |
-| [ENCRYPTION.md](ENCRYPTION.md) | E2E шифрование |
-| [RATE_LIMITING.md](RATE_LIMITING.md) | Защита от DDoS |
-| [DPI_BYPASS.md](DPI_BYPASS.md) | Обход DPI |
-
-## 🛠️ Разработка
-
-| Документ | Описание |
-|----------|----------|
-| [CONTRIBUTING.md](../CONTRIBUTING.md) | Руководство контрибьютора |
-| [BUILD.md](BUILD.md) | Сборка проекта |
-| [TESTING.md](TESTING.md) | Тестирование |
-| [MONITORING.md](MONITORING.md) | Prometheus и метрики |
-
-## 📱 Мобильные платформы
-
-| Документ | Описание |
-|----------|----------|
-| [INSTALL_MOBILE.md](INSTALL_MOBILE.md) | Установка на Android |
-
-## 🔬 Исследования
-
-| Документ | Описание |
-|----------|----------|
-| [HTTP/2 Research](HTTP2_RESEARCH.md) | Анализ HTTP/2 |
-
-## 📋 Списки задач
-
-| Документ | Описание |
-|----------|----------|
-| [TODO.md](../todo.md) | План разработки |
-| [CHANGELOG.md](CHANGELOG.md) | История изменений |
-| [Release Notes](RELEASE_NOTES.md) | Заметки к релизам |
-
----
+| Ресурс | Описание |
+|--------|----------|
+| [README.md](../README.md) | 🏠 Главная страница проекта |
+| [CONTRIBUTING.md](../CONTRIBUTING.md) | 🤝 Руководство для контрибьюторов |
+| [SECURITY.md](../SECURITY.md) | 🛡️ Политика безопасности |
+| [TODO.md](../todo.md) | 📝 План разработки |
 
 ## 📂 Структура проекта
 
 ```
 tg-ws-proxy/
-├── docs/                    # Документация
+├── docs/                    # Документация (6 основных файлов)
 │   ├── README.md           # Оглавление
-│   ├── QUICKSTART.md       # Быстрый старт
-│   ├── TELEGRAM_SETUP.md   # Настройка Telegram
+│   ├── QUICKSTART.md       # Быстрый старт + Telegram настройка
 │   ├── CONFIGURATION.md    # Конфигурация
-│   ├── GAMING_PROXY.md     # Игровые консоли
+│   ├── GAMING_PROXY.md     # Игровые консоли + Mobile
+│   ├── SECURITY_ADVANCED.md # Безопасность (объединяет 3 файла)
 │   ├── TESTING.md          # Тестирование
-│   ├── DPI_BYPASS.md       # Обход DPI
-│   ├── CHANGELOG.md        # История изменений
-│   └── ...                 # Другие документы
+│   └── CHANGELOG.md        # История изменений
 ├── proxy/                   # Исходный код (48 модулей)
-├── tests/                   # Тесты
+├── tests/                   # Тесты (35 файлов)
 ├── scripts/                 # Скрипты
 ├── mobile-app/              # Android приложение
 └── ...                      # Конфигурационные файлы
 ```
+
+## 🗂️ Оптимизация документации
+
+**Объединено:**
+- `TELEGRAM_SETUP.md` → `QUICKSTART.md`
+- `ENCRYPTION.md` + `RATE_LIMITING.md` + `DPI_BYPASS.md` → `SECURITY_ADVANCED.md`
+- `RELEASE_NOTES.md` + `GITHUB_RELEASE.md` → `CHANGELOG.md`
+- `INSTALL_MOBILE.md` → `GAMING_PROXY.md`
+- `HTTP2_RESEARCH.md` → удалён (устарел)
+- `BUILD.md` → перенесён в основной README
+
+**Удалено:** 9 дублирующихся файлов
 
 ---
 
