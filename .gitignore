@@ -2,7 +2,9 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyi
 *.egg-info/
+*.egg
 dist/
 build/
 *.spec.bak
@@ -12,9 +14,14 @@ build/
 venv/
 ENV/
 .coverage
+.coverage.*
 htmlcov/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.web_server.log
 web_server.log
+*.log
 requirements-*.txt.bak
 
 # --- PyInstaller & Desktop Build ---
@@ -57,9 +64,11 @@ mobile-app/ios/App/App.xcworkspace/xcuserdata/
 .idea/
 *.swp
 *.swo
+*~
 .DS_Store
 Thumbs.db
 Desktop.ini
+*.lnk
 
 # --- Project Specific / Temporary ---
 scan_ips.py
@@ -71,7 +80,11 @@ tweb-master/
 qr_code.*
 generate_qr.py
 *.cache
+*.db
+!proxy/*.db
+metrics_history.db
 
 # --- Build scripts backups ---
 build_mobile.py.bak
 upload-release.bat.bak
+*.bak
