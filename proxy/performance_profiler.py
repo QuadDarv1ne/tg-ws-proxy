@@ -196,7 +196,7 @@ class PerformanceProfiler:
             profile_result.memory_delta / 1024 / 1024,
         )
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     def get_suggestions(self, result: ProfileResult) -> list[OptimizationSuggestion]:
         """
