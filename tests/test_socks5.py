@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock
 from proxy.tg_ws_proxy import ProxyServer
 
 @pytest.fixture

@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import struct
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from proxy.tg_ws_proxy import _dc_from_init, _patch_init_dc, _is_telegram_ip, _is_http_transport
 
