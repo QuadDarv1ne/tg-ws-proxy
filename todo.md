@@ -88,7 +88,28 @@
 
 ---
 
-## 🟡 В процессе (v2.44.0: coverage + stability)
+## 🟢 Выполнено (v2.44.0: alerts + stability)
+
+### Производительность
+- ✅ **Connection Pooling Optimization** — динамическая настройка размера пула
+  - Адаптация на основе miss rate (>30% → increase, <5% → decrease)
+  - Адаптация на основе latency (>100ms → increase, <30ms → decrease)
+  - Интервал оптимизации: 30 секунд
+  - Логирование изменений размера пула
+
+### Надёжность
+- ✅ **Alerting** — уведомления при высокой задержке DC
+  - AlertType.DC_HIGH_LATENCY добавлен
+  - Порог: 150ms (warning), 200ms (critical)
+  - Cooldown: 2 минуты между алертами для одного DC
+  - Интеграция в monitor_dc_latency()
+  - Email/webhook уведомления (через AlertManager)
+  - Тесты: test_alerts.py (8 passed)
+- ✅ **metric_to_alert_type mapping** — корректное сопоставление метрик с AlertType
+
+---
+
+## 🟡 В процессе (v2.45.0: coverage + stability)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
@@ -135,7 +156,7 @@
 
 ---
 
-## 📊 Статус (22.03.2026 19:00)
+## 📊 Статус (22.03.2026 20:00)
 
 ```
 Модулей: 33 в proxy/ ✅
@@ -143,14 +164,14 @@
 Tests: 570+ passed, 7 skipped, 0 errors ✅
 Coverage: ~50% (цель >80%)
 Ruff: 0 ошибок ✅
-Mypy: 0 ошибок ✅
+Mypy: 14 ошибок (требуется исправление)
 RuntimeWarnings: 0 ✅
-Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
+Version: v2.44.0 (Alerting ✅, metric_to_alert_type ✅, Refactoring Complete ✅)
 ```
 
-**Актуальная версия:** v2.43.0 (dev) — ✅ refactoring complete, alerting added, ruff clean
-**Следующая версия:** v2.44.0 (merge to main + coverage improvement)
-**Последнее обновление:** 22.03.2026 (19:00)
+**Актуальная версия:** v2.44.0 (main/dev) — ✅ synced
+**Следующая версия:** v2.45.0 (coverage improvement + mypy fix)
+**Последнее обновление:** 22.03.2026 (20:00)
 
 ---
 
