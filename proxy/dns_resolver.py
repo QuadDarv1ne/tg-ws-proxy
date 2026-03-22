@@ -346,6 +346,108 @@ class DNSResolver:
 
         return removed
 
+    async def prewarm_cache(self, domains: list[str] | None = None) -> int:
+        """
+        Pre-warm DNS cache with known domains.
+
+        Resolves domains proactively to reduce first-connection latency.
+
+        Args:
+            domains: List of domains to pre-warm. If None, uses default Telegram domains.
+
+        Returns:
+            Number of domains successfully cached
+        """
+        if domains is None:
+            # Default Telegram/WhatsApp-like domains for pre-warming
+            domains = [
+                # Telegram WebSocket domains
+                'kws1.web.telegram.org',
+                'kws2.web.telegram.org',
+                'kws3.web.telegram.org',
+                'kws4.web.telegram.org',
+                'kws5.web.telegram.org',
+                'kws6.web.telegram.org',
+                'kws7.web.telegram.org',
+                'kws8.web.telegram.org',
+                'kws9.web.telegram.org',
+                'kws10.web.telegram.org',
+                # Telegram media domains
+                'telegram.org',
+                'telesco.pe',
+                'cdn-telegram.org',
+                # Core domains
+                't.me',
+                'web.telegram.org',
+                'graph.org',
+            ]
+
+        log.info("DNS cache pre-warming: resolving %d domains", len(domains))
+        start_time = time.monotonic()
+        cached_count = 0
+
+        # Resolve all domains concurrently
+        tasks = [self.resolve(domain, use_cache=True, aggressive_cache=True) for domain in domains]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for domain, result in zip(domains, results):
+            if isinstance(result, Exception):
+                log.debug("DNS pre-warm failed for %s: %s", domain, result)
+            elif result:
+                cached_count += 1
+                log.debug("DNS pre-warmed %s -> %s", domain, [ip for ip, _ in result])
+
+        elapsed = time.monotonic() - start_time
+        log.info(
+            "DNS cache pre-warming complete: %d/%d domains cached in %.2fs",
+            cached_count,
+            len(domains),
+            elapsed
+        )
+
+        return cached_count
+
+    async def refresh_cache(self, refresh_known_domains: bool = True) -> int:
+        """
+        Refresh DNS cache by re-resolving cached domains.
+
+        Args:
+            refresh_known_domains: Also refresh known Telegram domains
+
+        Returns:
+            Number of domains refreshed
+        """
+        now = time.monotonic()
+        refreshed_count = 0
+
+        # Get domains to refresh (expiring within 60 seconds)
+        refresh_threshold = now + 60
+        domains_to_refresh = [
+            domain for domain, entry in self._cache.items()
+            if entry.expiry <= refresh_threshold
+        ]
+
+        # Add known domains if requested
+        if refresh_known_domains:
+            known_domains = [
+                'kws1.web.telegram.org',
+                'kws2.web.telegram.org',
+                'kws3.web.telegram.org',
+                'kws4.web.telegram.org',
+                'telegram.org',
+                'telesco.pe',
+            ]
+            domains_to_refresh.extend(
+                d for d in known_domains if d not in domains_to_refresh
+            )
+
+        if domains_to_refresh:
+            log.debug("DNS cache refresh: refreshing %d domains", len(domains_to_refresh))
+            await self.prewarm_cache(domains_to_refresh)
+            refreshed_count = len(domains_to_refresh)
+
+        return refreshed_count
+
 
 # Global resolver instance
 _global_resolver: DNSResolver | None = None

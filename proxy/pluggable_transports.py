@@ -860,6 +860,257 @@ class ObfuscationPipeline:
 
 
 # =============================================================================
+# Adaptive Obfuscation Pipeline
+# =============================================================================
+
+
+class AdaptiveObfuscationPipeline(ObfuscationPipeline):
+    """
+    Adaptive obfuscation pipeline with automatic DPI detection.
+
+    Automatically adjusts obfuscation level based on detected censorship:
+    - Level 0: No obfuscation (clean network)
+    - Level 1: Light obfuscation (TLS spoofing only)
+    - Level 2: Medium obfuscation (TLS + fragmentation)
+    - Level 3: Heavy obfuscation (full pipeline)
+    - Level 4: Stealth mode (aggressive obfuscation + domain fronting)
+    """
+
+    def __init__(
+        self,
+        enable_auto_escalation: bool = True,
+        escalation_threshold: int = 3,
+        de_escalation_timeout: float = 300.0,
+        **kwargs: Any,
+    ):
+        """
+        Initialize adaptive obfuscation pipeline.
+
+        Args:
+            enable_auto_escalation: Enable automatic obfuscation escalation
+            escalation_threshold: Failures before escalating obfuscation
+            de_escalation_timeout: Seconds before de-escalating after success
+            **kwargs: Arguments for ObfuscationPipeline
+        """
+        super().__init__(**kwargs)
+
+        self.enable_auto_escalation = enable_auto_escalation
+        self.escalation_threshold = escalation_threshold
+        self.de_escalation_timeout = de_escalation_timeout
+
+        # Current obfuscation level (0-4)
+        self._escalation_level = 0
+        self._consecutive_failures = 0
+        self._last_success_time = 0.0
+        self._detector = CensorshipDetector()
+
+        # Active configuration for current level
+        self._active_config: dict[str, bool] = {}
+
+        log.info(
+            "Adaptive Obfuscation Pipeline initialized "
+            "(auto_escalation=%s, threshold=%d)",
+            enable_auto_escalation,
+            escalation_threshold
+        )
+
+    def _update_active_config(self) -> None:
+        """Update active configuration based on escalation level."""
+        if self._escalation_level == 0:
+            # No obfuscation
+            self._active_config = {
+                'obfs4': False,
+                'shadowsocks': False,
+                'fragmentation': False,
+                'traffic_shaping': False,
+                'domain_fronting': False,
+                'tls_spoof': False,
+            }
+        elif self._escalation_level == 1:
+            # Light: TLS spoofing only
+            self._active_config = {
+                'obfs4': False,
+                'shadowsocks': False,
+                'fragmentation': False,
+                'traffic_shaping': False,
+                'domain_fronting': False,
+                'tls_spoof': True,
+            }
+        elif self._escalation_level == 2:
+            # Medium: TLS + fragmentation
+            self._active_config = {
+                'obfs4': False,
+                'shadowsocks': False,
+                'fragmentation': True,
+                'traffic_shaping': True,
+                'domain_fronting': False,
+                'tls_spoof': True,
+            }
+        elif self._escalation_level == 3:
+            # Heavy: Full pipeline
+            self._active_config = {
+                'obfs4': True,
+                'shadowsocks': False,
+                'fragmentation': True,
+                'traffic_shaping': True,
+                'domain_fronting': False,
+                'tls_spoof': True,
+            }
+        else:  # level >= 4
+            # Stealth: Aggressive + domain fronting
+            self._active_config = {
+                'obfs4': True,
+                'shadowsocks': True,
+                'fragmentation': True,
+                'traffic_shaping': True,
+                'domain_fronting': True,
+                'tls_spoof': True,
+            }
+
+        log.info(
+            "Obfuscation level %d: %s",
+            self._escalation_level,
+            ', '.join(k for k, v in self._active_config.items() if v) or 'none'
+        )
+
+    def _escalate(self) -> None:
+        """Escalate obfuscation level."""
+        old_level = self._escalation_level
+        self._escalation_level = min(self._escalation_level + 1, 4)
+        if self._escalation_level != old_level:
+            self._update_active_config()
+            log.warning(
+                "Obfuscation escalated: level %d → %d (failures=%d)",
+                old_level,
+                self._escalation_level,
+                self._consecutive_failures
+            )
+
+    def _de_escalate(self) -> None:
+        """De-escalate obfuscation level."""
+        old_level = self._escalation_level
+        self._escalation_level = max(self._escalation_level - 1, 0)
+        if self._escalation_level != old_level:
+            self._update_active_config()
+            log.info(
+                "Obfuscation de-escalated: level %d → %d (success after timeout)",
+                old_level,
+                self._escalation_level
+            )
+
+    def record_failure(
+        self,
+        error_type: str = 'unknown',
+        error_msg: str = '',
+        dc_id: int | None = None,
+        domain: str | None = None,
+    ) -> None:
+        """
+        Record connection failure and potentially escalate obfuscation.
+
+        Args:
+            error_type: Type of error
+            error_msg: Error message
+            dc_id: Datacenter ID
+            domain: Domain
+        """
+        self._consecutive_failures += 1
+        self._detector.record_failure(error_type, error_msg, dc_id, domain)
+
+        if self.enable_auto_escalation:
+            if self._consecutive_failures >= self.escalation_threshold:
+                self._escalate()
+                self._consecutive_failures = 0
+
+    def record_success(self) -> None:
+        """Record successful connection."""
+        self._consecutive_failures = 0
+        self._last_success_time = time.monotonic()
+
+        # Check if we should de-escalate
+        if self.enable_auto_escalation and self._escalation_level > 0:
+            # De-escalate after timeout period of successful connections
+            # (implemented in obfuscate method for simplicity)
+
+    def obfuscate(self, data: bytes) -> list[bytes]:
+        """
+        Apply adaptive obfuscation based on current level.
+
+        Args:
+            data: Original data
+
+        Returns:
+            List of obfuscated fragments
+        """
+        # Check for de-escalation timeout
+        if (self.enable_auto_escalation and
+            self._escalation_level > 0 and
+            self._last_success_time > 0):
+            elapsed = time.monotonic() - self._last_success_time
+            if elapsed > self.de_escalation_timeout:
+                self._de_escalate()
+                self._last_success_time = time.monotonic()
+
+        # Build temporary pipeline based on active config
+        result = data
+
+        # Layer 1: Shadowsocks encryption
+        if self._active_config.get('shadowsocks') and self.ss_obfs:
+            result = self.ss_obfs.encrypt(result)
+
+        # Layer 2: Obfs4 obfuscation
+        if self._active_config.get('obfs4') and self.obfs4:
+            if not self.obfs4._initialized:
+                self.obfs4.create_client_handshake()
+            result = self.obfs4.obfuscate(result)
+
+        # Layer 3: Fragmentation
+        if self._active_config.get('fragmentation') and self.fragmenter:
+            fragments = self.fragmenter.fragment(result)
+        else:
+            fragments = [result]
+
+        # Layer 4: Traffic shaping
+        if self._active_config.get('traffic_shaping') and self.shaper:
+            shaped_fragments = []
+            for frag in fragments:
+                shaped_fragments.append(self.shaper.add_padding(frag))
+            fragments = shaped_fragments
+
+            # Apply jitter
+            for i, _ in enumerate(fragments):
+                if i > 0:
+                    self.shaper.apply_jitter()
+
+        return fragments
+
+    def get_ssl_context(self) -> ssl.SSLContext:
+        """Get SSL context with TLS fingerprint spoofing if enabled."""
+        if self._active_config.get('tls_spoof'):
+            return self.tls_spoof.create_ssl_context()
+        # Return default SSL context
+        return ssl.create_default_context()
+
+    def get_domain_fronting_host(self) -> str | None:
+        """Get domain fronting host if enabled."""
+        if self._active_config.get('domain_fronting') and self.domain_fronting:
+            return self.domain_fronting.get_fronting_host('kws*.web.telegram.org')
+        return None
+
+    def get_status(self) -> dict[str, Any]:
+        """Get adaptive obfuscation status."""
+        return {
+            'escalation_level': self._escalation_level,
+            'consecutive_failures': self._consecutive_failures,
+            'last_success_time': self._last_success_time,
+            'auto_escalation_enabled': self.enable_auto_escalation,
+            'active_config': self._active_config,
+            'blocking_detected': self._detector.blocking_detected,
+            'recommendation': self._detector.get_recommendation(),
+        }
+
+
+# =============================================================================
 # Auto-detection of Censorship
 # =============================================================================
 

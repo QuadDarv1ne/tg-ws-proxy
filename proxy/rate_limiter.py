@@ -426,11 +426,19 @@ class RateLimiter:
         return RateLimitAction.ALLOW
 
     def _refill_tokens(self, stats: IPStats, now: float) -> None:
-        """Refill token bucket based on elapsed time."""
+        """
+        Refill token bucket based on elapsed time.
+
+        Limits maximum accumulation time to prevent token hoarding after long idle periods.
+        This ensures more accurate rate limiting for burst traffic patterns.
+        """
         if not self.config.token_bucket_enabled:
             return
 
         elapsed = now - stats.last_token_refill
+        # Cap maximum refill time to prevent token accumulation abuse
+        # Max 10 seconds of refill to avoid hoarding after long idle periods
+        elapsed = min(elapsed, 10.0)
         refill_amount = elapsed * self.config.token_bucket_refill_rate
         stats.tokens = min(stats.tokens + refill_amount, self.config.token_bucket_capacity)
         stats.last_token_refill = now
