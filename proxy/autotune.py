@@ -74,14 +74,14 @@ class AutoTuner:
         self._samples_lock = asyncio.Lock()
 
         # Current tuned values
-        self._current_pool_size = 4
-        self._current_timeout_ms = 10000.0
-        self._current_max_retries = 3
+        self._current_pool_size: int = 4
+        self._current_timeout_ms: float = 10000.0
+        self._current_max_retries: int = 3
 
         # Tuning state
         self._last_adjustment_time: float = 0.0
-        self._tuning_applied_count = 0
-        self._running = False
+        self._tuning_applied_count: int = 0
+        self._running: bool = False
         self._tuning_task: asyncio.Task | None = None
 
         # Baseline metrics

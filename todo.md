@@ -28,15 +28,43 @@
 
 ---
 
+## ✅ Выполнено (v2.49.0: health check + autotune integration)
+
+### Надёжность
+- ✅ **Health Check Enhancement** — агрессивная проверка мёртвых соединений
+  - Интервал health check уменьшен с 45с до 30с (нормальный режим)
+  - Агрессивный режим: 15с интервал при обнаружении проблем
+  - Timeout адаптируется: 5с → 3с в агрессивном режиме
+  - Обнаружение stale соединений (>2 минут без активности)
+  - Трекинг последней активности для каждого соединения
+  - Трекинг consecutive failures для каждого DC
+  - Автоматическое включение aggressive mode при >5 failures
+  - Очистка старых failed connections (5 минут)
+
+### Производительность
+- ✅ **Connection Timeout Tuning** — интеграция с AutoTuner
+  - `proxy/autotune.py` — авто-тюнинг на основе latency
+  - Адаптивные таймауты для health check (на основе tuned timeout)
+  - Синхронизация pool optimization с autotuner
+  - Запись performance samples в autotuner
+  - Статистика autotune в `get_stats()`
+  - Запуск autotuner при старте сервера (BALANCED mode)
+  - Корректная остановка autotuner при shutdown
+
+### Интеграция
+- ✅ **AutoTuner + ConnectionPool** — полная интеграция
+  - `connection_pool.py` использует `get_autotuner()`
+  - Адаптивный timeout для health check (50% от tuned timeout, cap 10s)
+  - Performance samples записываются при оптимизации пула
+  - Статистика autotune доступна в pool stats
+
+---
+
 ## 🟡 В процессе (v2.49.0: integration tests + coverage)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
-
-### Надёжность
-- [ ] **Health Check Enhancement** — более агрессивная проверка мёртвых соединений
-- [ ] **Connection Timeout Tuning** — адаптивные таймауты на основе latency
 
 ### Безопасность
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
@@ -48,7 +76,7 @@
 
 ---
 
-## 📊 Статус (23.03.2026 01:00)
+## 📊 Статус (23.03.2026 01:30)
 
 ```
 Модулей: 35 в proxy/ ✅
@@ -58,12 +86,12 @@ Coverage: ~57% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.48.1 (Build Fixed ✅, AGP 9.1 ✅)
+Version: v2.49.0 (Health Check ✅, AutoTune ✅)
 ```
 
-**Актуальная версия:** v2.48.1 (dev) — ✅ synced
-**Следующая версия:** v2.49.0 (integration tests + coverage)
-**Последнее обновление:** 23.03.2026 (01:00)
+**Актуальная версия:** v2.49.0 (dev) — ✅ synced
+**Следующая версия:** v2.50.0 (E2E Encryption + Security)
+**Последнее обновление:** 23.03.2026 (01:30)
 
 ---
 

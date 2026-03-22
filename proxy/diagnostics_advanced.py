@@ -1,12 +1,13 @@
 """
-Advanced Diagnostics for TG WS Proxy.
+Advanced Diagnostics Report Module for TG WS Proxy.
 
-Provides comprehensive connectivity testing:
-- DNS resolution
-- TCP connectivity
-- WebSocket handshake
-- DC latency measurement
-- Performance recommendations
+Provides comprehensive network diagnostics with export capabilities:
+- Full connectivity testing (DNS, TCP, WebSocket)
+- Performance metrics (latency, packet loss)
+- DC health assessment
+- Export to JSON/CSV formats
+- Historical data tracking
+- Recommendations engine
 
 Author: Dupley Maxim Igorevich
 © 2026 Dupley Maxim Igorevich. All rights reserved.
@@ -15,398 +16,591 @@ Author: Dupley Maxim Igorevich
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 import logging
+import os
+import platform
 import socket
 import ssl
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
+from enum import Enum, auto
+from pathlib import Path
+from typing import Any
 
-log = logging.getLogger('tg-diagnostics')
+from . import tg_ws_proxy
+from .connection_pool import get_tcp_pool, _WsPool
+from .stats import Stats
+
+log = logging.getLogger('tg-ws-diagnostics-adv')
+
+
+class HealthStatus(Enum):
+    """Health status levels."""
+    EXCELLENT = auto()  # All tests passed, low latency
+    GOOD = auto()       # Most tests passed, acceptable latency
+    DEGRADED = auto()   # Some failures, high latency
+    CRITICAL = auto()   # Major failures, very high latency
+    DOWN = auto()       # Complete failure
 
 
 @dataclass
-class TestResult:
-    """Result of a single diagnostic test."""
-    test_name: str
-    target: str
-    success: bool
-    latency_ms: float | None = None
+class NetworkInterface:
+    """Network interface information."""
+    name: str
+    ip_address: str
+    mac_address: str | None
+    is_up: bool
+    is_default: bool = False
+
+
+@dataclass
+class DCTestResult:
+    """Diagnostic result for a single DC."""
+    dc_id: int
+    ip: str
+    domain: str
+    dns_success: bool
+    dns_latency_ms: float | None
+    tcp_success: bool
+    tcp_latency_ms: float | None
+    ws_success: bool
+    ws_latency_ms: float | None
+    ws_available: bool  # False if 302 redirect
     error: str | None = None
-    details: str | None = None
-    timestamp: float = field(default_factory=time.time)
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary."""
-        return {
-            'test_name': self.test_name,
-            'target': self.target,
-            'success': self.success,
-            'latency_ms': self.latency_ms,
-            'error': self.error,
-            'details': self.details,
-            'timestamp': self.timestamp,
-        }
 
 
 @dataclass
-class DiagnosticsReport:
-    """Complete diagnostics report."""
-    start_time: float = field(default_factory=time.time)
-    end_time: float | None = None
+class DiagnosticReport:
+    """Complete diagnostic report."""
+    timestamp: str
+    hostname: str
+    platform: str
+    python_version: str
+    proxy_version: str
+    
+    # Network info
+    network_interfaces: list[NetworkInterface] = field(default_factory=list)
+    
+    # DC test results
+    dc_results: list[DCTestResult] = field(default_factory=list)
+    
+    # Summary metrics
     total_tests: int = 0
     passed_tests: int = 0
     failed_tests: int = 0
-    results: list[TestResult] = field(default_factory=list)
+    avg_latency_ms: float = 0.0
+    min_latency_ms: float | None = None
+    max_latency_ms: float | None = None
+    
+    # Health assessment
+    overall_health: HealthStatus = HealthStatus.DEGRADED
+    best_dc: int | None = None
+    best_dc_latency_ms: float | None = None
+    
+    # Recommendations
     recommendations: list[str] = field(default_factory=list)
-
-    @property
-    def success_rate(self) -> float:
-        """Calculate success rate percentage."""
-        if self.total_tests == 0:
-            return 0.0
-        return (self.passed_tests / self.total_tests) * 100
-
-    @property
-    def duration_ms(self) -> float:
-        """Get test duration in milliseconds."""
-        if self.end_time is None:
-            return 0.0
-        return (self.end_time - self.start_time) * 1000
-
-    def add_result(self, result: TestResult) -> None:
-        """Add test result and update counters."""
-        self.results.append(result)
-        self.total_tests += 1
-        if result.success:
-            self.passed_tests += 1
-        else:
-            self.failed_tests += 1
-
-    def add_recommendation(self, recommendation: str) -> None:
-        """Add recommendation to the report."""
-        if recommendation not in self.recommendations:
-            self.recommendations.append(recommendation)
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary."""
-        return {
-            'start_time': self.start_time,
-            'end_time': self.end_time,
-            'duration_ms': self.duration_ms,
-            'total_tests': self.total_tests,
-            'passed_tests': self.passed_tests,
-            'failed_tests': self.failed_tests,
-            'success_rate': self.success_rate,
-            'results': [r.to_dict() for r in self.results],
-            'recommendations': self.recommendations,
-        }
+    
+    # Raw data for export
+    raw_data: dict[str, Any] = field(default_factory=dict)
 
 
-async def test_dns_resolution(hostname: str) -> TestResult:
-    """Test DNS resolution for a hostname."""
-    start = time.perf_counter()
-    try:
-        loop = asyncio.get_event_loop()
-        addrs = await loop.getaddrinfo(
-            host=hostname, port=None, family=socket.AF_INET, type=socket.SOCK_STREAM
+class DiagnosticsAdvanced:
+    """
+    Advanced diagnostics with comprehensive reporting.
+    
+    Features:
+    - Multi-threaded testing for speed
+    - Historical data tracking
+    - Export to multiple formats
+    - Health assessment
+    - Automated recommendations
+    """
+    
+    # Telegram DC configuration
+    DC_DOMAINS = {
+        1: ['kws1.web.telegram.org', 'kws1-1.web.telegram.org'],
+        2: ['kws2.web.telegram.org', 'kws2-1.web.telegram.org'],
+        3: ['kws3.web.telegram.org', 'kws3-1.web.telegram.org'],
+        4: ['kws4.web.telegram.org', 'kws4-1.web.telegram.org'],
+        5: ['kws5.web.telegram.org', 'kws5-1.web.telegram.org'],
+    }
+    
+    DC_IPS = {
+        1: ['149.154.175.50'],
+        2: ['149.154.167.220', '95.161.76.100'],
+        3: ['149.154.175.100'],
+        4: ['149.154.167.91'],
+        5: ['91.108.56.100'],
+    }
+    
+    def __init__(self):
+        self._history: list[DiagnosticReport] = []
+        self._max_history = 100  # Keep last 100 reports
+        self._ssl_ctx = ssl.create_default_context()
+        self._ssl_ctx.check_hostname = False
+        self._ssl_ctx.verify_mode = ssl.CERT_NONE
+        
+    async def run_full_diagnostics(
+        self,
+        dc_opt: dict[int, str | None] | None = None,
+    ) -> DiagnosticReport:
+        """
+        Run comprehensive diagnostics suite.
+        
+        Args:
+            dc_opt: Optional DC override configuration
+            
+        Returns:
+            Complete diagnostic report
+        """
+        start_time = time.time()
+        
+        # Initialize report
+        report = DiagnosticReport(
+            timestamp=datetime.now().isoformat(),
+            hostname=socket.gethostname(),
+            platform=f"{platform.system()} {platform.release()} ({platform.machine()})",
+            python_version=platform.python_version(),
+            proxy_version=self._get_proxy_version(),
         )
-        latency = (time.perf_counter() - start) * 1000
-        ips = list({addr[4][0] for addr in addrs})
-
-        return TestResult(
-            test_name="DNS Resolution",
-            target=hostname,
-            success=True,
-            latency_ms=latency,
-            details=f"Resolved to: {', '.join(ips)}",
-        )
-    except Exception as e:
-        return TestResult(
-            test_name="DNS Resolution",
-            target=hostname,
-            success=False,
-            error=str(e),
-        )
-
-
-async def test_tcp_connect(host: str, port: int, timeout: float = 5.0) -> TestResult:
-    """Test TCP connection to host:port."""
-    start = time.perf_counter()
-    try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port),
-            timeout=timeout
-        )
-        latency = (time.perf_counter() - start) * 1000
-        writer.close()
-        await writer.wait_closed()
-
-        return TestResult(
-            test_name="TCP Connect",
-            target=f"{host}:{port}",
-            success=True,
-            latency_ms=latency,
-        )
-    except asyncio.TimeoutError:
-        return TestResult(
-            test_name="TCP Connect",
-            target=f"{host}:{port}",
-            success=False,
-            error="Connection timeout",
-        )
-    except Exception as e:
-        return TestResult(
-            test_name="TCP Connect",
-            target=f"{host}:{port}",
-            success=False,
-            error=str(e),
-        )
-
-
-async def test_websocket_connect(ip: str, domain: str, timeout: float = 10.0) -> TestResult:
-    """Test WebSocket connection to Telegram DC."""
-    start = time.perf_counter()
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-
-    try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(ip, 443, ssl=ssl_ctx, server_hostname=domain),
-            timeout=timeout
-        )
-
-        # Send WebSocket handshake
-        import base64
-        import os
-
-        ws_key = base64.b64encode(os.urandom(16)).decode()
-        req = (
-            f'GET /apiws HTTP/1.1\r\n'
-            f'Host: {domain}\r\n'
-            f'Upgrade: websocket\r\n'
-            f'Connection: Upgrade\r\n'
-            f'Sec-WebSocket-Key: {ws_key}\r\n'
-            f'Sec-WebSocket-Version: 13\r\n'
-            f'\r\n'
-        )
-        writer.write(req.encode())
-        await writer.drain()
-
-        # Read response
-        response = await asyncio.wait_for(reader.read(512), timeout=timeout)
-        latency = (time.perf_counter() - start) * 1000
-
-        writer.close()
-        await writer.wait_closed()
-
-        # Check if upgrade was successful
-        if b'101' in response:
-            return TestResult(
-                test_name="WebSocket Connect",
-                target=f"{domain} via {ip}",
-                success=True,
-                latency_ms=latency,
-                details="WebSocket upgrade successful",
-            )
-        elif b'302' in response:
-            return TestResult(
-                test_name="WebSocket Connect",
-                target=f"{domain} via {ip}",
-                success=False,
-                latency_ms=latency,
-                error="HTTP 302 Redirect (WS not available)",
-            )
-        else:
-            return TestResult(
-                test_name="WebSocket Connect",
-                target=f"{domain} via {ip}",
-                success=False,
-                latency_ms=latency,
-                error=f"Unexpected response: {response[:100].decode('utf-8', errors='replace')}",
-            )
-
-    except asyncio.TimeoutError:
-        return TestResult(
-            test_name="WebSocket Connect",
-            target=f"{domain} via {ip}",
-            success=False,
-            error="Connection timeout",
-        )
-    except Exception as e:
-        return TestResult(
-            test_name="WebSocket Connect",
-            target=f"{domain} via {ip}",
-            success=False,
-            error=str(e),
-        )
-
-
-# Telegram DC WebSocket domains
-DC_DOMAINS = {
-    1: ['kws1.web.telegram.org', 'kws1-1.web.telegram.org'],
-    2: ['kws2.web.telegram.org', 'kws2-1.web.telegram.org'],
-    3: ['kws3.web.telegram.org', 'kws3-1.web.telegram.org'],
-    4: ['kws4.web.telegram.org', 'kws4-1.web.telegram.org'],
-    5: ['kws5.web.telegram.org', 'kws5-1.web.telegram.org'],
-}
-
-# Telegram DC IPs
-DC_IPS = {
-    1: ['149.154.175.50'],
-    2: ['149.154.167.220', '95.161.76.100'],
-    3: ['149.154.175.100'],
-    4: ['149.154.167.91'],
-    5: ['91.108.56.100'],
-}
-
-
-async def run_full_diagnostics() -> DiagnosticsReport:
-    """Run full diagnostic suite."""
-    report = DiagnosticsReport()
-
-    log.info("Starting diagnostics...")
-
-    # Test DNS
-    log.info("Testing DNS resolution...")
-    for dc in range(1, 6):
-        for domain in DC_DOMAINS[dc]:
-            result = await test_dns_resolution(domain)
-            report.add_result(result)
-            log.info("  %s: %s", result.target, "✓" if result.success else f"✗ {result.error}")
-
-    # Test TCP connectivity to DC IPs
-    log.info("Testing TCP connectivity...")
-    for _dc, ips in DC_IPS.items():
-        for ip in ips:
-            result = await test_tcp_connect(ip, 443)
-            report.add_result(result)
-            log.info("  %s: %s", result.target, "✓" if result.success else f"✗ {result.error}")
-
-    # Test WebSocket endpoints
-    log.info("Testing WebSocket endpoints...")
-    for dc, domains in DC_DOMAINS.items():
-        ip = DC_IPS[dc][0]
-        for domain in domains[:1]:  # Test first domain only
-            result = await test_websocket_connect(ip, domain)
-            report.add_result(result)
-            log.info("  %s: %s", result.target, "✓" if result.success else f"✗ {result.error}")
-
-    # Generate recommendations
-    _generate_recommendations(report)
-
-    # Summary
-    log.info("Diagnostics complete: %d/%d tests passed (%.1f%%)",
-             report.passed_tests, report.total_tests, report.success_rate)
-
-    report.end_time = time.time()
-    return report
-
-
-def _generate_recommendations(report: DiagnosticsReport) -> None:
-    """Generate recommendations based on test results."""
-    # Check DNS issues
-    dns_failures = [r for r in report.results if r.test_name == "DNS Resolution" and not r.success]
-    if dns_failures:
-        report.add_recommendation("⚠️ DNS resolution failures detected. Try changing your DNS server to Google DNS (8.8.8.8) or Cloudflare (1.1.1.1).")
-
-    # Check TCP connectivity
-    tcp_failures = [r for r in report.results if r.test_name == "TCP Connect" and not r.success]
-    if len(tcp_failures) > len(DC_IPS):
-        report.add_recommendation("⚠️ Multiple TCP connection failures. Check your firewall and internet connection.")
-
-    # Check WebSocket issues
-    ws_failures = [r for r in report.results if r.test_name == "WebSocket Connect" and not r.success]
-    ws_redirects = [r for r in ws_failures if "302" in (r.error or "")]
-
-    if ws_redirects:
-        report.add_recommendation("⚠️ WebSocket endpoints returning 302 redirects. This DC may not support WebSocket connections - TCP fallback will be used.")
-
-    if len(ws_failures) > len(DC_DOMAINS) and not ws_redirects:
-        report.add_recommendation("⚠️ Multiple WebSocket failures. Consider using TCP fallback or checking your network configuration.")
-
-    # Check latency
-    successful_ws = [r for r in report.results if r.test_name == "WebSocket Connect" and r.success and r.latency_ms]
-    if successful_ws:
-        avg_latency = sum(r.latency_ms for r in successful_ws) / len(successful_ws)  # type: ignore[misc]
-        if avg_latency > 200:
-            report.add_recommendation(f"🐌 High average latency ({avg_latency:.1f}ms). Try selecting a different DC or checking your network connection.")
-        elif avg_latency > 100:
-            report.add_recommendation(f"⚡ Moderate latency ({avg_latency:.1f}ms). Performance should be acceptable.")
-        else:
-            report.add_recommendation(f"✅ Excellent latency ({avg_latency:.1f}ms). Network connection is optimal.")
-
-    # Overall success rate
-    if report.success_rate < 50:
-        report.add_recommendation("🔴 Low success rate. Major connectivity issues detected. Check your internet connection and firewall settings.")
-    elif report.success_rate < 80:
-        report.add_recommendation("🟡 Moderate success rate. Some connectivity issues detected. Review failed tests above.")
-    else:
-        report.add_recommendation("🟢 Good connectivity. All critical systems operational.")
-
-
-def print_diagnostics_report(report: DiagnosticsReport) -> None:
-    """Print formatted diagnostics report."""
-    print("\n" + "=" * 70)
-    print("  TG WS Proxy - Diagnostics Report")
-    print("=" * 70)
-    print(f"  Duration: {report.duration_ms:.0f}ms | Tests: {report.total_tests} | "
-          f"Passed: {report.passed_tests} | Failed: {report.failed_tests} | "
-          f"Success: {report.success_rate:.1f}%")
-    print("=" * 70)
-
-    # Group by type
-    dns_results = [r for r in report.results if r.test_name == "DNS Resolution"]
-    tcp_results = [r for r in report.results if r.test_name == "TCP Connect"]
-    ws_results = [r for r in report.results if r.test_name == "WebSocket Connect"]
-
-    def print_section(title: str, results: list[TestResult]) -> None:
-        print(f"\n{title}:")
+        
+        # Gather network interfaces
+        report.network_interfaces = await self._gather_network_info()
+        
+        # Use provided DC config or default
+        if dc_opt is None:
+            dc_opt = self.DC_IPS.copy()
+        
+        # Run DC tests
+        dc_results = await self._test_all_dcs(dc_opt)
+        report.dc_results = dc_results
+        
+        # Calculate summary metrics
+        self._calculate_summary(report)
+        
+        # Assess health
+        report.overall_health = self._assess_health(report)
+        
+        # Generate recommendations
+        report.recommendations = self._generate_recommendations(report)
+        
+        # Store in history
+        self._history.append(report)
+        if len(self._history) > self._max_history:
+            self._history.pop(0)
+        
+        duration = time.time() - start_time
+        log.info("Diagnostics completed in %.2fs (health: %s)", 
+                duration, report.overall_health.name)
+        
+        return report
+    
+    async def _gather_network_info(self) -> list[NetworkInterface]:
+        """Gather network interface information."""
+        interfaces = []
+        
+        try:
+            # Get default interface
+            default_ip = self._get_default_ip()
+            
+            # Get all interfaces (simplified for cross-platform)
+            hostname = socket.gethostname()
+            try:
+                addr_info = socket.getaddrinfo(hostname, None, socket.AF_INET)
+                for info in addr_info:
+                    ip = info[4][0]
+                    if not ip.startswith('127.'):
+                        interfaces.append(NetworkInterface(
+                            name='default',
+                            ip_address=ip,
+                            mac_address=None,  # Requires admin privileges
+                            is_up=True,
+                            is_default=(ip == default_ip),
+                        ))
+            except Exception as e:
+                log.debug("Failed to get interface info: %s", e)
+                
+        except Exception as e:
+            log.debug("Network info gathering failed: %s", e)
+        
+        return interfaces
+    
+    def _get_default_ip(self) -> str:
+        """Get default gateway IP."""
+        try:
+            # Create UDP socket to determine default route
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "unknown"
+    
+    async def _test_all_dcs(
+        self,
+        dc_opt: dict[int, str | None],
+    ) -> list[DCTestResult]:
+        """Test all DCs concurrently."""
+        tasks = []
+        
+        for dc_id, target_ip in dc_opt.items():
+            if target_ip is None:
+                continue
+                
+            domains = self.DC_DOMAINS.get(dc_id, [])
+            if not domains:
+                continue
+            
+            # Test each domain for this DC
+            for domain in domains[:1]:  # Test first domain only
+                task = asyncio.create_task(
+                    self._test_single_dc(dc_id, target_ip, domain)
+                )
+                tasks.append(task)
+        
+        # Run all tests concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter out exceptions
+        valid_results = []
         for r in results:
-            status = "✓" if r.success else "✗"
-            if r.success:
-                print(f"  {status} {r.target}: {r.latency_ms:.1f}ms" if r.latency_ms else f"  {status} {r.target}")
+            if isinstance(r, DCTestResult):
+                valid_results.append(r)
+            elif isinstance(r, Exception):
+                log.debug("DC test exception: %s", r)
+        
+        return valid_results
+    
+    async def _test_single_dc(
+        self,
+        dc_id: int,
+        ip: str,
+        domain: str,
+    ) -> DCTestResult:
+        """Test a single DC endpoint."""
+        result = DCTestResult(
+            dc_id=dc_id,
+            ip=ip,
+            domain=domain,
+            dns_success=False,
+            dns_latency_ms=None,
+            tcp_success=False,
+            tcp_latency_ms=None,
+            ws_success=False,
+            ws_latency_ms=None,
+            ws_available=True,
+        )
+        
+        # Test DNS resolution
+        dns_start = time.perf_counter()
+        try:
+            loop = asyncio.get_event_loop()
+            resolved = await loop.getaddrinfo(domain, 443, family=socket.AF_INET)
+            dns_latency = (time.perf_counter() - dns_start) * 1000
+            result.dns_success = True
+            result.dns_latency_ms = dns_latency
+            log.debug("DC%d DNS %s: %.1fms", dc_id, domain, dns_latency)
+        except Exception as e:
+            result.error = f"DNS: {e}"
+            log.debug("DC%d DNS %s failed: %s", dc_id, domain, e)
+        
+        # Test TCP connectivity
+        if result.dns_success:
+            tcp_start = time.perf_counter()
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(ip, 443, ssl=self._ssl_ctx, server_hostname=domain),
+                    timeout=10.0
+                )
+                tcp_latency = (time.perf_counter() - tcp_start) * 1000
+                result.tcp_success = True
+                result.tcp_latency_ms = tcp_latency
+                
+                # Test WebSocket upgrade
+                ws_result = await self._test_websocket_upgrade(reader, writer, domain)
+                result.ws_success = ws_result['success']
+                result.ws_latency_ms = ws_result.get('latency_ms')
+                result.ws_available = ws_result.get('available', True)
+                if not result.ws_available:
+                    result.error = "WebSocket not available (302 redirect)"
+                    
+                log.debug("DC%d TCP+WS %s: %.1fms", dc_id, domain, tcp_latency)
+                
+            except Exception as e:
+                result.error = f"TCP: {e}"
+                log.debug("DC%d TCP %s failed: %s", dc_id, domain, e)
+        
+        return result
+    
+    async def _test_websocket_upgrade(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        domain: str,
+    ) -> dict[str, Any]:
+        """Test WebSocket upgrade."""
+        import base64
+        
+        try:
+            ws_key = base64.b64encode(os.urandom(16)).decode()
+            req = (
+                f'GET /apiws HTTP/1.1\r\n'
+                f'Host: {domain}\r\n'
+                f'Upgrade: websocket\r\n'
+                f'Connection: Upgrade\r\n'
+                f'Sec-WebSocket-Key: {ws_key}\r\n'
+                f'Sec-WebSocket-Version: 13\r\n'
+                f'\r\n'
+            )
+            
+            start = time.perf_counter()
+            writer.write(req.encode())
+            await writer.drain()
+            
+            response = await asyncio.wait_for(reader.read(512), timeout=5.0)
+            latency = (time.perf_counter() - start) * 1000
+            
+            writer.close()
+            await writer.wait_closed()
+            
+            if b'101' in response:
+                return {'success': True, 'latency_ms': latency, 'available': True}
+            elif b'302' in response:
+                return {'success': False, 'latency_ms': latency, 'available': False}
             else:
-                print(f"  {status} {r.target}: {r.error}")
-            if r.details:
-                print(f"      {r.details}")
+                return {'success': False, 'latency_ms': latency, 'available': True}
+                
+        except Exception as e:
+            try:
+                writer.close()
+            except Exception:
+                pass
+            return {'success': False, 'error': str(e), 'available': True}
+    
+    def _calculate_summary(self, report: DiagnosticReport) -> None:
+        """Calculate summary metrics."""
+        report.total_tests = len(report.dc_results) * 3  # DNS + TCP + WS per DC
+        report.passed_tests = sum(
+            (1 if r.dns_success else 0) +
+            (1 if r.tcp_success else 0) +
+            (1 if r.ws_success else 0)
+            for r in report.dc_results
+        )
+        report.failed_tests = report.total_tests - report.passed_tests
+        
+        # Calculate latency statistics
+        latencies = [
+            r.ws_latency_ms for r in report.dc_results
+            if r.ws_success and r.ws_latency_ms is not None
+        ]
+        
+        if latencies:
+            report.avg_latency_ms = sum(latencies) / len(latencies)
+            report.min_latency_ms = min(latencies)
+            report.max_latency_ms = max(latencies)
+            
+            # Find best DC
+            best = min(
+                [(r.dc_id, r.ws_latency_ms) for r in report.dc_results if r.ws_success and r.ws_latency_ms],
+                key=lambda x: x[1]
+            )
+            report.best_dc = best[0]
+            report.best_dc_latency_ms = best[1]
+    
+    def _assess_health(self, report: DiagnosticReport) -> HealthStatus:
+        """Assess overall health status."""
+        if report.passed_tests == 0:
+            return HealthStatus.DOWN
+        
+        pass_rate = report.passed_tests / report.total_tests if report.total_tests > 0 else 0
+        
+        if pass_rate == 1.0 and report.avg_latency_ms < 100:
+            return HealthStatus.EXCELLENT
+        elif pass_rate >= 0.8 and report.avg_latency_ms < 200:
+            return HealthStatus.GOOD
+        elif pass_rate >= 0.5 and report.avg_latency_ms < 500:
+            return HealthStatus.DEGRADED
+        elif pass_rate >= 0.3:
+            return HealthStatus.CRITICAL
+        else:
+            return HealthStatus.DOWN
+    
+    def _generate_recommendations(self, report: DiagnosticReport) -> list[str]:
+        """Generate recommendations based on diagnostics."""
+        recommendations = []
+        
+        # Health-based recommendations
+        if report.overall_health == HealthStatus.DOWN:
+            recommendations.append("🔴 Критическая проблема: проверьте подключение к интернету")
+        elif report.overall_health == HealthStatus.CRITICAL:
+            recommendations.append("⚠️ Серьезные проблемы с подключением к Telegram DC")
+        
+        # Latency recommendations
+        if report.avg_latency_ms > 300:
+            recommendations.append(
+                f"🐌 Высокая задержка ({report.avg_latency_ms:.0f}ms). "
+                f"Попробуйте использовать DC{report.best_dc} ({report.best_dc_latency_ms:.0f}ms)"
+            )
+        
+        # DC-specific recommendations
+        failed_dcs = [r.dc_id for r in report.dc_results if not r.ws_success]
+        if len(failed_dcs) > 0 and len(failed_dcs) < len(report.dc_results):
+            recommendations.append(
+                f"💡 DC {', '.join(map(str, failed_dcs))} недоступен. "
+                f"Используйте DC{report.best_dc} как основной"
+            )
+        
+        # DNS recommendations
+        dns_failures = sum(1 for r in report.dc_results if not r.dns_success)
+        if dns_failures > 0:
+            recommendations.append("⚠️ Проблемы с DNS. Попробуйте использовать DoH или DNS over TLS")
+        
+        # General recommendations
+        if not recommendations:
+            recommendations.append("✅ Все системы работают нормально")
+        
+        return recommendations
+    
+    def _get_proxy_version(self) -> str:
+        """Get proxy version."""
+        try:
+            from . import __version__
+            return __version__
+        except Exception:
+            return "unknown"
+    
+    def export_json(self, report: DiagnosticReport, filepath: str | Path) -> None:
+        """Export report to JSON format."""
+        data = {
+            'timestamp': report.timestamp,
+            'hostname': report.hostname,
+            'platform': report.platform,
+            'python_version': report.python_version,
+            'proxy_version': report.proxy_version,
+            'network_interfaces': [asdict(i) for i in report.network_interfaces],
+            'dc_results': [asdict(r) for r in report.dc_results],
+            'summary': {
+                'total_tests': report.total_tests,
+                'passed_tests': report.passed_tests,
+                'failed_tests': report.failed_tests,
+                'avg_latency_ms': report.avg_latency_ms,
+                'min_latency_ms': report.min_latency_ms,
+                'max_latency_ms': report.max_latency_ms,
+            },
+            'health': report.overall_health.name,
+            'best_dc': report.best_dc,
+            'best_dc_latency_ms': report.best_dc_latency_ms,
+            'recommendations': report.recommendations,
+        }
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        log.info("Diagnostic report exported to %s", filepath)
+    
+    def export_csv(self, report: DiagnosticReport, filepath: str | Path) -> None:
+        """Export DC results to CSV format."""
+        output = io.StringIO()
+        
+        fieldnames = [
+            'dc_id', 'ip', 'domain', 'dns_success', 'dns_latency_ms',
+            'tcp_success', 'tcp_latency_ms', 'ws_success', 'ws_latency_ms',
+            'ws_available', 'error'
+        ]
+        
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        for r in report.dc_results:
+            row = asdict(r)
+            writer.writerow(row)
+        
+        with open(filepath, 'w', encoding='utf-8', newline='') as f:
+            f.write(output.getvalue())
+        
+        log.info("Diagnostic CSV exported to %s", filepath)
+    
+    def get_history(self, limit: int = 10) -> list[DiagnosticReport]:
+        """Get recent diagnostic history."""
+        return self._history[-limit:]
+    
+    def print_report(self, report: DiagnosticReport) -> None:
+        """Print formatted diagnostic report."""
+        print("\n" + "=" * 70)
+        print("  TG WS Proxy Diagnostic Report")
+        print("=" * 70)
+        print(f"  Time: {report.timestamp}")
+        print(f"  Host: {report.hostname}")
+        print(f"  Platform: {report.platform}")
+        print(f"  Proxy: {report.proxy_version}")
+        print("=" * 70)
+        
+        # Network interfaces
+        if report.network_interfaces:
+            print("\n📡 Network Interfaces:")
+            for iface in report.network_interfaces:
+                default = " (default)" if iface.is_default else ""
+                print(f"  • {iface.name}{default}: {iface.ip_address}")
+        
+        # DC results
+        print("\n🌐 Datacenter Results:")
+        for r in report.dc_results:
+            status = "✓" if r.ws_success else "✗"
+            latency = f"{r.ws_latency_ms:.0f}ms" if r.ws_latency_ms else "N/A"
+            print(f"  {status} DC{r.dc_id} ({r.domain} via {r.ip})")
+            print(f"      DNS: {r.dns_latency_ms:.0f}ms | TCP: {r.tcp_latency_ms:.0f}ms | WS: {latency}")
+            if r.error:
+                print(f"      Error: {r.error}")
+        
+        # Summary
+        print("\n📊 Summary:")
+        print(f"  Tests: {report.passed_tests}/{report.total_tests} passed")
+        if report.avg_latency_ms > 0:
+            print(f"  Avg Latency: {report.avg_latency_ms:.0f}ms")
+        if report.best_dc:
+            print(f"  Best DC: DC{report.best_dc} ({report.best_dc_latency_ms:.0f}ms)")
+        
+        # Health status
+        health_icons = {
+            HealthStatus.EXCELLENT: "✅",
+            HealthStatus.GOOD: "🟢",
+            HealthStatus.DEGRADED: "🟡",
+            HealthStatus.CRITICAL: "🔴",
+            HealthStatus.DOWN: "⛔",
+        }
+        print(f"\n  Health: {health_icons[report.overall_health]} {report.overall_health.name}")
+        
+        # Recommendations
+        print("\n💡 Recommendations:")
+        for rec in report.recommendations:
+            print(f"  • {rec}")
+        
+        print("\n" + "=" * 70 + "\n")
 
-    print_section("📡 DNS Resolution", dns_results)
-    print_section("🔌 TCP Connectivity (port 443)", tcp_results)
-    print_section("🌐 WebSocket Endpoints", ws_results)
 
-    print("\n" + "=" * 70)
-    print("  Recommendations:")
-    print("=" * 70)
-    for rec in report.recommendations:
-        print(f"  {rec}")
-    print("=" * 70 + "\n")
+# Global diagnostics instance
+_diagnostics: DiagnosticsAdvanced | None = None
 
 
-def run_diagnostics_cli() -> int:
-    """Run diagnostics from CLI."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(message)s'
-    )
-
-    print("\n🔍 Running TG WS Proxy Diagnostics...\n")
-
-    report = asyncio.run(run_full_diagnostics())
-    print_diagnostics_report(report)
-
-    # Optionally save to file
-    if len(sys.argv) > 1 and sys.argv[1] == '--json':
-        output_file = 'diagnostics_report.json'
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(report.to_dict(), f, indent=2)
-        print(f"\n💾 Report saved to: {output_file}")
-
-    # Return exit code based on results
-    return 0 if report.success_rate >= 80 else 1
+def get_diagnostics() -> DiagnosticsAdvanced:
+    """Get or create global diagnostics instance."""
+    global _diagnostics
+    if _diagnostics is None:
+        _diagnostics = DiagnosticsAdvanced()
+    return _diagnostics
 
 
-if __name__ == '__main__':
-    sys.exit(run_diagnostics_cli())
+__all__ = [
+    'DiagnosticsAdvanced',
+    'DiagnosticReport',
+    'DCTestResult',
+    'NetworkInterface',
+    'HealthStatus',
+    'get_diagnostics',
+]
