@@ -145,6 +145,7 @@ LOCK_FILE_EXT = ".lock"
 DEFAULT_CONFIG = {
     "port": DEFAULT_PORT,
     "host": DEFAULT_HOST,
+    "auto_port": False,  # Auto-detect free port
     "dc_ip": ["2:149.154.167.220", "4:149.154.167.220"],
     "verbose": False,
     "ip_whitelist": [],  # Empty = allow all IPs
