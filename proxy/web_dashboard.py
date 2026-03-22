@@ -14,7 +14,7 @@ import os
 import threading
 import time
 from datetime import datetime
-from typing import Callable
+from typing import Callable, Generator
 
 try:
     from flask import Flask, Response, jsonify, render_template_string, request
@@ -2243,6 +2243,42 @@ class WebDashboard:
                 )
             else:
                 return jsonify(stats)
+
+        @self.app.route('/api/stream')
+        def api_stream() -> Response:
+            """Server-Sent Events stream for real-time statistics."""
+            def event_stream() -> Generator[str, None, None]:
+                """Generate SSE events."""
+                import random
+                last_stats = {}
+                
+                while True:
+                    try:
+                        stats = self.get_stats()
+                        stats['timestamp'] = datetime.now().isoformat()
+                        stats['version'] = '2.5.5'
+                        
+                        # Only send if stats changed significantly
+                        if stats != last_stats:
+                            yield f"data: {json.dumps(stats)}\n\n"
+                            last_stats = stats
+                        
+                        # Send every 2 seconds
+                        time.sleep(2)
+                        
+                    except Exception as e:
+                        log.error("SSE stream error: %s", e)
+                        break
+            
+            return Response(
+                event_stream(),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'X-Accel-Buffering': 'no',  # Disable nginx buffering
+                }
+            )
 
         @self.app.route('/api/config', methods=['GET'])
         def api_get_config() -> Response | tuple[Response, int]:
