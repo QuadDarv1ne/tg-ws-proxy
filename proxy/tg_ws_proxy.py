@@ -19,6 +19,7 @@ from .circuit_breaker import (
     CircuitBreakerConfig,
 )
 from .connection_pool import (
+    _TcpPool,  # noqa: F401 — используется в тестах
     _WsPool,
 )
 from .connection_pool import (

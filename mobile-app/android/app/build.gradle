@@ -70,6 +70,7 @@ dependencies {
     implementation libs.androidx.security.crypto
     implementation libs.androidx.work.runtime
     implementation libs.androidx.biometric
+    implementation libs.material
     
     implementation project(':capacitor-android')
     implementation project(':capacitor-cordova-android-plugins')

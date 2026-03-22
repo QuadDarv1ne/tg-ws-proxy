@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from proxy.connection_pool import _WsPool
 from proxy.stats import Stats
-from proxy.tg_ws_proxy import RawWebSocket, _WsPool
+from proxy.websocket_client import RawWebSocket
 
 
 @pytest.fixture
@@ -18,7 +19,7 @@ def stats():
 @pytest.fixture
 def ws_pool(stats):
     # Patch heartbeat loop to avoid background task interference during tests
-    with patch("proxy.tg_ws_proxy.asyncio.create_task"):
+    with patch("proxy.connection_pool.asyncio.create_task"):
         return _WsPool(stats)
 
 class TestWsPoolLogic:

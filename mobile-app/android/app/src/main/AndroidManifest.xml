@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -15,19 +16,6 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
         </intent>
-        <intent><component android:name="com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity" /></intent>
-        <intent><component android:name="com.letv.android.letvsafe/com.letv.android.letvsafe.AutobootManageActivity" /></intent>
-        <intent><component android:name="com.huawei.systemmanager/com.huawei.systemmanager.optimize.process.ProtectActivity" /></intent>
-        <intent><component android:name="com.huawei.systemmanager/com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity" /></intent>
-        <intent><component android:name="com.coloros.safecenter/com.coloros.safecenter.permission.startup.StartupAppListActivity" /></intent>
-        <intent><component android:name="com.coloros.safecenter/com.coloros.safecenter.startupapp.StartupAppListActivity" /></intent>
-        <intent><component android:name="com.oppo.safe/com.oppo.safe.permission.startup.StartupAppListActivity" /></intent>
-        <intent><component android:name="com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity" /></intent>
-        <intent><component android:name="com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.BgStartUpManager" /></intent>
-        <intent><component android:name="com.vivo.permissionmanager/com.vivo.permissionmanager.activity.BgStartUpManagerActivity" /></intent>
-        <intent><component android:name="com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity" /></intent>
-        <intent><component android:name="com.htc.pitroad/com.htc.pitroad.landingpage.activity.LandingPageActivity" /></intent>
-        <intent><component android:name="com.asus.mobilemanager/com.asus.mobilemanager.autostart.AutoStartActivity" /></intent>
     </queries>
 
     <application
@@ -38,7 +26,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+        android:theme="@style/AppTheme"
+        tools:replace="android:allowBackup,android:fullBackupContent,android:dataExtractionRules,android:theme">
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
@@ -53,7 +42,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Automation Intent Filter (Task 7) -->
             <intent-filter>
                 <action android:name="com.dupley.tgwssproxy.ACTION_START_PROXY" />
                 <action android:name="com.dupley.tgwssproxy.ACTION_STOP_PROXY" />
@@ -95,7 +83,6 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
 
@@ -112,10 +99,12 @@
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
-            android:grantUriPermissions="true">
+            android:grantUriPermissions="true"
+            tools:replace="android:authorities">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths"></meta-data>
+                android:resource="@xml/file_paths"
+                tools:replace="android:resource"></meta-data>
         </provider>
     </application>
 </manifest>

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from proxy.connection_pool import _TcpPool, _WsPool, get_tcp_pool
 from proxy.stats import Stats
 from proxy.tg_ws_proxy import (
     ProxyServer,
@@ -13,12 +14,9 @@ from proxy.tg_ws_proxy import (
     _check_ws_domains_available,
     _clear_dns_cache,
     _dns_cache,
-    _get_tcp_pool,
     _measure_all_dc_pings,
     _measure_dc_ping,
     _resolve_domain_cached,
-    _TcpPool,
-    _WsPool,
 )
 
 
@@ -169,7 +167,7 @@ class TestGetTcpPool:
         import proxy.connection_pool as cp
         cp._tcp_pool = None  # Reset
 
-        pool = _get_tcp_pool()
+        pool = get_tcp_pool()
 
         assert pool is not None
         assert isinstance(pool, _TcpPool)
@@ -177,8 +175,8 @@ class TestGetTcpPool:
 
     def test_get_tcp_pool_singleton(self):
         """Test that pool is singleton."""
-        pool1 = _get_tcp_pool()
-        pool2 = _get_tcp_pool()
+        pool1 = get_tcp_pool()
+        pool2 = get_tcp_pool()
 
         assert pool1 is pool2
 
