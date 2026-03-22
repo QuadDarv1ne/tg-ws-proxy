@@ -89,30 +89,34 @@
 
 ### Безопасность
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
-- [ ] **E2E Encryption** — локальное шифрование трафика между клиентом и прокси
+- [ ] **Rate Limiting Improvements** — защита от DDoS и злоупотреблений
 
 ### Тестирование
 - [ ] **Coverage Improvement** — увеличение покрытия с 55% до 60%
 - [ ] **Integration Tests** — сквозные тесты для основных сценариев
 
+### Мониторинг
+- [ ] **Real-time Dashboard** — улучшение веб-панели с live графиками
+- [ ] **Metrics History** — хранение истории метрик за 30 дней
+
 ---
 
-## 📊 Статус (23.03.2026 01:30)
+## 📊 Статус (23.03.2026 02:00)
 
 ```
-Модулей: 35 в proxy/ ✅
+Модулей: 37 в proxy/ ✅ (добавлены e2e_encryption.py, diagnostics_advanced.py)
 Тестов: 33 файла в tests/ ✅
 Tests: 642 passed, 7 skipped ✅
 Coverage: ~57% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.49.0 (Health Check ✅, AutoTune ✅)
+Version: v2.49.0 (Health Check ✅, Adaptive Timeout ✅, E2E ✅, Diagnostics ✅)
 ```
 
 **Актуальная версия:** v2.49.0 (dev) — ✅ synced
-**Следующая версия:** v2.50.0 (E2E Encryption + Security)
-**Последнее обновление:** 23.03.2026 (01:30)
+**Следующая версия:** v2.50.0 (Dashboard + Rate Limiting)
+**Последнее обновление:** 23.03.2026 (02:00)
 
 ---
 
