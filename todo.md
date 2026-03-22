@@ -88,25 +88,13 @@
 
 ---
 
-## 🟡 В процессе (v2.42.0: optimization & resilience)
+## 🟡 В процессе (v2.44.0: coverage + stability)
 
 ### Производительность
-- ✅ **Connection Pooling Optimization** — динамическая настройка размера пула
-  - Адаптация на основе miss rate (>30% → increase, <5% → decrease)
-  - Адаптация на основе latency (>100ms → increase, <30ms → decrease)
-  - Интервал оптимизации: 30 секунд
-  - Логирование изменений размера пула
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
 ### Надёжность
-- ✅ **Alerting** — уведомления при высокой задержке DC
-  - AlertType.DC_HIGH_LATENCY добавлен
-  - Порог: 150ms (warning), 200ms (critical)
-  - Cooldown: 2 минуты между алертами для одного DC
-  - Интеграция в monitor_dc_latency()
-  - Email/webhook уведомления (через AlertManager)
-  - Тесты: test_alerts.py (7 passed)
 - [ ] **Retry Strategy** — умный повтор запросов при смене сети
 - [ ] **Health Check Enhancement** — более агрессивная проверка мёртвых соединений
 - [ ] **Connection Timeout Tuning** — адаптивные таймауты на основе latency
@@ -115,6 +103,11 @@
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
 - [ ] **E2E Encryption** — локальное шифрование трафика между клиентом и прокси
 - [ ] **Rate Limiting Improvements** — защита от DDoS и злоупотреблений
+
+### Тестирование
+- [ ] **Coverage Improvement** — увеличение покрытия с 48% до 60%
+- [ ] **Integration Tests** —端到端 тесты для основных сценариев
+- [ ] **Performance Tests** — benchmark тесты производительности
 
 ### Мониторинг
 - ✅ **Prometheus metrics endpoint** — `/metrics` endpoint реализован

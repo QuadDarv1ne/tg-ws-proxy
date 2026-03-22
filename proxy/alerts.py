@@ -146,7 +146,7 @@ class AlertManager:
             "traffic_gb_per_hour": AlertType.TRAFFIC_LIMIT,
             "dc_latency_ms": AlertType.DC_HIGH_LATENCY,
         }
-        
+
         titles = {
             "connections_per_minute": f"High connection rate: {value:.0f}/min",
             "error_rate_percent": f"High error rate: {value:.1f}%",
@@ -168,7 +168,7 @@ class AlertManager:
         }
 
         alert_type = metric_to_alert_type.get(metric, AlertType.SECURITY_EVENT)
-        
+
         return Alert(
             alert_type=alert_type,
             severity=severity,

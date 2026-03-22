@@ -18,11 +18,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Callable
+from typing import Any, Callable
 
 import psutil
 

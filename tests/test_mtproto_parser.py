@@ -7,8 +7,6 @@ Author: Dupley Maxim Igorevich
 
 import struct
 
-import pytest
-
 from proxy.mtproto_parser import (
     MsgSplitter,
     extract_dc_from_init,
@@ -102,9 +100,9 @@ def test_patch_init_dc_with_extra_data():
     init_packet = b'\x00' * 64
     extra_data = b'extra'
     full_packet = init_packet + extra_data
-    
+
     result = patch_init_dc(full_packet, 2)
-    
+
     # Should preserve extra data
     assert len(result) == len(full_packet)
     assert result[64:] == extra_data
@@ -159,7 +157,7 @@ def test_msg_splitter_empty_chunk():
     """Test MsgSplitter with empty chunk."""
     init_data = b'\x00' * 64
     splitter = MsgSplitter(init_data)
-    
+
     messages = splitter.split(b'')
     assert messages == []
 
@@ -168,7 +166,7 @@ def test_msg_splitter_incomplete_message():
     """Test MsgSplitter with incomplete message."""
     init_data = b'\x00' * 64
     splitter = MsgSplitter(init_data)
-    
+
     # Only 2 bytes when more are needed
     messages = splitter.split(b'\x00\x00')
     assert messages == []
@@ -224,11 +222,11 @@ def test_msg_splitter_buffering():
     """Test MsgSplitter buffers incomplete messages."""
     init_data = b'\x00' * 64
     splitter = MsgSplitter(init_data)
-    
+
     # Send incomplete message
     messages1 = splitter.split(b'\x00\x00')
     assert len(messages1) == 0
-    
+
     # Buffer should retain data
     assert len(splitter._buf) == 2
 
@@ -238,7 +236,7 @@ def test_extract_dc_from_init_dc_range():
     # DC must be between 1 and 5
     init_data = b'\x00' * 64
     dc, is_media = extract_dc_from_init(init_data)
-    
+
     # Invalid DC should return None
     if dc is not None:
         assert 1 <= dc <= 5

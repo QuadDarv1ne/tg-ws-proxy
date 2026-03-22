@@ -45,7 +45,7 @@ class TestDCLatencyAlerts:
         alert_dc_latency(2, 175.0)
         manager = get_alert_manager()
         alerts = manager.get_recent_alerts(1)
-        
+
         assert len(alerts) > 0
         alert = alerts[-1]
         assert alert.alert_type == AlertType.DC_HIGH_LATENCY
@@ -65,7 +65,7 @@ class TestDCLatencyAlerts:
         alert_dc_latency(4, 250.0)
         manager = get_alert_manager()
         alerts = manager.get_recent_alerts(1)
-        
+
         assert len(alerts) > 0
         alert = alerts[-1]
         assert alert.alert_type == AlertType.DC_HIGH_LATENCY
@@ -84,7 +84,7 @@ class TestDCLatencyAlerts:
         alert_dc_latency(1, 150.0)
         manager = get_alert_manager()
         alerts = manager.get_recent_alerts(1)
-        
+
         assert len(alerts) > 0
         alert = alerts[-1]
         assert alert.severity == AlertSeverity.WARNING
@@ -99,7 +99,7 @@ class TestDCLatencyAlerts:
         alert_dc_latency(3, 200.0)
         manager = get_alert_manager()
         alerts = manager.get_recent_alerts(1)
-        
+
         assert len(alerts) > 0
         alert = alerts[-1]
         assert alert.severity == AlertSeverity.CRITICAL
@@ -115,7 +115,7 @@ class TestDCLatencyAlerts:
             metadata={"dc_id": 2, "latency_ms": 175.0}
         )
         data = alert.to_dict()
-        
+
         assert data["type"] == "DC_HIGH_LATENCY"
         assert data["severity"] == "WARNING"
         assert data["title"] == "DC2 high latency: 175ms"

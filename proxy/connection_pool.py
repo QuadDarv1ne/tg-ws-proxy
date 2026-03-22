@@ -259,7 +259,7 @@ class _WsPool:
 
     async def close_all(self) -> None:
         """Close all pooled connections."""
-        for key, bucket in list(self._idle.items()):
+        for _key, bucket in list(self._idle.items()):
             for ws, _ in bucket:
                 await self._quiet_close(ws)
         self._idle.clear()
@@ -334,8 +334,8 @@ class _TcpPool:
 
     async def close_all(self) -> None:
         """Close all pooled connections."""
-        for key, bucket in list(self._idle.items()):
-            for reader, writer, _ in bucket:
+        for _key, bucket in list(self._idle.items()):
+            for _reader, writer, _ in bucket:
                 try:
                     writer.close()
                     await writer.wait_closed()
