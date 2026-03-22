@@ -67,6 +67,7 @@ _OPTIMIZATION_CONFIG = {
     'enable_dns_cache': True,
     'enable_connection_pooling': True,
     'enable_auto_dc_selection': True,
+    'enable_compression': False,  # WebSocket permessage-deflate compression
     'pool_min_size': 2,
     'pool_max_size': 8,
     'pool_max_age': 120.0,
@@ -1411,10 +1412,14 @@ class _WsPool:
 
     @staticmethod
     async def _connect_one(target_ip: str, domains: list[str]) -> RawWebSocket | None:
+        """Connect to WebSocket server with compression support."""
+        # Get compression setting from config
+        compress = _OPTIMIZATION_CONFIG.get('enable_compression', False)
+        
         for domain in domains:
             try:
                 ws = await RawWebSocket.connect(
-                    target_ip, domain, timeout=8)
+                    target_ip, domain, timeout=8, compress=compress)
                 return ws
             except WsHandshakeError as exc:
                 if exc.is_redirect:
