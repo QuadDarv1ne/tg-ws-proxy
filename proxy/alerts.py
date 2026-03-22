@@ -45,6 +45,7 @@ class AlertType(Enum):
     MEMORY_HIGH = auto()
     WS_ERRORS = auto()
     DC_UNAVAILABLE = auto()
+    DC_HIGH_LATENCY = auto()  # New: High DC latency alert
     SECURITY_EVENT = auto()
     KEY_ROTATION = auto()
     RATE_LIMIT = auto()
@@ -106,6 +107,7 @@ class AlertManager:
             "memory_percent": AlertThreshold("memory_percent", 70.0, 90.0, cooldown_seconds=600),
             "ws_errors_per_minute": AlertThreshold("ws_errors_per_minute", 10, 50, cooldown_seconds=180),
             "traffic_gb_per_hour": AlertThreshold("traffic_gb_per_hour", 50, 100, cooldown_seconds=3600),
+            "dc_latency_ms": AlertThreshold("dc_latency_ms", 150.0, 200.0, cooldown_seconds=120),  # New: DC latency threshold
         }
 
     def check_threshold(self, metric: str, value: float) -> Alert | None:
@@ -141,6 +143,7 @@ class AlertManager:
             "memory_percent": f"High memory usage: {value:.1f}%",
             "ws_errors_per_minute": f"WebSocket errors: {value:.0f}/min",
             "traffic_gb_per_hour": f"High traffic: {value:.1f} GB/hour",
+            "dc_latency_ms": f"High DC latency: {value:.0f}ms",  # New: DC latency alert title
         }
 
         messages = {
@@ -150,6 +153,7 @@ class AlertManager:
             "memory_percent": f"Memory usage is critically high. Current: {value:.1f}%",
             "ws_errors_per_minute": f"WebSocket errors detected. Current: {value:.0f}/min",
             "traffic_gb_per_hour": f"Traffic volume exceeded threshold. Current: {value:.1f} GB/hour",
+            "dc_latency_ms": f"DC latency is above acceptable level. Current: {value:.0f}ms (threshold: 150ms warning, 200ms critical)",  # New: DC latency message
         }
 
         return Alert(
@@ -299,4 +303,16 @@ def alert_key_rotation(algorithm: str) -> None:
     send_alert(AlertType.KEY_ROTATION, AlertSeverity.INFO, f"Encryption keys rotated: {algorithm}", f"Automatic key rotation completed successfully for {algorithm}", {"algorithm": algorithm})
 
 
-__all__ = ['AlertManager', 'Alert', 'AlertType', 'AlertSeverity', 'AlertThreshold', 'get_alert_manager', 'check_alert', 'send_alert', 'alert_ws_errors', 'alert_connection_spike', 'alert_traffic_limit', 'alert_key_rotation']
+def alert_dc_latency(dc_id: int, latency_ms: float) -> None:
+    """Send alert for high DC latency."""
+    severity = AlertSeverity.WARNING if latency_ms < 200 else AlertSeverity.CRITICAL
+    send_alert(
+        AlertType.DC_HIGH_LATENCY,
+        severity,
+        f"DC{dc_id} high latency: {latency_ms:.0f}ms",
+        f"Telegram DC{dc_id} latency is {latency_ms:.0f}ms (threshold: 150ms warning, 200ms critical)",
+        {"dc_id": dc_id, "latency_ms": latency_ms}
+    )
+
+
+__all__ = ['AlertManager', 'Alert', 'AlertType', 'AlertSeverity', 'AlertThreshold', 'get_alert_manager', 'check_alert', 'send_alert', 'alert_ws_errors', 'alert_connection_spike', 'alert_traffic_limit', 'alert_key_rotation', 'alert_dc_latency']

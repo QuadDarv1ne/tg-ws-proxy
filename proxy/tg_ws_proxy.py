@@ -1909,6 +1909,7 @@ async def _run(
 
     # Start real-time monitoring with auto-export
     import os
+
     import appdirs
     stats_dir = os.path.join(appdirs.user_data_dir('TgWsProxy', 'Dupley Maxim'), 'stats')
     await server_instance.stats.start_realtime_monitoring(
@@ -2099,6 +2100,9 @@ async def _run(
                         _last_latency_alert[dc_id] = now
                         log.warning("DC%d: HIGH LATENCY %.1fms (threshold: %.1fms)",
                                    dc_id, latency_ms, _high_latency_threshold)
+                        # Send alert notification
+                        from .alerts import alert_dc_latency
+                        alert_dc_latency(dc_id, latency_ms)
 
             log.info("DC latency: best=DC%d (%.1fms), current=%s",
                     best_dc, best_latency,

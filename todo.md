@@ -240,7 +240,7 @@ Version: v2.42.0 (RuntimeWarnings Fixed ✅, Connection Pooling ✅)
 **Решение:** Разбить на модули:
 - `proxy/socks5_handler.py` — SOCKS5 протокол и handshake ✅
 - `proxy/websocket_client.py` — RawWebSocket класс ✅
-- `proxy/connection_pool.py` — _WsPool и _TcpPool [ ]
+- `proxy/connection_pool.py` — _WsPool и _TcpPool ✅ (v2.42.0)
 - `proxy/mtproto_parser.py` — парсинг MTProto init пакетов [ ]
 
 ### 2. Увеличение покрытия тестами
