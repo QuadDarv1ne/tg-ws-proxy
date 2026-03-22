@@ -187,16 +187,17 @@ class PerformanceProfiler:
         self._results.append(profile_result)
 
         # Log summary
+        func_name = getattr(func, '__name__', str(func))
         log.info(
             "Profiled %s: %.3fs, %d calls, %d primitive, memory: %.2f MB",
-            func.__name__,
+            func_name,
             profile_result.total_time,
             profile_result.total_calls,
             profile_result.primitive_calls,
             profile_result.memory_delta / 1024 / 1024,
         )
 
-        return result  # type: ignore[no-any-return]
+        return profile_result
 
     def get_suggestions(self, result: ProfileResult) -> list[OptimizationSuggestion]:
         """

@@ -29,7 +29,6 @@ android {
                 install "appdirs"
                 install "zeroconf"
             }
-            staticProxy = true
             pyc {
                 src false
                 pip true
