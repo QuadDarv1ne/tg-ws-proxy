@@ -17,6 +17,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Generic, TypeVar
 
+# Optional alerts integration
+try:
+    from .web_dashboard import get_alerts_manager
+    _HAS_ALERTS = True
+except ImportError:
+    _HAS_ALERTS = False
+
 log = logging.getLogger('tg-ws-circuit-breaker')
 
 
@@ -165,12 +172,39 @@ class CircuitBreaker(Generic[T]):
             self._state = CircuitState.OPEN
             self._opened_at = time.monotonic()
             self._stats.state_changes += 1
+            
+            # Send alert
+            if _HAS_ALERTS:
+                get_alerts_manager().add_alert(
+                    category='system',
+                    severity='error',
+                    message=f'Circuit breaker {self.name} opened (half-open failure)',
+                    details={
+                        'circuit': self.name,
+                        'consecutive_failures': self._stats.consecutive_failures,
+                        'threshold': self.config.failure_threshold,
+                    }
+                )
         elif self._state == CircuitState.CLOSED:
             if self._stats.consecutive_failures >= self.config.failure_threshold:
                 log.warning("Circuit %s: failure threshold exceeded, transitioning to OPEN", self.name)
                 self._state = CircuitState.OPEN
                 self._opened_at = time.monotonic()
                 self._stats.state_changes += 1
+                
+                # Send alert
+                if _HAS_ALERTS:
+                    get_alerts_manager().add_alert(
+                        category='system',
+                        severity='warning',
+                        message=f'Circuit breaker {self.name} opened (threshold exceeded)',
+                        details={
+                            'circuit': self.name,
+                            'consecutive_failures': self._stats.consecutive_failures,
+                            'threshold': self.config.failure_threshold,
+                            'timeout': self.config.timeout,
+                        }
+                    )
 
     async def call(
         self,

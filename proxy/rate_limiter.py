@@ -23,6 +23,13 @@ from enum import Enum, auto
 
 from .metrics_history import get_metrics_history
 
+# Optional alerts integration
+try:
+    from .web_dashboard import get_alerts_manager
+    _HAS_ALERTS = True
+except ImportError:
+    _HAS_ALERTS = False
+
 log = logging.getLogger('tg-ws-ratelimit')
 
 
@@ -353,6 +360,20 @@ class RateLimiter:
                 stats.total_bans += 1
                 stats.last_ban_duration = ban_duration
                 log.critical("IP %s banned for DDoS: %.0f seconds", ip, ban_duration)
+                
+                # Send alert
+                if _HAS_ALERTS:
+                    get_alerts_manager().add_alert(
+                        category='security',
+                        severity='critical',
+                        message=f'DDoS attack detected from {ip}',
+                        details={
+                            'ip': ip,
+                            'ban_duration': ban_duration,
+                            'rps': stats.requests_per_second[-1] if stats.requests_per_second else 0,
+                        }
+                    )
+                
                 return RateLimitAction.BAN, ban_duration
 
         # Connection flood detection
@@ -363,6 +384,20 @@ class RateLimiter:
                 stats.total_bans += 1
                 stats.last_ban_duration = ban_duration
                 log.critical("IP %s banned for connection flood: %.0f seconds", ip, ban_duration)
+                
+                # Send alert
+                if _HAS_ALERTS:
+                    get_alerts_manager().add_alert(
+                        category='security',
+                        severity='critical',
+                        message=f'Connection flood detected from {ip}',
+                        details={
+                            'ip': ip,
+                            'ban_duration': ban_duration,
+                            'cps': stats.connections_per_second[-1] if stats.connections_per_second else 0,
+                        }
+                    )
+                
                 return RateLimitAction.BAN, ban_duration
 
         # Subnet limit check
