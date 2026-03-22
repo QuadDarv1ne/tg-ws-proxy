@@ -26,7 +26,7 @@
 
 ---
 
-## 🔴 Высокий приоритет (v2.36.0: Performance & Android)
+## 🔴 Высокий приоритет (v2.38.0: Performance & Android)
 
 ### [ПЛАН РЕАЛИЗАЦИИ: 15 ШАГОВ]
 1.  [x] **Dev Env Sync**: Тесты и окружение готовы.
@@ -37,11 +37,11 @@
 6.  [x] **Crash Watchdog**: Внедрен авто-рестарт.
 7.  [x] **DoH Integration**: DNS over HTTPS.
 8.  [x] **Pool Tests**: Тесты переполнения и очистки пула.
-9.  [ ] **HTTP/2 Multiplexing**: (Перенесено в v2.37).
+9.  [ ] **HTTP/2 Multiplexing**: (Перенесено в v2.39).
 10. [x] **VpnService Routing**: Нативный TUN-интерфейс на Android.
 11. [x] **Dynamic Tile**: Живая статистика скорости в шторке.
 12. [x] **Auto-TLS**: Локальное шифрование сертификатами.
-13. [ ] **Memory Profiling**: Поиск утечек в пуле.
+13. [x] **Memory Profiling**: Поиск утечек в пуле ✅
 14. [x] **CI Validation**: Ruff/Mypy/Pytest (486 тестов ✅).
 15. [ ] **Release**: Merge dev -> main.
 
@@ -56,26 +56,30 @@ Ruff: 0 ошибок ✅
 Mypy: missing stubs (внешние зависимости)
 ```
 
-**Актуальная версия:** v2.37.0 (dev + main синхронизированы) ✅
+**Актуальная версия:** v2.38.0 (dev) — готов к merge в main
 
 ---
 
-## 📋 План на v2.38.0: Stability & Monitoring
+## ✅ Выполнено (v2.38.0)
+
+### Stability & Monitoring
+- ✅ Memory Profiling — поиск утечек в пулах (tracemalloc, weakref)
+- ✅ Graceful shutdown — корректное завершение всех соединений
+- ✅ Автоматический выбор DC — по latency в реальном времени
+- ✅ Обновлены тесты profiler (оптимизация)
+
+---
+
+## 📋 План на v2.39.0: HTTP/2 & Android Optimization
 
 ### Производительность
-- [x] **Zero-copy буферизация** — `memoryview` вместо копирования байтов ✅
-- [x] **Batch WebSocket отправка** — группировка мелких пакетов (<4KB) ✅
-- [x] **Автоматический выбор DC** — по latency в реальном времени (5 мин) ✅
 - [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP
+- [ ] **Кэширование DNS ответов** — TTL для DoH запросов
 
 ### Надёжность
-- [x] **Экспоненциальный backoff** — при ошибках подключения (2^(n-1), max 8x) ✅
-- [x] **Graceful shutdown** — корректное завершение всех соединений ✅
-- [x] **Memory Profiling** — поиск утечек в пулах (tracemalloc, weakref) ✅
+- [ ] **Circuit breaker** — защита от cascade failures
 
 ### Безопасность
-- [x] **Rate limiting** — защита от злоупотреблений (10 req/s, 100 req/min) ✅
-- [x] **IP whitelist/blacklist** — фильтрация подключений (allow-list по умолчанию) ✅
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
 
 ### Android App
@@ -87,6 +91,28 @@ Mypy: missing stubs (внешние зависимости)
 - [ ] **Prometheus metrics** — endpoint `/metrics` для сбора метрик
 - [ ] **JSON логирование** — для интеграции с ELK/Grafana
 - [ ] **Alerting** — уведомления при высокой задержке DC (>200ms)
+
+---
+
+## 📁 Архив версий
+
+### v2.37.0 — Performance & Stability
+- ✅ Zero-copy буферизация WebSocket
+- ✅ Batch отправка WebSocket фреймов
+- ✅ Исправлена обработка ошибок WebSocket (_read_frame, recv)
+- ✅ Timeout на чтение фреймов (30s)
+- ✅ Обработка IncompleteReadError и TimeoutError
+- ✅ Улучшен health check — подсчёт failed connections
+- ✅ Автоматический выбор DC — по latency в реальном времени
+- ✅ Экспоненциальный backoff — при ошибках подключения
+
+### v2.36.0 — Stability Phase
+- ✅ `test_tg_ws_proxy_logic.py` — тесты парсинга пакетов
+- ✅ SRP Рефакторинг `_handle_client`
+- ✅ Health Checks: WS PING/PONG keep-alive
+- ✅ Crash Watchdog: Авто-рестарт asyncio loop
+- ✅ DoH Integration: DNS over HTTPS
+- ✅ Pool Tests: Покрытие логики `_WsPool` тестами
 
 ---
 
