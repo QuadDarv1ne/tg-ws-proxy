@@ -76,8 +76,9 @@ Mypy: 15 ошибок (type annotations, Any usage)
 Version: v2.39.0 (sync complete ✅)
 ```
 
-**Актуальная версия:** v2.39.0 (main) — ✅ merged
+**Актуальная версия:** v2.39.0 (main/dev) — ✅ synced
 **Следующая версия:** v2.40.0 (planning)
+**Последнее обновление:** 22.03.2026
 
 ---
 
