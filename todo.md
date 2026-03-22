@@ -546,34 +546,22 @@
 
 ---
 
-## 📊 Статус (23.03.2026 16:00)
+## 📊 Статус (23.03.2026 16:30)
 
 ```
-<<<<<<< HEAD
-Модулей: 47 в proxy/ ✅
-=======
-Модулей: 47 в proxy/ ✅ (добавлены: windows_proxy.py, cloudflare_warp.py, mtproxy.py, dpi_bypass.py, proxy_chain.py)
->>>>>>> dev
+Модулей: 48 в proxy/ ✅
 Тестов: 35 файлов в tests/ ✅
 Tests: 678 passed, 7 skipped ✅
 Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-<<<<<<< HEAD
-Version: v2.55.0 (Cloudflare ✅, MTProxy ✅, System Proxy ✅)
+Version: v2.56.0 (Proxy Chain ✅, Cloudflare ✅, MTProto ✅, Anti-censorship ✅)
 ```
 
-**Актуальная версия:** v2.55.0 (dev) — ✅ synced
-**Следующая версия:** v2.56.0 (Integration Tests + Coverage Improvement)
-=======
-Version: v2.55.0 (System Proxy ✅, Cloudflare WARP ✅, MTProxy ✅, DPI Bypass ✅, Proxy Chain ✅)
-```
-
-**Актуальная версия:** v2.55.0 (dev) — ✅ synced
-**Следующая версия:** v2.56.0 (Integration Tests + Coverage)
->>>>>>> dev
-**Последнее обновление:** 23.03.2026 (16:00)
+**Актуальная версия:** v2.56.0 (dev) — ✅ synced
+**Следующая версия:** v2.57.0 (Integration Tests + Coverage Improvement)
+**Последнее обновление:** 23.03.2026 (16:30)
 
 ---
 
