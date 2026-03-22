@@ -21,6 +21,8 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
+from .metrics_history import get_metrics_history
+
 log = logging.getLogger('tg-ws-ratelimit')
 
 
@@ -222,6 +224,13 @@ class RateLimiter:
 
         # Calculate RPS
         recent_rps = len([t for t in stats.requests_per_second if t > now - 1.0])
+        
+        # Record RPS metric
+        try:
+            metrics = get_metrics_history()
+            metrics.record_metric('rate_limiter_rps', recent_rps, {'ip': ip})
+        except Exception:
+            pass
 
         if recent_rps >= self.config.ddos_threshold_rps:
             stats.ddos_violations += 1
@@ -229,6 +238,13 @@ class RateLimiter:
                 "DDoS detected from %s: %d RPS (threshold: %d)",
                 ip, recent_rps, self.config.ddos_threshold_rps
             )
+            
+            # Record DDoS detection metric
+            try:
+                metrics = get_metrics_history()
+                metrics.record_metric('rate_limiter_ddos_detected', 1, {'ip': ip, 'rps': str(recent_rps)})
+            except Exception:
+                pass
 
             # Progressive ban duration
             ban_duration = min(
@@ -255,6 +271,13 @@ class RateLimiter:
 
         # Calculate CPS
         recent_cps = len([t for t in stats.connections_per_second if t > now - 1.0])
+        
+        # Record CPS metric
+        try:
+            metrics = get_metrics_history()
+            metrics.record_metric('rate_limiter_cps', recent_cps, {'ip': ip})
+        except Exception:
+            pass
 
         if recent_cps >= self.config.flood_threshold_connections:
             stats.connection_flood_violations += 1
@@ -262,6 +285,13 @@ class RateLimiter:
                 "Connection flood detected from %s: %d CPS (threshold: %d)",
                 ip, recent_cps, self.config.flood_threshold_connections
             )
+            
+            # Record flood detection metric
+            try:
+                metrics = get_metrics_history()
+                metrics.record_metric('rate_limiter_flood_detected', 1, {'ip': ip, 'cps': str(recent_cps)})
+            except Exception:
+                pass
 
             ban_duration = min(
                 self.config.flood_ban_duration * (2 ** stats.connection_flood_violations),
@@ -459,6 +489,13 @@ class RateLimiter:
         stats.violations += 1
         stats.last_violation = time.time()
         stats.blocked_requests += 1
+        
+        # Record violation metric
+        try:
+            metrics = get_metrics_history()
+            metrics.record_metric('rate_limiter_violations', 1, {'ip': ip, 'type': limit_type})
+        except Exception:
+            pass
 
         delay_ms = min(
             self.config.initial_delay_ms * (self.config.backoff_multiplier ** (stats.violations - 1)),
@@ -470,6 +507,14 @@ class RateLimiter:
             stats.ban_until = time.time() + self.config.ban_duration_seconds
             log.warning("IP %s banned for %.0f seconds (violations: %d, limit: %s)",
                         ip, self.config.ban_duration_seconds, stats.violations, limit_type)
+            
+            # Record ban metric
+            try:
+                metrics = get_metrics_history()
+                metrics.record_metric('rate_limiter_bans', 1, {'ip': ip, 'duration': str(self.config.ban_duration_seconds)})
+            except Exception:
+                pass
+                
             return RateLimitAction.BAN, self.config.ban_duration_seconds
 
         log.debug("IP %s rate limited: %s (violation %d, delay: %.1fs)",

@@ -102,7 +102,54 @@
 
 ---
 
-## 🟡 В процессе (v2.51.0: dashboard + stability)
+## ✅ Выполнено (v2.52.0: metrics history + monitoring)
+
+### Мониторинг
+- ✅ **Metrics History** — хранение истории метрик за 30 дней
+  - `proxy/metrics_history.py` — новый модуль (670+ строк)
+  
+  **Возможности:**
+  • SQLite backend для персистентности
+  • 30-day retention policy с авто-очисткой
+  • WAL mode для лучшей конкурентности
+  • In-memory cache (1000 recent metrics)
+  
+  **Функции:**
+  • record_metric() — запись отдельной метрики
+  • record_metrics_batch() — пакетная запись
+  • get_metric_summary() — summary (min, max, avg, p50, p95, p99)
+  • get_metric_history() — история с разрешением (raw/minute/hour)
+  • get_trend() — анализ тренда (direction, slope, change%)
+  • export_to_json() — экспорт в JSON
+  • export_to_csv() — экспорт в CSV
+  
+  **Агрегации:**
+  • p50, p95, p99 percentiles
+  • min, max, avg, count
+  • linear regression slope
+  
+  **Индексы:**
+  • idx_metrics_name_time — для queries по имени + времени
+  • idx_metrics_time — для time-range queries
+  • idx_hourly_name_time — для hourly summaries
+
+- ✅ **Rate Limiter Integration** — запись метрик в history
+  - rate_limiter_rps — requests per second per IP
+  - rate_limiter_cps — connections per second per IP
+  - rate_limiter_violations — нарушения rate limiting
+  - rate_limiter_bans — баны IP
+  - rate_limiter_ddos_detected — DDoS атаки
+  - rate_limiter_flood_detected — flood атаки
+  
+  **Labels:**
+  • ip: IP адрес нарушителя
+  • type: тип нарушения
+  • rps/cps: значения метрик
+  • duration: длительность бана
+
+---
+
+## 🟡 В процессе (v2.53.0: dashboard + stability)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
@@ -116,27 +163,30 @@
 - [ ] **Integration Tests** — сквозные тесты для основных сценариев
 
 ### Мониторинг
-- [ ] **Real-time Dashboard** — улучшение веб-панели с live графиками
-- [ ] **Metrics History** — хранение истории метрик за 30 дней
+- ✅ **Real-time Dashboard** — улучшение веб-панели с live графиками
+  - `proxy/web_dashboard.py` — 10 новых API endpoints (+186 строк)
+  - Rate Limiter API: stats, metrics, ban, unban
+  - Metrics History API: history, summary, trend, export
+  - Tests: 21 passed ✅
 
 ---
 
-## 📊 Статус (23.03.2026 03:00)
+## 📊 Статус (23.03.2026 04:00)
 
 ```
-Модулей: 37 в proxy/ ✅
+Модулей: 38 в proxy/ ✅
 Тестов: 34 файла в tests/ ✅
-Tests: 657 passed, 7 skipped ✅
-Coverage: ~58% (цель >80%)
+Tests: 678 passed, 7 skipped ✅
+Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.50.0 (Rate Limiting ✅, DDoS Protection ✅, Token Bucket ✅)
+Version: v2.52.0 (Metrics History ✅, Real-time Dashboard ✅)
 ```
 
-**Актуальная версия:** v2.50.0 (dev) — ✅ synced
-**Следующая версия:** v2.51.0 (Dashboard + Stability)
-**Последнее обновление:** 23.03.2026 (03:00)
+**Актуальная версия:** v2.52.0 (dev) — ✅ synced
+**Следующая версия:** v2.53.0 (HTTP/2 + Stability)
+**Последнее обновление:** 23.03.2026 (04:00)
 
 ---
 
