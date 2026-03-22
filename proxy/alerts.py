@@ -136,6 +136,17 @@ class AlertManager:
         return alert
 
     def _create_threshold_alert(self, metric: str, value: float, severity: AlertSeverity) -> Alert:
+        # Mapping from metric names to AlertType
+        metric_to_alert_type = {
+            "connections_per_minute": AlertType.CONNECTION_SPIKE,
+            "error_rate_percent": AlertType.ERROR_RATE_HIGH,
+            "cpu_percent": AlertType.CPU_HIGH,
+            "memory_percent": AlertType.MEMORY_HIGH,
+            "ws_errors_per_minute": AlertType.WS_ERRORS,
+            "traffic_gb_per_hour": AlertType.TRAFFIC_LIMIT,
+            "dc_latency_ms": AlertType.DC_HIGH_LATENCY,
+        }
+        
         titles = {
             "connections_per_minute": f"High connection rate: {value:.0f}/min",
             "error_rate_percent": f"High error rate: {value:.1f}%",
@@ -143,7 +154,7 @@ class AlertManager:
             "memory_percent": f"High memory usage: {value:.1f}%",
             "ws_errors_per_minute": f"WebSocket errors: {value:.0f}/min",
             "traffic_gb_per_hour": f"High traffic: {value:.1f} GB/hour",
-            "dc_latency_ms": f"High DC latency: {value:.0f}ms",  # New: DC latency alert title
+            "dc_latency_ms": f"High DC latency: {value:.0f}ms",
         }
 
         messages = {
@@ -153,11 +164,13 @@ class AlertManager:
             "memory_percent": f"Memory usage is critically high. Current: {value:.1f}%",
             "ws_errors_per_minute": f"WebSocket errors detected. Current: {value:.0f}/min",
             "traffic_gb_per_hour": f"Traffic volume exceeded threshold. Current: {value:.1f} GB/hour",
-            "dc_latency_ms": f"DC latency is above acceptable level. Current: {value:.0f}ms (threshold: 150ms warning, 200ms critical)",  # New: DC latency message
+            "dc_latency_ms": f"DC latency is above acceptable level. Current: {value:.0f}ms (threshold: 150ms warning, 200ms critical)",
         }
 
+        alert_type = metric_to_alert_type.get(metric, AlertType.SECURITY_EVENT)
+        
         return Alert(
-            alert_type=AlertType[metric.upper()],
+            alert_type=alert_type,
             severity=severity,
             title=titles.get(metric, f"Threshold exceeded: {metric}"),
             message=messages.get(metric, f"{metric}: {value}"),
