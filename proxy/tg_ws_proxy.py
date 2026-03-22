@@ -1993,7 +1993,7 @@ async def _run(
             await asyncio.sleep(30)  # Check every 30 seconds
             try:
                 # Get average latency from DC stats
-                dc_stats = server_instance.get_dc_stats()
+                dc_stats = server_instance.dc_opt
                 latencies = [
                     dc.get('latency_ms', 0)
                     for dc in dc_stats.values()

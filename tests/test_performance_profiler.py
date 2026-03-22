@@ -57,7 +57,7 @@ class TestPerformanceProfiler:
 
         result = await profiler.profile(sync_func, 5, 3)
 
-        assert result == 8
+        assert isinstance(result, ProfileResult)
         assert result.total_time > 0
         assert result.total_calls > 0
 
@@ -72,7 +72,7 @@ class TestPerformanceProfiler:
 
         result = await profiler.profile(async_func, 0.1)
 
-        assert result == "done"
+        assert isinstance(result, ProfileResult)
         assert result.total_time >= 0.1
         assert result.total_calls > 0
 
@@ -86,7 +86,8 @@ class TestPerformanceProfiler:
 
         result = await profiler.profile(func_with_kwargs, 5, b=20)
 
-        assert result == 25
+        assert isinstance(result, ProfileResult)
+        assert result.total_calls > 0
 
     @pytest.mark.asyncio
     async def test_memory_tracking(self):
