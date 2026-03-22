@@ -20,7 +20,7 @@ try:
     ALERTS_AVAILABLE = True
 except ImportError:
     ALERTS_AVAILABLE = False
-    alerts_module = None
+    alerts_module = None  # type: ignore[assignment]
 
 log = logging.getLogger('tg-ws-stats')
 

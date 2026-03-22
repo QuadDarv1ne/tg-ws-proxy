@@ -8,55 +8,69 @@
 
 ## ✅ Выполнено (v2.40.0)
 
-### Reliability
-- ✅ Circuit breaker — защита от cascade failures (websocket, tcp, dns)
-- ✅ CircuitBreakerRegistry — управление circuit breakers
-- ✅ Интеграция в ProxyServer — 3 circuit breakers
+### Monitoring & Observability
+- ✅ **Prometheus metrics endpoint** — `/metrics` для сбора метрик
+  - Connection metrics (total, active, bytes)
+  - Performance metrics (CPU, memory)
+  - DC latency and errors
+  - Circuit breaker states
+  - DNS resolver metrics
+  - Plugin system metrics
+- ✅ **Circuit breaker** — защита от cascade failures (websocket, tcp, dns)
+- ✅ **CircuitBreakerRegistry** — управление circuit breakers
+- ✅ **Интеграция в ProxyServer** — 3 circuit breakers
 
 ### Refactoring
-- ✅ websocket_client.py — выделен RawWebSocket и WsHandshakeError
-- ✅ socks5_handler.py — выделен SOCKS5 handler
-- ✅ test_websocket_client.py — тесты WebSocket клиента
-- ✅ test_socks5_handler.py — тесты SOCKS5 handler
+- ✅ **websocket_client.py** — выделен RawWebSocket и WsHandshakeError
+- ✅ **socks5_handler.py** — выделен SOCKS5 handler
+- ✅ **test_websocket_client.py** — тесты WebSocket клиента
+- ✅ **test_socks5_handler.py** — тесты SOCKS5 handler
 
 ### Performance & Stability
-- ✅ Zero-copy буферизация WebSocket
-- ✅ Batch отправка WebSocket фреймов
-- ✅ Исправлена обработка ошибок WebSocket (_read_frame, recv)
-- ✅ Timeout на чтение фреймов (30s)
-- ✅ Обработка IncompleteReadError и TimeoutError
-- ✅ Улучшен health check — подсчёт failed connections
-- ✅ Memory Profiling — поиск утечек в пулах (tracemalloc, weakref)
-- ✅ Graceful shutdown — корректное завершение всех соединений
-- ✅ Автоматический выбор DC — по latency в реальном времени
-- ✅ VpnService Routing — нативный TUN-интерфейс на Android
+- ✅ **Zero-copy буферизация WebSocket**
+- ✅ **Batch отправка WebSocket фреймов**
+- ✅ **Исправлена обработка ошибок WebSocket** (_read_frame, recv)
+- ✅ **Timeout на чтение фреймов** (30s)
+- ✅ **Обработка IncompleteReadError и TimeoutError**
+- ✅ **Улучшен health check** — подсчёт failed connections
+- ✅ **Memory Profiling** — поиск утечек в пулах (tracemalloc, weakref)
+- ✅ **Graceful shutdown** — корректное завершение всех соединений
+- ✅ **Автоматический выбор DC** — по latency в реальном времени
+- ✅ **VpnService Routing** — нативный TUN-интерфейс на Android
 
 ### Ядро и Сеть
-- ✅ DNS Caching — TTL для DoH запросов
-- ✅ Crash Watchdog — авто-рестарт asyncio loop
-- ✅ Исправлена синхронизация версий в `proxy/__init__.py` и `pyproject.toml`
-- ✅ Исправлен тест `test_profiler.py` (RuntimeError loop)
+- ✅ **DNS Caching** — TTL для DoH запросов
+- ✅ **Crash Watchdog** — авто-рестарт asyncio loop
+- ✅ **Исправлена синхронизация версий** в `proxy/__init__.py` и `pyproject.toml`
+- ✅ **Исправлен тест** `test_profiler.py` (RuntimeError loop)
 
 ### Android App
-- ✅ Quick Settings Tile — запуск/остановка из шторки
-- ✅ Живая статистика в шторке — скорость и подключения
-- ✅ Background Config Update — через WorkManager
-- ✅ Splash API & Material 3
-- ✅ Интеграция Chaquopy и asyncio мост
+- ✅ **Quick Settings Tile** — запуск/остановка из шторки
+- ✅ **Живая статистика в шторке** — скорость и подключения
+- ✅ **Background Config Update** — через WorkManager
+- ✅ **Splash API & Material 3**
+- ✅ **Интеграция Chaquopy и asyncio мост**
+
+### R&D
+- ✅ **HTTP/2 Multiplexing Research** — анализ применимости (docs/HTTP2_RESEARCH.md)
+  - Вывод: HTTP/2 не применим к основному прокси потоку
+  - Рекомендация: использовать для Web Dashboard (v2.41.0)
+  - Перспектива: QUIC/HTTP/3 для mobile (v3.0.0)
 
 ---
 
 ## 🟡 В процессе (v2.41.0: optimization & resilience)
 
 ### Производительность
-- [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP (R&D)
-- [ ] **QUIC/UDP Support** — для звонков и медиа через прокси
-- [ ] **Connection Pooling Optimization** — динамическая настройка размера пула на основе нагрузки
+- [ ] **WebSocket Compression** — permessage-deflate для снижения трафика на 30-50%
+- [ ] **Connection Pooling Optimization** — динамическая настройка размера пула
+- [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
+- [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
 ### Надёжность
-- [ ] **Circuit breaker** — защита от cascade failures
 - [ ] **Retry Strategy** — умный повтор запросов при смене сети
 - [ ] **Health Check Enhancement** — более агрессивная проверка мёртвых соединений
+- [ ] **Connection Timeout Tuning** — адаптивные таймауты на основе latency
 
 ### Безопасность
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
@@ -64,10 +78,11 @@
 - [ ] **Rate Limiting Improvements** — защита от DDoS и злоупотреблений
 
 ### Мониторинг
-- [ ] **Prometheus metrics** — endpoint `/metrics` для сбора метрик
+- [ ] **Grafana Dashboard** — визуализация Prometheus метрик
 - [ ] **Alerting** — уведомления при высокой задержке DC (>200ms)
 - [ ] **Diagnostic Report** — экспорт детального отчета о состоянии сети
 - [ ] **Real-time Dashboard** — улучшение веб-панели с live графиками
+- [ ] **Metrics History** — хранение истории метрик за 30 дней
 
 ---
 

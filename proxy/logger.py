@@ -159,7 +159,7 @@ class EnhancedLogger:
             log_file = log_path / f"{name}.log"
 
             if enable_rotation:
-                file_handler = RotatingFileHandler(
+                file_handler: RotatingFileHandler | logging.FileHandler = RotatingFileHandler(
                     log_file,
                     maxBytes=max_bytes,
                     backupCount=backup_count,
