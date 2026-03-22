@@ -330,7 +330,7 @@ def _generate_recommendations(report: DiagnosticsReport) -> None:
     # Check latency
     successful_ws = [r for r in report.results if r.test_name == "WebSocket Connect" and r.success and r.latency_ms]
     if successful_ws:
-        avg_latency = sum(r.latency_ms for r in successful_ws) / len(successful_ws)
+        avg_latency = sum(r.latency_ms for r in successful_ws) / len(successful_ws)  # type: ignore[misc]
         if avg_latency > 200:
             report.add_recommendation(f"🐌 High average latency ({avg_latency:.1f}ms). Try selecting a different DC or checking your network connection.")
         elif avg_latency > 100:

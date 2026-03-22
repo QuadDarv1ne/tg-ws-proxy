@@ -163,7 +163,7 @@ class PerformanceProfiler:
 
         # Extract top functions
         top_functions = []
-        for func_name, (cc, nc, tt, ct, _callers) in ps.stats.items():
+        for func_name, (cc, nc, tt, ct, _callers) in ps.stats.items():  # type: ignore[attr-defined]
             filename, line, func = func_name
             full_name = f"{filename}:{line}({func})"
             percall = ct / cc if cc > 0 else 0
@@ -175,9 +175,9 @@ class PerformanceProfiler:
         # Create result
         profile_result = ProfileResult(
             total_time=end_time - start_time,
-            total_calls=ps.total_calls,
+            total_calls=ps.total_calls,  # type: ignore[attr-defined]
             primitive_calls=nc,
-            recursive_calls=ps.stats.get((':', 0, '<listcomp>'), (0, 0, 0, 0, 0))[0] if ps.stats else 0,
+            recursive_calls=ps.stats.get((':', 0, '<listcomp>'), (0, 0, 0, 0, 0))[0] if ps.stats else 0,  # type: ignore[attr-defined]
             top_functions=top_functions[:20],
             memory_before=memory_before,
             memory_after=memory_after,
@@ -196,7 +196,7 @@ class PerformanceProfiler:
             profile_result.memory_delta / 1024 / 1024,
         )
 
-        return result  # type: ignore[return-value]
+        return result
 
     def get_suggestions(self, result: ProfileResult) -> list[OptimizationSuggestion]:
         """
@@ -306,7 +306,7 @@ async def profile_async(
         result = await profile_async(my_func, arg1, arg2)
     """
     profiler = get_profiler()
-    return await profiler.profile(func, *args, **kwargs)
+    return await profiler.profile(func, *args, **kwargs)  # type: ignore[return-value]
 
 
 def print_profile_report(result: ProfileResult, limit: int = 20) -> None:
