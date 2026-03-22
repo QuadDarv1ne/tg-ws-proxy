@@ -33,18 +33,56 @@ class RateLimitAction(Enum):
 
 @dataclass
 class RateLimitConfig:
+    # Basic rate limits
     requests_per_second: float = 10.0
     requests_per_minute: int = 100
     requests_per_hour: int = 1000
     max_concurrent_connections: int = 500
     max_connections_per_ip: int = 10
+    
+    # Token bucket configuration (more efficient algorithm)
+    token_bucket_enabled: bool = True
+    token_bucket_capacity: int = 20  # Max tokens
+    token_bucket_refill_rate: float = 10.0  # Tokens per second
+    
+    # Ban configuration
     ban_threshold: int = 5
     ban_duration_seconds: float = 300.0
     initial_delay_ms: int = 100
     max_delay_ms: int = 5000
     backoff_multiplier: float = 2.0
+    
     # Trusted IPs that are not subject to rate limits
     allow_list: set[str] = field(default_factory=lambda: {"127.0.0.1", "::1"})
+
+    # DDoS Protection
+    ddos_detection_enabled: bool = True
+    ddos_threshold_rps: int = 50  # Requests per second from single IP
+    ddos_ban_duration: float = 3600.0  # 1 hour ban for DDoS
+    ddos_cooldown_seconds: float = 60.0  # Cooldown before re-evaluation
+    
+    # Connection Flood Protection
+    flood_detection_enabled: bool = True
+    flood_threshold_connections: int = 50  # Max connections per second
+    flood_ban_duration: float = 600.0  # 10 minutes ban
+
+    # Geographic Rate Limiting (by IP range)
+    enable_ip_range_limiting: bool = True
+    max_connections_per_subnet: int = 20  # /24 subnet
+
+    # Progressive penalties
+    progressive_ban_enabled: bool = True
+    max_ban_duration: float = 86400.0  # 24 hours maximum
+    
+    # API Rate Limiting (for web dashboard)
+    api_rate_limit_enabled: bool = True
+    api_requests_per_second: float = 5.0
+    api_burst_size: int = 10
+    
+    # Connection Scoring (suspicious activity detection)
+    connection_scoring_enabled: bool = True
+    suspicious_score_threshold: int = 100  # Ban if score exceeds
+    score_decay_per_second: float = 1.0  # Score decay rate
 
 
 @dataclass
@@ -56,6 +94,34 @@ class IPStats:
     ban_until: float = 0.0
     total_requests: int = 0
     blocked_requests: int = 0
+
+    # DDoS detection
+    requests_per_second: deque[float] = field(default_factory=lambda: deque(maxlen=50))
+    last_ddos_check: float = 0.0
+    ddos_violations: int = 0
+
+    # Connection tracking
+    connections_per_second: deque[float] = field(default_factory=lambda: deque(maxlen=50))
+    connection_flood_violations: int = 0
+
+    # Subnet tracking
+    subnet: str = ""
+
+    # Progressive penalty tracking
+    total_bans: int = 0
+    last_ban_duration: float = 0.0
+    
+    # Token bucket state
+    tokens: float = 20.0  # Start with full bucket
+    last_token_refill: float = 0.0
+    
+    # Connection scoring (suspicious activity)
+    suspicious_score: float = 0.0
+    last_score_update: float = 0.0
+    
+    # API rate limiting (separate bucket for API)
+    api_tokens: float = 10.0
+    last_api_token_refill: float = 0.0
 
 
 class RateLimiter:
@@ -69,6 +135,16 @@ class RateLimiter:
         self._total_active = 0
         self._cleanup_task: asyncio.Task | None = None
         self._running = False
+        
+        # Subnet tracking for geographic limiting
+        self._subnet_connections: dict[str, set[str]] = defaultdict(set)
+        
+        # Connection rate tracking for flood detection
+        self._connection_timestamps: deque[float] = deque(maxlen=1000)
+        
+        # Initialize IP stats with subnet info
+        for ip in self._ip_stats:
+            self._ip_stats[ip].subnet = self._get_subnet(ip)
 
     async def start(self) -> None:
         self._running = True
@@ -119,6 +195,105 @@ class RateLimiter:
 
         while self._global_requests and self._global_requests[0] < hour_ago:
             self._global_requests.popleft()
+    
+    def _get_subnet(self, ip: str) -> str:
+        """Extract /24 subnet from IP address."""
+        if ':' in ip:  # IPv6
+            return ':'.join(ip.split(':')[:4]) + '::/32'
+        # IPv4: get first 3 octets
+        parts = ip.split('.')
+        if len(parts) == 4:
+            return f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+        return ip
+    
+    def _check_ddos(self, ip: str, stats: IPStats) -> tuple[bool, float]:
+        """
+        Check for DDoS attack patterns.
+        
+        Returns:
+            Tuple of (is_ddos_detected, ban_duration)
+        """
+        if not self.config.ddos_detection_enabled:
+            return False, 0.0
+        
+        now = time.time()
+        
+        # Track requests per second
+        stats.requests_per_second.append(now)
+        
+        # Calculate RPS
+        recent_rps = len([t for t in stats.requests_per_second if t > now - 1.0])
+        
+        if recent_rps >= self.config.ddos_threshold_rps:
+            stats.ddos_violations += 1
+            log.warning(
+                "DDoS detected from %s: %d RPS (threshold: %d)",
+                ip, recent_rps, self.config.ddos_threshold_rps
+            )
+            
+            # Progressive ban duration
+            ban_duration = min(
+                self.config.ddos_ban_duration * (2 ** stats.ddos_violations),
+                self.config.max_ban_duration
+            )
+            return True, ban_duration
+        
+        return False, 0.0
+    
+    def _check_connection_flood(self, ip: str, stats: IPStats) -> tuple[bool, float]:
+        """
+        Check for connection flood attacks.
+        
+        Returns:
+            Tuple of (is_flood_detected, ban_duration)
+        """
+        if not self.config.flood_detection_enabled:
+            return False, 0.0
+        
+        now = time.time()
+        
+        # Track connections per second
+        stats.connections_per_second.append(now)
+        
+        # Calculate CPS
+        recent_cps = len([t for t in stats.connections_per_second if t > now - 1.0])
+        
+        if recent_cps >= self.config.flood_threshold_connections:
+            stats.connection_flood_violations += 1
+            log.warning(
+                "Connection flood detected from %s: %d CPS (threshold: %d)",
+                ip, recent_cps, self.config.flood_threshold_connections
+            )
+            
+            ban_duration = min(
+                self.config.flood_ban_duration * (2 ** stats.connection_flood_violations),
+                self.config.max_ban_duration
+            )
+            return True, ban_duration
+        
+        return False, 0.0
+    
+    def _check_subnet_limit(self, ip: str) -> tuple[bool, str]:
+        """
+        Check if IP's subnet has exceeded connection limit.
+        
+        Returns:
+            Tuple of (is_limit_exceeded, subnet)
+        """
+        if not self.config.enable_ip_range_limiting:
+            return False, ""
+        
+        subnet = self._get_subnet(ip)
+        subnet_count = len(self._subnet_connections.get(subnet, set()))
+        
+        if subnet_count >= self.config.max_connections_per_subnet:
+            log.warning(
+                "Subnet limit exceeded for %s: %d connections (limit: %d)",
+                subnet, subnet_count, self.config.max_connections_per_subnet
+            )
+            return True, subnet
+        
+        return False, subnet
 
     def check_rate_limit(self, ip: str) -> tuple[RateLimitAction, float]:
         if ip in self.config.allow_list:
@@ -127,15 +302,49 @@ class RateLimiter:
         now = time.time()
         stats = self._ip_stats[ip]
         stats.total_requests += 1
+        
+        # Initialize subnet if not set
+        if not stats.subnet:
+            stats.subnet = self._get_subnet(ip)
 
+        # Check if already banned
         if stats.ban_until > now:
             stats.blocked_requests += 1
             return RateLimitAction.BAN, stats.ban_until - now
 
+        # Check global limit
         global_action = self._check_global_limit()
         if global_action != RateLimitAction.ALLOW:
             stats.blocked_requests += 1
             return global_action, 0
+        
+        # DDoS detection
+        if self.config.ddos_detection_enabled:
+            is_ddos, ban_duration = self._check_ddos(ip, stats)
+            if is_ddos:
+                stats.ban_until = now + ban_duration
+                stats.total_bans += 1
+                stats.last_ban_duration = ban_duration
+                log.critical("IP %s banned for DDoS: %.0f seconds", ip, ban_duration)
+                return RateLimitAction.BAN, ban_duration
+        
+        # Connection flood detection
+        if self.config.flood_detection_enabled:
+            is_flood, ban_duration = self._check_connection_flood(ip, stats)
+            if is_flood:
+                stats.ban_until = now + ban_duration
+                stats.total_bans += 1
+                stats.last_ban_duration = ban_duration
+                log.critical("IP %s banned for connection flood: %.0f seconds", ip, ban_duration)
+                return RateLimitAction.BAN, ban_duration
+        
+        # Subnet limit check
+        if self.config.enable_ip_range_limiting:
+            subnet_exceeded, subnet = self._check_subnet_limit(ip)
+            if subnet_exceeded:
+                stats.blocked_requests += 1
+                log.warning("IP %s blocked: subnet %s limit exceeded", ip, subnet)
+                return RateLimitAction.REJECT, 0
 
         self._clean_old_requests(stats)
 
@@ -177,6 +386,61 @@ class RateLimiter:
 
         return RateLimitAction.ALLOW
 
+    def _refill_tokens(self, stats: IPStats, now: float) -> None:
+        """Refill token bucket based on elapsed time."""
+        if not self.config.token_bucket_enabled:
+            return
+            
+        elapsed = now - stats.last_token_refill
+        refill_amount = elapsed * self.config.token_bucket_refill_rate
+        stats.tokens = min(stats.tokens + refill_amount, self.config.token_bucket_capacity)
+        stats.last_token_refill = now
+
+    def _refill_api_tokens(self, stats: IPStats, now: float) -> None:
+        """Refill API token bucket."""
+        if not self.config.api_rate_limit_enabled:
+            return
+            
+        elapsed = now - stats.last_api_token_refill
+        refill_amount = elapsed * self.config.api_requests_per_second
+        stats.api_tokens = min(stats.api_tokens + refill_amount, self.config.api_burst_size)
+        stats.last_api_token_refill = now
+
+    def _update_suspicious_score(self, stats: IPStats, now: float, delta: float) -> None:
+        """Update suspicious activity score."""
+        if not self.config.connection_scoring_enabled:
+            return
+            
+        elapsed = now - stats.last_score_update
+        decay = elapsed * self.config.score_decay_per_second
+        stats.suspicious_score = max(0, stats.suspicious_score + delta - decay)
+        stats.last_score_update = now
+
+    def check_api_rate_limit(self, ip: str) -> tuple[RateLimitAction, float]:
+        """Check rate limit for API requests (web dashboard)."""
+        if ip in self.config.allow_list:
+            return RateLimitAction.ALLOW, 0.0
+
+        now = time.time()
+        stats = self._ip_stats[ip]
+        
+        # Refill API tokens
+        self._refill_api_tokens(stats, now)
+        
+        # Check if banned
+        if stats.ban_until > now:
+            return RateLimitAction.BAN, stats.ban_until - now
+        
+        # Check API token bucket
+        if stats.api_tokens < 1.0:
+            wait_time = (1.0 - stats.api_tokens) / self.config.api_requests_per_second
+            log.debug("API rate limit exceeded for %s, wait %.1fs", ip, wait_time)
+            return RateLimitAction.DELAY, wait_time
+        
+        # Consume token
+        stats.api_tokens -= 1.0
+        return RateLimitAction.ALLOW, 0.0
+
     def _clean_old_requests(self, stats: IPStats) -> None:
         hour_ago = time.time() - 3600
         while stats.requests and stats.requests[0] < hour_ago:
@@ -204,14 +468,37 @@ class RateLimiter:
         return RateLimitAction.DELAY, delay_sec
 
     def add_connection(self, ip: str) -> None:
+        stats = self._ip_stats[ip]
+        subnet = stats.subnet or self._get_subnet(ip)
+        
         self._active_connections[ip] += 1
         self._total_active += 1
         self._global_requests.append(time.time())
+        
+        # Track for subnet limiting
+        if self.config.enable_ip_range_limiting:
+            self._subnet_connections[subnet].add(ip)
+        
+        # Track for flood detection
+        if self.config.flood_detection_enabled:
+            self._connection_timestamps.append(time.time())
+            stats.connections_per_second.append(time.time())
 
     def remove_connection(self, ip: str) -> None:
         if self._active_connections[ip] > 0:
             self._active_connections[ip] -= 1
             self._total_active -= 1
+            
+        # Remove from subnet tracking
+        if self.config.enable_ip_range_limiting:
+            stats = self._ip_stats.get(ip)
+            if stats:
+                subnet = stats.subnet or self._get_subnet(ip)
+                self._subnet_connections[subnet].discard(ip)
+                
+                # Clean up empty subnets
+                if not self._subnet_connections[subnet]:
+                    del self._subnet_connections[subnet]
 
     def get_ip_stats(self, ip: str) -> dict:
         stats = self._ip_stats.get(ip, IPStats())
@@ -223,17 +510,29 @@ class RateLimiter:
             "active_connections": self._active_connections[ip],
             "is_banned": stats.ban_until > now,
             "ban_remaining": max(0, stats.ban_until - now),
-            "requests_last_minute": sum(1 for t in stats.requests if t > now - 60)
+            "requests_last_minute": sum(1 for t in stats.requests if t > now - 60),
+            "ddos_violations": stats.ddos_violations,
+            "flood_violations": stats.connection_flood_violations,
+            "total_bans": stats.total_bans,
+            "subnet": stats.subnet or self._get_subnet(ip),
         }
 
     def get_global_stats(self) -> dict:
         now = time.time()
+        banned_count = sum(1 for s in self._ip_stats.values() if s.ban_until > now)
+        ddos_detected = sum(1 for s in self._ip_stats.values() if s.ddos_violations > 0)
+        flood_detected = sum(1 for s in self._ip_stats.values() if s.connection_flood_violations > 0)
+        
         return {
             "total_active_connections": self._total_active,
             "unique_ips": len(self._ip_stats),
             "requests_last_minute": len([t for t in self._global_requests if t > now - 60]),
-            "banned_ips": sum(1 for s in self._ip_stats.values() if s.ban_until > now),
-            "total_violations": sum(s.violations for s in self._ip_stats.values())
+            "banned_ips": banned_count,
+            "total_violations": sum(s.violations for s in self._ip_stats.values()),
+            "ddos_attacks_detected": ddos_detected,
+            "flood_attacks_detected": flood_detected,
+            "subnets_active": len(self._subnet_connections),
+            "connection_flood_rate": len([t for t in self._connection_timestamps if t > now - 1.0]),
         }
 
     def reset_ip(self, ip: str) -> None:
