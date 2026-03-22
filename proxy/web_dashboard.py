@@ -2814,6 +2814,162 @@ class WebDashboard:
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 
+        @self.app.route('/metrics')
+        def prometheus_metrics() -> Response:
+            """
+            Prometheus metrics endpoint.
+
+            Returns metrics in Prometheus text exposition format.
+            See: https://prometheus.io/docs/instrumenting/exposition_formats/
+            """
+            try:
+                from proxy.tg_ws_proxy import _server_instance
+                from proxy.stats import get_stats_instance
+
+                lines = []
+
+                # Basic info
+                lines.append('# HELP tg_ws_proxy_info Proxy information')
+                lines.append('# TYPE tg_ws_proxy_info gauge')
+                lines.append('tg_ws_proxy_info{version="2.39.0"} 1')
+
+                # Get stats
+                stats = get_stats_instance()
+                if stats:
+                    # Connection metrics
+                    lines.append('')
+                    lines.append('# HELP tg_ws_proxy_connections_total Total number of connections')
+                    lines.append('# TYPE tg_ws_proxy_connections_total counter')
+                    lines.append(f'tg_ws_proxy_connections_total {stats.connections_total}')
+
+                    lines.append('')
+                    lines.append('# HELP tg_ws_proxy_connections_active Current active connections')
+                    lines.append('# TYPE tg_ws_proxy_connections_active gauge')
+                    lines.append(f'tg_ws_proxy_connections_active {stats.connections_active}')
+
+                    lines.append('')
+                    lines.append('# HELP tg_ws_proxy_bytes_received_total Total bytes received from clients')
+                    lines.append('# TYPE tg_ws_proxy_bytes_received_total counter')
+                    lines.append(f'tg_ws_proxy_bytes_received_total {stats.bytes_received}')
+
+                    lines.append('')
+                    lines.append('# HELP tg_ws_proxy_bytes_sent_total Total bytes sent to clients')
+                    lines.append('# TYPE tg_ws_proxy_bytes_sent_total counter')
+                    lines.append(f'tg_ws_proxy_bytes_sent_total {stats.bytes_sent}')
+
+                    lines.append('')
+                    lines.append('# HELP tg_ws_proxy_bytes_forwarded_total Total bytes forwarded to Telegram')
+                    lines.append('# TYPE tg_ws_proxy_bytes_forwarded_total counter')
+                    lines.append(f'tg_ws_proxy_bytes_forwarded_total {stats.bytes_forwarded}')
+
+                # Performance metrics
+                if stats and hasattr(stats, 'cpu_percent'):
+                    lines.append('')
+                    lines.append('# HELP tg_ws_proxy_cpu_percent CPU usage percentage')
+                    lines.append('# TYPE tg_ws_proxy_cpu_percent gauge')
+                    lines.append(f'tg_ws_proxy_cpu_percent {stats.cpu_percent:.2f}')
+
+                if stats and hasattr(stats, 'memory_mb'):
+                    lines.append('')
+                    lines.append('# HELP tg_ws_proxy_memory_mb Memory usage in MB')
+                    lines.append('# TYPE tg_ws_proxy_memory_mb gauge')
+                    lines.append(f'tg_ws_proxy_memory_mb {stats.memory_mb:.2f}')
+
+                # DC stats
+                if _server_instance:
+                    dc_stats = _server_instance.get_dc_stats()
+                    if dc_stats:
+                        lines.append('')
+                        lines.append('# HELP tg_ws_proxy_dc_latency_ms DC latency in milliseconds')
+                        lines.append('# TYPE tg_ws_proxy_dc_latency_ms gauge')
+                        for dc_id, dc_info in dc_stats.items():
+                            if isinstance(dc_info, dict) and 'latency_ms' in dc_info:
+                                lines.append(f'tg_ws_proxy_dc_latency_ms{{dc_id="{dc_id}"}} {dc_info["latency_ms"]:.2f}')
+
+                        lines.append('')
+                        lines.append('# HELP tg_ws_proxy_dc_errors_total Total DC errors')
+                        lines.append('# TYPE tg_ws_proxy_dc_errors_total counter')
+                        for dc_id, dc_info in dc_stats.items():
+                            if isinstance(dc_info, dict) and 'errors' in dc_info:
+                                lines.append(f'tg_ws_proxy_dc_errors_total{{dc_id="{dc_id}"}} {dc_info["errors"]}')
+
+                # Circuit breaker metrics
+                try:
+                    from proxy.circuit_breaker import get_all_circuit_breakers_info
+                    cb_info = get_all_circuit_breakers_info()
+                    if cb_info:
+                        lines.append('')
+                        lines.append('# HELP tg_ws_proxy_circuit_breaker_state Circuit breaker state (0=closed, 1=open, 2=half_open)')
+                        lines.append('# TYPE tg_ws_proxy_circuit_breaker_state gauge')
+                        for cb in cb_info:
+                            state_value = {'closed': 0, 'open': 1, 'half_open': 2}.get(cb.get('state', 'closed'), 0)
+                            lines.append(f'tg_ws_proxy_circuit_breaker_state{{name="{cb["name"]}"}} {state_value}')
+
+                        lines.append('')
+                        lines.append('# HELP tg_ws_proxy_circuit_breaker_failures_total Total circuit breaker failures')
+                        lines.append('# TYPE tg_ws_proxy_circuit_breaker_failures_total counter')
+                        for cb in cb_info:
+                            stats_cb = cb.get('stats', {})
+                            lines.append(f'tg_ws_proxy_circuit_breaker_failures_total{{name="{cb["name"]}"}} {stats_cb.get("failed_calls", 0)}')
+
+                        lines.append('')
+                        lines.append('# HELP tg_ws_proxy_circuit_breaker_rejected_total Total rejected calls (circuit open)')
+                        lines.append('# TYPE tg_ws_proxy_circuit_breaker_rejected_total counter')
+                        for cb in cb_info:
+                            stats_cb = cb.get('stats', {})
+                            lines.append(f'tg_ws_proxy_circuit_breaker_rejected_total{{name="{cb["name"]}"}} {stats_cb.get("rejected_calls", 0)}')
+                except ImportError:
+                    pass
+
+                # DNS resolver metrics
+                try:
+                    from proxy.tg_ws_proxy import get_dns_resolver
+                    resolver = get_dns_resolver()
+                    if resolver:
+                        dns_metrics = resolver.get_metrics()
+                        if dns_metrics:
+                            lines.append('')
+                            lines.append('# HELP tg_ws_proxy_dns_queries_total Total DNS queries')
+                            lines.append('# TYPE tg_ws_proxy_dns_queries_total counter')
+                            lines.append(f'tg_ws_proxy_dns_queries_total {dns_metrics.get("total_queries", 0)}')
+
+                            lines.append('')
+                            lines.append('# HELP tg_ws_proxy_dns_cache_hits_total Total DNS cache hits')
+                            lines.append('# TYPE tg_ws_proxy_dns_cache_hits_total counter')
+                            lines.append(f'tg_ws_proxy_dns_cache_hits_total {dns_metrics.get("cache_hits", 0)}')
+
+                            lines.append('')
+                            lines.append('# HELP tg_ws_proxy_dns_cache_misses_total Total DNS cache misses')
+                            lines.append('# TYPE tg_ws_proxy_dns_cache_misses_total counter')
+                            lines.append(f'tg_ws_proxy_dns_cache_misses_total {dns_metrics.get("cache_misses", 0)}')
+
+                            lines.append('')
+                            lines.append('# HELP tg_ws_proxy_dns_cache_hit_rate DNS cache hit rate')
+                            lines.append('# TYPE tg_ws_proxy_dns_cache_hit_rate gauge')
+                            lines.append(f'tg_ws_proxy_dns_cache_hit_rate {dns_metrics.get("cache_hit_rate", 0):.4f}')
+                except ImportError:
+                    pass
+
+                # Plugin metrics
+                try:
+                    from proxy.plugins import get_plugin_manager
+                    pm = get_plugin_manager()
+                    plugin_stats = pm.get_statistics()
+                    if plugin_stats:
+                        lines.append('')
+                        lines.append('# HELP tg_ws_proxy_plugins_loaded Number of loaded plugins')
+                        lines.append('# TYPE tg_ws_proxy_plugins_loaded gauge')
+                        lines.append(f'tg_ws_proxy_plugins_loaded {plugin_stats.get("loaded_plugins", 0)}')
+                except ImportError:
+                    pass
+
+                return Response('\n'.join(lines) + '\n', mimetype='text/plain; charset=utf-8')
+
+            except Exception as e:
+                # Return empty metrics on error
+                log.error(f"Error generating Prometheus metrics: {e}")
+                return Response('# Error generating metrics\n', mimetype='text/plain; charset=utf-8', status=500)
+
         @self.app.route('/api/optimization/dns/cache', methods=['DELETE'])
         def api_dns_cache_clear() -> Response:
             """Clear DNS cache."""

@@ -160,7 +160,7 @@ class PerformanceOptimizer:
         self._dc_stats_lock = asyncio.Lock()
 
         # Connection cache with LRU eviction
-        self._connection_cache: dict[str, tuple[any, float, int]] = {}  # key -> (connection, timestamp, hits)
+        self._connection_cache: dict[str, tuple[Any, float, int]] = {}  # key -> (connection, timestamp, hits)
         self._cache_max_size = 100
         self._cache_ttl = 120.0  # 2 minutes
 

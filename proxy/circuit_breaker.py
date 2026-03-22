@@ -206,7 +206,7 @@ class CircuitBreaker(Generic[T]):
             else:
                 result = func(*args, **kwargs)
             self._on_success()
-            return result
+            return result  # type: ignore[no-any-return]
         except self.config.excluded_exceptions:
             # Don't count these as failures
             raise
@@ -247,7 +247,7 @@ class CircuitBreaker(Generic[T]):
 class CircuitBreakerRegistry:
     """Registry for managing multiple circuit breakers."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize registry."""
         self._breakers: dict[str, CircuitBreaker] = {}
         self._lock = asyncio.Lock()
