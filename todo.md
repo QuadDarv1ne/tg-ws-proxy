@@ -163,26 +163,30 @@
 - [ ] **Integration Tests** — сквозные тесты для основных сценариев
 
 ### Мониторинг
-- [ ] **Real-time Dashboard** — улучшение веб-панели с live графиками
+- ✅ **Real-time Dashboard** — улучшение веб-панели с live графиками
+  - `proxy/web_dashboard.py` — 10 новых API endpoints (+186 строк)
+  - Rate Limiter API: stats, metrics, ban, unban
+  - Metrics History API: history, summary, trend, export
+  - Tests: 21 passed ✅
 
 ---
 
-## 📊 Статус (23.03.2026 03:30)
+## 📊 Статус (23.03.2026 04:00)
 
 ```
-Модулей: 38 в proxy/ ✅ (добавлен metrics_history.py)
+Модулей: 38 в proxy/ ✅
 Тестов: 34 файла в tests/ ✅
-Tests: 657 passed, 7 skipped ✅
-Coverage: ~58% (цель >80%)
+Tests: 678 passed, 7 skipped ✅
+Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.52.0 (Metrics History ✅, Rate Limiter Integration ✅)
+Version: v2.52.0 (Metrics History ✅, Real-time Dashboard ✅)
 ```
 
 **Актуальная версия:** v2.52.0 (dev) — ✅ synced
-**Следующая версия:** v2.53.0 (Dashboard + Stability)
-**Последнее обновление:** 23.03.2026 (03:30)
+**Следующая версия:** v2.53.0 (HTTP/2 + Stability)
+**Последнее обновление:** 23.03.2026 (04:00)
 
 ---
 
