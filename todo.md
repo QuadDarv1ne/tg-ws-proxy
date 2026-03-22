@@ -6,7 +6,17 @@
 
 ---
 
-## ✅ Выполнено (v2.40.0)
+## ✅ Выполнено (v2.41.0)
+
+### Performance Optimization
+- ✅ **Performance Profiler** — cProfile интеграция с optimization suggestions
+  - `proxy/performance_profiler.py` — профилирование CPU и памяти
+  - `tests/test_performance_profiler.py` — 18 тестов
+  - Автоматические рекомендации по оптимизации
+- ✅ **DNS Resolver Aggressive Caching** — hit rate >90% target
+  - Extended TTL для стабильных доменов (1 час для Telegram)
+  - `_get_aggressive_ttl()` — умный выбор TTL на основе домена
+  - Custom TTL поддержка в `_add_to_cache()`
 
 ### Monitoring & Observability
 - ✅ **Prometheus metrics endpoint** — `/metrics` для сбора метрик
@@ -54,12 +64,12 @@
 ### R&D
 - ✅ **HTTP/2 Multiplexing Research** — анализ применимости (docs/HTTP2_RESEARCH.md)
   - Вывод: HTTP/2 не применим к основному прокси потоку
-  - Рекомендация: использовать для Web Dashboard (v2.41.0)
+  - Рекомендация: использовать для Web Dashboard (v2.42.0)
   - Перспектива: QUIC/HTTP/3 для mobile (v3.0.0)
 
 ---
 
-## 🟡 В процессе (v2.41.0: optimization & resilience)
+## 🟡 В процессе (v2.42.0: optimization & resilience)
 
 ### Производительность
 - [ ] **WebSocket Compression** — permessage-deflate для снижения трафика на 30-50%
