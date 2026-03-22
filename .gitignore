@@ -27,7 +27,6 @@ requirements-*.txt.bak
 # --- PyInstaller & Desktop Build ---
 *.manifest
 *.log
-icon.ico
 packaging/*.spec
 build_desktop.py.bak
 # If you want to keep final executables out of Git:
@@ -36,6 +35,11 @@ build_desktop.py.bak
 *.AppImage
 *.deb
 *.rpm
+
+# Build artifacts (keep source icons)
+dist/icon.ico
+build/icon.ico
+*.icon.ico
 
 # --- Mobile App (Capacitor) ---
 mobile-app/node_modules/
@@ -75,14 +79,14 @@ scan_ips.py
 scan.txt
 AyuGramDesktop-dev/
 tweb-master/
-*.qr.png
-*.qr.svg
-qr_code.*
-generate_qr.py
 *.cache
 *.db
 !proxy/*.db
 metrics_history.db
+
+# Build artifacts (keep source files)
+dist/qr_code.*
+build/qr_code.*
 
 # --- Build scripts backups ---
 build_mobile.py.bak
