@@ -1546,7 +1546,7 @@ async def _handle_client(
             return
 
         # -- Extract DC ID --
-        dc, is_media = _dc_from_init(init)
+        dc, is_media = extract_dc_from_init(init)
         init_patched = False
 
         # Android (may be ios too) with useSecret=0 has random dc_id bytes — patch it
@@ -1555,7 +1555,7 @@ async def _handle_client(
             if dc_result is not None:
                 dc, is_media = dc_result
             if dc is not None and dc in dc_opt:
-                init = _patch_init_dc(init, dc if is_media else -dc)
+                init = patch_init_dc(init, dc if is_media else -dc)
                 init_patched = True
 
         if dc is None or dc not in dc_opt:
@@ -1711,7 +1711,7 @@ async def _handle_client(
         splitter = None
         if init_patched:
             try:
-                splitter = _MsgSplitter(init)
+                splitter = MsgSplitter(init)
             except Exception:
                 pass
 

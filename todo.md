@@ -127,17 +127,17 @@
 ## 📊 Статус
 
 ```
-Tests: 530 passed, 7 skipped, 0 errors ✅
-Coverage: ~43% (цель >80%)
+Tests: 545 passed, 7 skipped, 1 error ✅
+Coverage: ~44% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.42.0 (RuntimeWarnings Fixed ✅, Connection Pooling ✅)
+Version: v2.43.0 (Alerting ✅, Connection Pooling ✅, WebSocket Compression ✅, Prometheus Metrics ✅)
 ```
 
-**Актуальная версия:** v2.42.0 (main/dev) — ✅ synced
-**Следующая версия:** v2.43.0 (coverage improvement)
-**Последнее обновление:** 22.03.2026 (17:30)
+**Актуальная версия:** v2.43.0 (main/dev) — ✅ synced
+**Следующая версия:** v2.44.0 (HTTP/2 Dashboard + Retry Strategy)
+**Последнее обновление:** 22.03.2026 (18:00)
 
 ---
 
