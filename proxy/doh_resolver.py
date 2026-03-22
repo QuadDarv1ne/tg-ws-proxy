@@ -76,7 +76,7 @@ class DNSOverHTTPSResolver:
     """
     
     # Default DoH providers
-    DEFAULT_PROVIDERS: list[DoHProvider] = field(default_factory=lambda: [
+    DEFAULT_PROVIDERS = [
         DoHProvider(
             name="Cloudflare",
             url="https://cloudflare-dns.com/dns-query",
@@ -92,7 +92,7 @@ class DNSOverHTTPSResolver:
             url="https://dns.quad9.net/dns-query",
             priority=3,
         ),
-    ])
+    ]
     
     def __init__(
         self,
@@ -112,7 +112,7 @@ class DNSOverHTTPSResolver:
             enable_dnssec: Enable DNSSEC validation
             fallback_to_system: Fallback to system DNS on DoH failure
         """
-        self.providers = providers or self.DEFAULT_PROVIDERS.copy()
+        self.providers = providers.copy() if providers else [p for p in self.DEFAULT_PROVIDERS]
         self.cache_ttl = cache_ttl
         self.max_cache_size = max_cache_size
         self.enable_dnssec = enable_dnssec
