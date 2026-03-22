@@ -88,6 +88,13 @@
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
 ### Надёжность
+- ✅ **Alerting** — уведомления при высокой задержке DC
+  - AlertType.DC_HIGH_LATENCY добавлен
+  - Порог: 150ms (warning), 200ms (critical)
+  - Cooldown: 2 минуты между алертами для одного DC
+  - Интеграция в monitor_dc_latency()
+  - Email/webhook уведомления (через AlertManager)
+  - Тесты: test_alerts.py (7 passed)
 - [ ] **Retry Strategy** — умный повтор запросов при смене сети
 - [ ] **Health Check Enhancement** — более агрессивная проверка мёртвых соединений
 - [ ] **Connection Timeout Tuning** — адаптивные таймауты на основе latency
