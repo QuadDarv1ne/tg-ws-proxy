@@ -1507,7 +1507,7 @@ async def _handle_client(
             return
 
         # -- Non-Telegram IP -> direct passthrough --
-        if not _is_telegram_ip(dst):
+        if not is_telegram_ip(dst):
             stats.connections_passthrough += 1
             log.debug("%s passthrough -> %s:%d", label, dst, port)
             try:
@@ -1538,7 +1538,7 @@ async def _handle_client(
             return
 
         # HTTP transport -> reject
-        if _is_http_transport(init):
+        if is_http_transport(init):
             stats.connections_http_rejected += 1
             log.debug("%s HTTP transport to %s:%d (rejected)",
                       label, dst, port)
