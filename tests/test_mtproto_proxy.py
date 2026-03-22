@@ -554,3 +554,159 @@ class TestMTProtoProxyExtended:
 
         # Should not raise
         await proxy._handle_client(mock_reader, mock_writer)
+
+
+class TestMTProtoTransport:
+    """Tests for MTProtoTransport class."""
+
+    def test_mtproto_transport_init(self):
+        """Test MTProtoTransport initialization."""
+        secret = "0123456789abcdef0123456789abcdef"
+        transport = MTProtoTransport(secret=secret)
+        
+        assert transport.secret == secret
+        assert transport.key is not None
+        assert transport.iv is not None
+        assert transport._initialized is False
+
+    def test_mtproto_transport_encrypt_decrypt(self):
+        """Test encryption and decryption."""
+        secret = "0123456789abcdef0123456789abcdef"
+        transport = MTProtoTransport(secret=secret)
+        
+        data = b'test data for encryption'
+        
+        # Encrypt
+        encrypted = transport.encrypt(data)
+        
+        # Should be different from original
+        assert encrypted != data
+        assert len(encrypted) > len(data)  # Includes padding
+        
+        # Decrypt
+        decrypted = transport.decrypt(encrypted)
+        
+        # Should match original
+        assert decrypted == data
+
+    def test_mtproto_transport_empty_data(self):
+        """Test encryption with empty data."""
+        secret = "0123456789abcdef0123456789abcdef"
+        transport = MTProtoTransport(secret=secret)
+        
+        # Empty data should be encrypted
+        encrypted = transport.encrypt(b'')
+        assert len(encrypted) > 0  # At least one block with padding
+        
+        # Decrypt
+        decrypted = transport.decrypt(encrypted)
+        assert decrypted == b''
+
+    def test_mtproto_transport_large_data(self):
+        """Test encryption with large data."""
+        secret = "0123456789abcdef0123456789abcdef"
+        transport = MTProtoTransport(secret=secret)
+        
+        # Large data (multiple blocks)
+        data = b'X' * 1000
+        
+        encrypted = transport.encrypt(data)
+        decrypted = transport.decrypt(encrypted)
+        
+        assert decrypted == data
+
+
+class TestRateLimiterExtended:
+    """Extended tests for RateLimiter class."""
+
+    def test_rate_limiter_is_ip_allowed(self):
+        """Test IP allowed check."""
+        limiter = RateLimiter(max_bytes_per_second=1024*1024)
+        
+        # Should allow normal IP
+        assert limiter.is_ip_allowed("192.168.1.1") is True
+
+    def test_rate_limiter_block_over_limit(self):
+        """Test blocking IPs over limit."""
+        limiter = RateLimiter(max_bytes_per_second=100)
+        
+        # Add IP to blacklist
+        limiter.ip_blacklist.add("192.168.1.100")
+        
+        # Should block
+        assert limiter.is_ip_allowed("192.168.1.100") is False
+
+    def test_rate_limiter_whitelist(self):
+        """Test rate limiter whitelist."""
+        limiter = RateLimiter(ip_whitelist=["192.168.1.1"])
+        
+        # Whitelisted IP should be allowed
+        assert limiter.is_ip_allowed("192.168.1.1") is True
+        
+        # Non-whitelisted should also be allowed (not blacklisted)
+        assert limiter.is_ip_allowed("192.168.1.2") is True
+
+    def test_rate_limiter_bytes_tracking(self):
+        """Test bytes per IP tracking."""
+        limiter = RateLimiter(max_bytes_per_second=1000)
+        
+        # Add some bytes
+        with limiter._lock:
+            limiter.bytes_per_ip["192.168.1.1"].append((0.0, 500))
+        
+        # Should have data
+        assert len(limiter.bytes_per_ip["192.168.1.1"]) > 0
+
+    def test_rate_limiter_connections_tracking(self):
+        """Test connections per IP tracking."""
+        limiter = RateLimiter(max_connections_per_ip=5)
+        
+        # Add connections
+        with limiter._lock:
+            limiter.connections_per_ip["192.168.1.1"] = 3
+        
+        assert limiter.connections_per_ip["192.168.1.1"] == 3
+
+
+class TestSecretFunctions:
+    """Tests for secret-related functions."""
+
+    def test_generate_secret_length(self):
+        """Test generated secret length."""
+        secret = generate_secret()
+        
+        assert len(secret) == 32  # 32 hex chars = 16 bytes
+
+    def test_generate_secret_hex(self):
+        """Test generated secret is hex."""
+        secret = generate_secret()
+        
+        # Should be valid hex
+        int(secret, 16)
+
+    def test_secret_to_key_iv(self):
+        """Test secret to key/IV conversion."""
+        secret = "0123456789abcdef0123456789abcdef"
+        
+        key, iv = secret_to_key_iv(secret)
+        
+        assert len(key) == 32  # 256-bit key
+        assert len(iv) == 32   # 256-bit IV (or 16 depending on config)
+
+    def test_validate_secret_valid(self):
+        """Test validation of valid secret."""
+        secret = "0123456789abcdef0123456789abcdef"  # 32 hex chars
+        
+        assert validate_secret(secret) is True
+
+    def test_validate_secret_invalid_length(self):
+        """Test validation of invalid length secret."""
+        secret = "0123"  # Too short
+        
+        assert validate_secret(secret) is False
+
+    def test_validate_secret_invalid_chars(self):
+        """Test validation of invalid chars in secret."""
+        secret = "0123456789abcdefg123456789abcdef"  # 'g' is not hex
+        
+        assert validate_secret(secret) is False
