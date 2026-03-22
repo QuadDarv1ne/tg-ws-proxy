@@ -186,13 +186,13 @@ class RawWebSocket:
             f'AppleWebKit/537.36 (KHTML, like Gecko) '
             f'Chrome/131.0.0.0 Safari/537.36\r\n'
         )
-        
+
         # Add compression extension (RFC 7692)
         if compress:
             req += 'Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits; server_max_window_bits=15\r\n'
-        
+
         req += '\r\n'
-        
+
         writer.write(req.encode())
         await writer.drain()
 
@@ -256,7 +256,7 @@ class RawWebSocket:
         """
         if self._closed:
             raise ConnectionError("WebSocket closed")
-        
+
         # Compress data if enabled
         if self._compress and self._compressor and len(data) > 0:
             # Compress with permessage-deflate (RFC 7692)
@@ -265,7 +265,7 @@ class RawWebSocket:
             if compressed.endswith(b'\x00\x00\xff\xff'):
                 compressed = compressed[:-4]
             data = compressed
-        
+
         frame = self._build_frame(self.OP_BINARY, data, mask=True)
         self.writer.write(frame)
         await self.writer.drain()
@@ -367,7 +367,7 @@ class RawWebSocket:
         if self._closed:
             return
         self._closed = True
-        
+
         # Reset compression state
         if self._compressor:
             try:
@@ -379,7 +379,7 @@ class RawWebSocket:
                 self._decompressor.flush()
             except Exception:
                 pass
-        
+
         try:
             self.writer.write(
                 self._build_frame(self.OP_CLOSE, b'', mask=True)

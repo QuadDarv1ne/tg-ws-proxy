@@ -1415,7 +1415,7 @@ class _WsPool:
         """Connect to WebSocket server with compression support."""
         # Get compression setting from config
         compress = _OPTIMIZATION_CONFIG.get('enable_compression', False)
-        
+
         for domain in domains:
             try:
                 ws = await RawWebSocket.connect(
