@@ -673,6 +673,126 @@ def _on_toggle_compact_menu(icon=None, item=None) -> None:
         _tray_icon.update_menu()
 
 
+def _on_toggle_obfuscation(icon=None, item=None) -> None:
+    """Toggle traffic obfuscation on/off."""
+    # Load anticensorship config
+    anticensorship = _config.get("anticensorship", {})
+    enabled = anticensorship.get("enabled", False)
+    
+    # Toggle
+    anticensorship["enabled"] = not enabled
+    _config["anticensorship"] = anticensorship
+    save_config(_config)
+    
+    state = "включена" if not enabled else "выключена"
+    _show_info(
+        f"Обфускация трафика {state}.\n\n"
+        f"Прокси будет перезапущен для применения настроек.",
+        "TG WS Proxy — Обфускация"
+    )
+    
+    # Restart proxy
+    threading.Thread(target=restart_proxy, daemon=True).start()
+
+
+def _on_obfuscation_preset(icon=None, item=None, preset: str = "") -> None:
+    """Apply obfuscation preset."""
+    if not preset:
+        return
+        
+    anticensorship = _config.get("anticensorship", {})
+    anticensorship["preset"] = preset
+    anticensorship["enabled"] = True
+    _config["anticensorship"] = anticensorship
+    save_config(_config)
+    
+    preset_names = {
+        "default": "Обычный",
+        "aggressive": "Агрессивный",
+        "stealth": "Стеелс",
+    }
+    
+    _show_info(
+        f"Применён режим: {preset_names.get(preset, preset)}\n\n"
+        f"Прокси будет перезапущен.",
+        "TG WS Proxy — Режим обфускации"
+    )
+    
+    threading.Thread(target=restart_proxy, daemon=True).start()
+
+
+def _on_toggle_domain_fronting(icon=None, item=None) -> None:
+    """Toggle domain fronting on/off."""
+    anticensorship = _config.get("anticensorship", {})
+    obfuscation = anticensorship.get("obfuscation", {})
+    enabled = obfuscation.get("enable_domain_fronting", False)
+    
+    obfuscation["enable_domain_fronting"] = not enabled
+    anticensorship["obfuscation"] = obfuscation
+    anticensorship["enabled"] = True
+    _config["anticensorship"] = anticensorship
+    save_config(_config)
+    
+    state = "включена" if not enabled else "выключена"
+    _show_info(
+        f"Domain Fronting {state}.\n\n"
+        f"Используется Cloudflare CDN для маскировки трафика.",
+        "TG WS Proxy — Domain Fronting"
+    )
+    
+    threading.Thread(target=restart_proxy, daemon=True).start()
+
+
+def _on_toggle_http2_fallback(icon=None, item=None) -> None:
+    """Toggle HTTP/2 fallback on/off."""
+    anticensorship = _config.get("anticensorship", {})
+    http2 = anticensorship.get("http2", {})
+    enabled = http2.get("enable_fallback", True)
+    
+    http2["enable_fallback"] = not enabled
+    anticensorship["http2"] = http2
+    anticensorship["enabled"] = True
+    _config["anticensorship"] = anticensorship
+    save_config(_config)
+    
+    state = "включена" if not enabled else "выключена"
+    _show_info(
+        f"HTTP/2 fallback {state}.\n\n"
+        f"При блокировке WebSocket будет использоваться HTTP/2.",
+        "TG WS Proxy — HTTP/2 Fallback"
+    )
+    
+    threading.Thread(target=restart_proxy, daemon=True).start()
+
+
+def _on_show_censorship_status(icon=None, item=None) -> None:
+    """Show censorship detection status."""
+    from proxy.pluggable_transports import get_censorship_detector
+    
+    detector = get_censorship_detector()
+    
+    status_lines = ["Статус обхода блокировок:\n"]
+    
+    if detector.is_blocked():
+        status_lines.append("⚠️ Обнаружены признаки блокировки!\n")
+        
+        if detector.blocking_detected.get('tcp_reset'):
+            status_lines.append("• TCP Reset (разрыв соединений)")
+        if detector.blocking_detected.get('sni_blocking'):
+            status_lines.append("• SNI Blocking (блокировка по домену)")
+        if detector.blocking_detected.get('timeout'):
+            status_lines.append("• Таймауты соединений")
+        if detector.blocking_detected.get('dpi'):
+            status_lines.append("• DPI (глубокий анализ трафика)")
+            
+        status_lines.append(f"\nРекомендация: {detector.get_recommendation()}")
+    else:
+        status_lines.append("✅ Блокировки не обнаружены")
+        status_lines.append("\nТрафик проходит без препятствий.")
+        
+    _show_info('\n'.join(status_lines), "TG WS Proxy — Мониторинг блокировок")
+
+
 def _apply_dc_preset(preset: str) -> None:
     """Apply DC preset configuration.
 
@@ -1759,6 +1879,31 @@ def _build_menu() -> pystray.Menu | None:
             pystray.MenuItem("Выход", _on_exit),
         )
 
+    # Anticensorship config
+    anticensorship = _config.get("anticensorship", {})
+    is_obfuscation = anticensorship.get("enabled", False)
+    obfuscation_preset = anticensorship.get("preset", "default")
+    obfuscation_cfg = anticensorship.get("obfuscation", {})
+    is_domain_fronting = obfuscation_cfg.get("enable_domain_fronting", False)
+    http2_cfg = anticensorship.get("http2", {})
+    is_http2_fallback = http2_cfg.get("enable_fallback", True)
+
+    # Obfuscation preset submenu
+    obfuscation_submenu = pystray.Menu(
+        pystray.MenuItem(
+            "Обычный (базовая обфускация)",
+            lambda: _on_obfuscation_preset(preset="default"),
+            checked=lambda _: obfuscation_preset == "default"),
+        pystray.MenuItem(
+            "Агрессивный (максимум защиты)",
+            lambda: _on_obfuscation_preset(preset="aggressive"),
+            checked=lambda _: obfuscation_preset == "aggressive"),
+        pystray.MenuItem(
+            "Стеелс (полная невидимость)",
+            lambda: _on_obfuscation_preset(preset="stealth"),
+            checked=lambda _: obfuscation_preset == "stealth"),
+    )
+
     # Full menu
     return pystray.Menu(
         pystray.MenuItem(
@@ -1770,7 +1915,23 @@ def _build_menu() -> pystray.Menu | None:
         pystray.MenuItem("Статистика", _on_show_stats),
         pystray.MenuItem("Быстрые DC", dc_submenu),
         pystray.MenuItem("Перезапустить прокси", _on_restart),
-        pystray.MenuItem("Настройки...", _on_edit_config),
+        pystray.Menu.SEPARATOR,
+        # Anticensorship submenu
+        pystray.MenuItem(
+            f"🛡 Обход блокировок: {'Вкл' if is_obfuscation else 'Выкл'}",
+            _on_toggle_obfuscation),
+        pystray.MenuItem(
+            "Режим обфускации",
+            obfuscation_submenu),
+        pystray.MenuItem(
+            f"Domain Fronting: {'Вкл' if is_domain_fronting else 'Выкл'}",
+            _on_toggle_domain_fronting),
+        pystray.MenuItem(
+            f"HTTP/2 Fallback: {'Вкл' if is_http2_fallback else 'Выкл'}",
+            _on_toggle_http2_fallback),
+        pystray.MenuItem(
+            "Мониторинг блокировок",
+            _on_show_censorship_status),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
             f"Уведомления: {'Вкл' if is_notifications else 'Выкл'}",

@@ -162,6 +162,51 @@ DEFAULT_CONFIG = {
     "rate_limit_per_ip": 10,  # Max connections per IP
     "rate_limit_ban_threshold": 5,  # Violations before ban
     "rate_limit_ban_duration": 300.0,  # Ban duration in seconds
+
+    # Anti-censorship settings
+    "anticensorship": {
+        "enabled": False,
+        "preset": "default",
+        "obfuscation": {
+            "enabled": False,
+            "enable_obfs4": True,
+            "enable_shadowsocks": False,
+            "shadowsocks_password": "",
+            "shadowsocks_cipher": "aes-256-gcm",
+            "enable_fragmentation": True,
+            "fragment_min_size": 64,
+            "fragment_max_size": 256,
+            "enable_traffic_shaping": True,
+            "traffic_jitter_ms": [10, 100],
+            "traffic_padding_ratio": 0.1,
+            "enable_tls_spoof": True,
+            "browser_profile": "chrome_120",
+            "enable_domain_fronting": False,
+            "fronting_provider": "cloudflare",
+        },
+        "relay": {
+            "enabled": False,
+            "auto_select": True,
+            "preferred_relay": "",
+            "preferred_region": "",
+            "require_fronting": False,
+            "custom_relays": [],
+        },
+        "http2": {
+            "enable_fallback": True,
+            "prefer_http2": False,
+            "http2_only": False,
+            "path": "/apiws",
+            "timeout": 10.0,
+        },
+        "censorship_detection": {
+            "enabled": True,
+            "auto_switch": True,
+            "failure_threshold": 5,
+            "failure_window": 60,
+            "check_interval": 30,
+        },
+    },
 }
 
 # =============================================================================
