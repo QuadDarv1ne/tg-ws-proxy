@@ -88,30 +88,31 @@ class TestTcpPool:
     @pytest.mark.asyncio
     async def test_tcp_pool_get_empty(self):
         """Test getting connection from empty pool."""
-        pool = _TcpPool(Stats(), max_size=4, max_age=60.0)
+        pool = _TcpPool()
 
-        result = await pool.get("127.0.0.1", 443)
+        result = pool.get("127.0.0.1", 443)
 
         assert result is None
 
     @pytest.mark.asyncio
     async def test_tcp_pool_put_and_get(self):
         """Test putting and getting connection."""
-        pool = _TcpPool(Stats(), max_size=4, max_age=60.0)
+        pool = _TcpPool()
         mock_reader = MagicMock()
         mock_writer = MagicMock()
         mock_writer.is_closing.return_value = False
         mock_writer.transport.is_closing.return_value = False
 
         pool.put("127.0.0.1", 443, mock_reader, mock_writer)
-        result = await pool.get("127.0.0.1", 443)
+        result = pool.get("127.0.0.1", 443)
 
         assert result == (mock_reader, mock_writer)
 
     @pytest.mark.asyncio
     async def test_tcp_pool_expired_connection(self):
         """Test that expired connections are not returned."""
-        pool = _TcpPool(Stats(), max_size=4, max_age=0.1)  # 100ms max age
+        pool = _TcpPool()
+        pool._max_age = 0.1  # 100ms max age
         mock_reader = MagicMock()
         mock_writer = MagicMock()
         mock_writer.is_closing.return_value = False
@@ -119,14 +120,15 @@ class TestTcpPool:
 
         pool.put("127.0.0.1", 443, mock_reader, mock_writer)
         await asyncio.sleep(0.2)  # Wait for expiration
-        result = await pool.get("127.0.0.1", 443)
+        result = pool.get("127.0.0.1", 443)
 
         assert result is None
 
     @pytest.mark.asyncio
     async def test_tcp_pool_max_size(self):
         """Test pool respects max size."""
-        pool = _TcpPool(Stats(), max_size=2, max_age=60.0)
+        pool = _TcpPool()
+        pool._max_size = 2
         mock_writer_closing = MagicMock()
         mock_writer_closing.is_closing.return_value = True
         mock_writer_closing.close = MagicMock()
@@ -136,12 +138,12 @@ class TestTcpPool:
             pool.put("127.0.0.1", 443, MagicMock(), mock_writer_closing)
 
         # Pool should only keep 2
-        assert len(pool._idle.get("127.0.0.1:443", [])) <= 2
+        assert len(pool._idle.get(("127.0.0.1", 443), [])) <= 2
 
     @pytest.mark.asyncio
     async def test_tcp_pool_clear(self):
         """Test clearing the pool."""
-        pool = _TcpPool(Stats(), max_size=4, max_age=60.0)
+        pool = _TcpPool()
         mock_reader = MagicMock()
         mock_writer = MagicMock()
         mock_writer.is_closing.return_value = False
@@ -158,19 +160,20 @@ class TestGetTcpPool:
 
     def teardown_module(self):
         """Reset global pool after tests."""
-        from proxy import tg_ws_proxy
-        tg_ws_proxy._tcp_pool = None
+        # Reset via get_tcp_pool function
+        import proxy.connection_pool as cp
+        cp._tcp_pool = None
 
     def test_get_tcp_pool_lazy_init(self):
         """Test lazy initialization of TCP pool."""
-        from proxy import tg_ws_proxy
-        tg_ws_proxy._tcp_pool = None  # Reset
+        import proxy.connection_pool as cp
+        cp._tcp_pool = None  # Reset
 
         pool = _get_tcp_pool()
 
         assert pool is not None
         assert isinstance(pool, _TcpPool)
-        assert tg_ws_proxy._tcp_pool is pool
+        assert cp._tcp_pool is pool
 
     def test_get_tcp_pool_singleton(self):
         """Test that pool is singleton."""

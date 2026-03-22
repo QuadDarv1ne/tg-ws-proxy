@@ -119,10 +119,11 @@ def test_parse_mtproto_length_short():
 def test_parse_mtproto_length_long():
     """Test parsing long MTProto length."""
     # Length >= 0x7F, use 4 bytes
-    # Length = 100, so total = 4 + 100*4 = 404 bytes
-    data = struct.pack('<I', 100) + b'\x00' * 400
+    # Use 200 (0xC8) which is >= 0x7F to trigger long format
+    # Length = 200, so total = 4 + 200*4 = 804 bytes
+    data = struct.pack('<I', 200) + b'\x00' * 800
     length = parse_mtproto_length(data)
-    assert length == 404
+    assert length == 804
 
 
 def test_parse_mtproto_length_empty():

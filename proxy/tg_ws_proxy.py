@@ -811,7 +811,7 @@ class RawWebSocket:
 
     @staticmethod
     async def connect(ip: str, domain: str, path: str = '/apiws',
-                      timeout: float = 10.0) -> RawWebSocket:
+                      timeout: float = 10.0, compress: bool = False) -> RawWebSocket:
         """
         Connect via TLS to the given IP,
         perform WebSocket upgrade, return a RawWebSocket.
@@ -1321,7 +1321,7 @@ async def _tcp_fallback(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
     # Try to get cached connection
     rr, rw = None, None
-    cached = await tcp_pool.get(dst, port)
+    cached = tcp_pool.get(dst, port)
     if cached:
         rr, rw = cached
         log.debug("[%s] TCP pool hit for %s:%d", label, dst, port)
@@ -1612,7 +1612,7 @@ async def _handle_client(
                          label, dc, media_tag, dst, port, url, target,
                          " [compression]" if compress else "")
                 try:
-                    ws = await RawWebSocket.connect(target, domain,  # type: ignore[arg-type]
+                    ws = await RawWebSocket.connect(target, domain,
                                                     timeout=10, compress=compress)
                     all_redirects = False
                     break
@@ -1717,7 +1717,7 @@ async def _handle_client(
         await ws.send(init)
 
         # Bidirectional bridge
-        await _bridge_ws(reader, writer, ws, label, stats,
+        await _bridge_ws(reader, writer, ws, label, stats,  # type: ignore[arg-type]
                          dc=dc, dst=dst, port=port, is_media=is_media,
                          splitter=splitter)
 
@@ -1965,7 +1965,7 @@ async def _run(
                     _last_dc_switch = now
 
                     # Warmup WS pool for new best DC
-                    asyncio.create_task(server_instance.ws_pool.warmup({best_dc: current_ip}))
+                    server_instance.ws_pool.warmup({best_dc: current_ip})
                     log.info("DC switched to DC%d (new primary)", best_dc)
 
             # Check for high latency and notify
@@ -2032,7 +2032,7 @@ async def _run(
     asyncio.create_task(cleanup_dns_cache())
 
     # Warmup WebSocket pool and start health checker
-    await server_instance.ws_pool.warmup(dc_opt)
+    server_instance.ws_pool.warmup(dc_opt)
     await server_instance.ws_pool.start_health_checker()
     log.info("WS pool health checker started (interval: %.1fs)", server_instance.ws_pool._heartbeat_interval)
 

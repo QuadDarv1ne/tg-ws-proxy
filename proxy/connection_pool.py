@@ -293,7 +293,7 @@ class _WsPool:
 class _TcpPool:
     """TCP connection pool with expiry."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._idle: dict[tuple[str, int], list] = {}
         self._max_size = TCP_POOL_SIZE
         self._max_age = TCP_POOL_MAX_AGE
@@ -343,6 +343,10 @@ class _TcpPool:
                     pass
         self._idle.clear()
 
+    def clear(self) -> None:
+        """Clear all pooled connections."""
+        self._idle.clear()
+
     def get_stats(self) -> dict[str, Any]:
         """Get TCP pool statistics."""
         total = sum(len(b) for b in self._idle.values())
@@ -361,4 +365,4 @@ def get_tcp_pool() -> _TcpPool:
     global _tcp_pool
     if _tcp_pool is None:
         _tcp_pool = _TcpPool()
-    return _tcp_pool  # type: ignore[return-value]
+    return _tcp_pool

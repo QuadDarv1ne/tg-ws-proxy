@@ -5,11 +5,11 @@ from __future__ import annotations
 import struct
 from unittest.mock import MagicMock, patch
 
-from proxy.tg_ws_proxy import (
-    _dc_from_init,
-    _is_http_transport,
-    _is_telegram_ip,
-    _patch_init_dc,
+from proxy.mtproto_parser import (
+    extract_dc_from_init,
+    is_http_transport,
+    is_telegram_ip,
+    patch_init_dc,
 )
 
 
@@ -19,27 +19,27 @@ class TestPacketParsing:
     def test_is_telegram_ip(self):
         """Test Telegram IP detection."""
         # Known Telegram IPs
-        assert _is_telegram_ip("149.154.167.220") is True
-        assert _is_telegram_ip("91.108.4.5") is True
+        assert is_telegram_ip("149.154.167.220") is True
+        assert is_telegram_ip("91.108.4.5") is True
 
         # Non-Telegram IPs
-        assert _is_telegram_ip("8.8.8.8") is False
-        assert _is_telegram_ip("127.0.0.1") is False
+        assert is_telegram_ip("8.8.8.8") is False
+        assert is_telegram_ip("127.0.0.1") is False
 
     def test_is_http_transport(self):
         """Test detection of HTTP transport."""
-        assert _is_http_transport(b"GET / HTTP/1.1\r\n") is True
-        assert _is_http_transport(b"POST /api HTTP/1.1\r\n") is True
-        assert _is_http_transport(b"HEAD / HTTP/1.1\r\n") is True
+        assert is_http_transport(b"GET / HTTP/1.1\r\n") is True
+        assert is_http_transport(b"POST /api HTTP/1.1\r\n") is True
+        assert is_http_transport(b"HEAD / HTTP/1.1\r\n") is True
 
         # MTProto init packet (should not be detected as HTTP)
-        assert _is_http_transport(b"\x00" * 64) is False
+        assert is_http_transport(b"\x00" * 64) is False
 
     def test_dc_from_init_invalid_size(self):
         """Test _dc_from_init with small data."""
-        assert _dc_from_init(b"too small")[0] is None
+        assert extract_dc_from_init(b"too small")[0] is None
 
-    @patch("proxy.tg_ws_proxy.Cipher")
+    @patch("proxy.mtproto_parser.Cipher")
     def test_dc_from_init_success(self, mock_cipher):
         """Test successful DC extraction from init packet."""
         # Create 64-byte init packet
@@ -66,12 +66,12 @@ class TestPacketParsing:
         # Since keystream is zeros, data[56:64] = plain_header XOR 0 = plain_header
         data[56:64] = plain_header
 
-        dc, is_media = _dc_from_init(bytes(data))
+        dc, is_media = extract_dc_from_init(bytes(data))
 
         assert dc == 2
         assert is_media is False
 
-    @patch("proxy.tg_ws_proxy.Cipher")
+    @patch("proxy.mtproto_parser.Cipher")
     def test_patch_init_dc(self, mock_cipher):
         """Test patching DC in init packet."""
         # Create 64-byte init packet
@@ -89,7 +89,7 @@ class TestPacketParsing:
         mock_cipher.return_value.encryptor.return_value = mock_encryptor
 
         # Patching to DC 4
-        patched = _patch_init_dc(bytes(data), 4)
+        patched = patch_init_dc(bytes(data), 4)
 
         # With zero keystream: patched[60] = ks[60] ^ new_dc[0] = 0 ^ 4 = 4
         # new_dc = struct.pack('<h', 4) = b'\x04\x00'

@@ -126,8 +126,8 @@ class RawWebSocket:
         self.writer = writer
         self._closed = False
         self._compress = compress
-        self._compressor = zlib.compressobj(level=6, wbits=-15) if compress else None
-        self._decompressor = zlib.decompressobj(wbits=-15) if compress else None
+        self._compressor: zlib.Compress | None = zlib.compressobj(level=6, wbits=-15) if compress else None
+        self._decompressor: zlib.Decompress | None = zlib.decompressobj(wbits=-15) if compress else None
 
     @staticmethod
     async def connect(

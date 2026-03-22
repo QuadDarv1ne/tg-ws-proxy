@@ -2,10 +2,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from proxy.tg_ws_proxy import (
-    _dc_from_init,
-    _is_telegram_ip,
-    _patch_init_dc,
+from proxy.mtproto_parser import (
+    extract_dc_from_init,
+    is_telegram_ip,
+    patch_init_dc,
 )
 
 
@@ -17,7 +17,7 @@ from proxy.tg_ws_proxy import (
 ])
 def test_is_telegram_ip(ip, expected):
     """Test Telegram IP detection logic."""
-    assert _is_telegram_ip(ip) == expected
+    assert is_telegram_ip(ip) == expected
 
 
 class TestDcHandling:
@@ -25,19 +25,19 @@ class TestDcHandling:
 
     def test_dc_from_init_fail(self):
         """Test DC detection with invalid data."""
-        assert _dc_from_init(b'too short') == (None, False)
+        assert extract_dc_from_init(b'too short') == (None, False)
 
     def test_patch_init_dc(self):
         """Test patching DC ID in init packet."""
         init_data = bytearray(b'A' * 64)
 
-        with patch('proxy.tg_ws_proxy.Cipher') as mock_cipher:
+        with patch('proxy.mtproto_parser.Cipher') as mock_cipher:
             mock_enc = MagicMock()
             mock_cipher.return_value.encryptor.return_value = mock_enc
             # Mock keystream
             mock_enc.update.return_value = b'\x00' * 64
 
-            patched = _patch_init_dc(bytes(init_data), 2)
+            patched = patch_init_dc(bytes(init_data), 2)
 
             # In our mock (keystream 0), patched bytes should be XORed with 2
             # Byte 60-61 are DC offset

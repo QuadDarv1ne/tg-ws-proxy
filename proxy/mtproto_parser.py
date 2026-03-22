@@ -255,7 +255,7 @@ def parse_mtproto_length(data: bytes) -> int | None:
         return 1 + first_byte * 4
     elif len(data) >= 4:
         # Long length: 4 bytes + length * 4
-        length = struct.unpack('<I', data[:4])[0]
+        length: int = struct.unpack('<I', data[:4])[0]
         return 4 + length * 4
 
     return None
