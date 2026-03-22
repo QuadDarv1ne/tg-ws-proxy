@@ -16,6 +16,10 @@ from typing import Any, Callable
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+)
 from .constants import (
     _IP_TO_DC,
     DC_FAIL_COOLDOWN,
@@ -424,6 +428,10 @@ class ProxyServer:
             export_dir=stats_dir
         )
 
+        # Circuit breakers for cascade failure protection
+        self._circuit_breakers: dict[str, CircuitBreaker] = {}
+        self._init_circuit_breakers()
+
         # WebSocket connection pool (lazy initialized)
         self._ws_pool: _WsPool | None = None
 
@@ -556,6 +564,48 @@ class ProxyServer:
         except Exception as e:
             log.warning("Failed to setup rate limiter: %s. Running without rate limiting.", e)
             self.rate_limiter = None
+
+    def _init_circuit_breakers(self) -> None:
+        """Initialize circuit breakers for cascade failure protection."""
+        # Circuit breaker for WebSocket connections
+        self._circuit_breakers['websocket'] = CircuitBreaker(
+            name='websocket',
+            config=CircuitBreakerConfig(
+                failure_threshold=5,
+                success_threshold=3,
+                timeout=30.0,
+                half_open_max_calls=3,
+            ),
+        )
+        # Circuit breaker for TCP connections
+        self._circuit_breakers['tcp'] = CircuitBreaker(
+            name='tcp',
+            config=CircuitBreakerConfig(
+                failure_threshold=10,
+                success_threshold=5,
+                timeout=15.0,
+                half_open_max_calls=5,
+            ),
+        )
+        # Circuit breaker for DNS resolution
+        self._circuit_breakers['dns'] = CircuitBreaker(
+            name='dns',
+            config=CircuitBreakerConfig(
+                failure_threshold=5,
+                success_threshold=3,
+                timeout=60.0,
+                half_open_max_calls=3,
+            ),
+        )
+        log.info("Circuit breakers initialized: websocket, tcp, dns")
+
+    def get_circuit_breaker(self, name: str) -> CircuitBreaker | None:
+        """Get circuit breaker by name."""
+        return self._circuit_breakers.get(name)
+
+    def get_all_circuit_breakers_info(self) -> list[dict]:
+        """Get info for all circuit breakers."""
+        return [cb.get_info() for cb in self._circuit_breakers.values()]
 
     async def _start_rate_limiter(self) -> None:
         """Start rate limiter background tasks."""
