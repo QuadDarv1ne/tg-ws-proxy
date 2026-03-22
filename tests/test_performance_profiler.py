@@ -162,7 +162,7 @@ class TestPerformanceProfiler:
             primitive_calls=80,
             recursive_calls=0,
             top_functions=[
-                ("test.py:1(slow_func)", 10, 0.05, 0.8, 0.08),
+                ("test.py:1(slow_func)", 10, 0.05, 0.8, 0.15),  # percall > 0.1
             ],
             memory_before=0,
             memory_after=0,
