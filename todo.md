@@ -149,7 +149,43 @@
 
 ---
 
-## 🟡 В процессе (v2.53.0: dashboard + stability)
+## ✅ Выполнено (v2.53.0: dashboard metrics + prometheus)
+
+### Мониторинг
+- ✅ **Dashboard Metrics History API** — API для работы с историей метрик
+  - `GET /api/metrics/history` — история метрик с фильтрацией
+    • metric: имя метрики (default: rate_limiter_rps)
+    • hours: временной диапазон (default: 24)
+    • resolution: raw/minute/hour/auto
+    • Response: history, summary (min/max/avg/p50/p95/p99), trend
+  
+  - `GET /api/metrics/history/export` — экспорт данных
+    • format: json/csv
+    • Response: file download
+  
+  - `GET /api/metrics/trend` — анализ трендов
+    • multiple metrics support
+    • Response: trends per metric
+  
+- ✅ **Prometheus Metrics Export** — экспорт метрик rate limiter
+  - `get_prometheus_metrics()` метод
+  - 10 метрик для экспорта:
+    • rate_limiter_active_connections (gauge)
+    • rate_limiter_unique_ips (gauge)
+    • rate_limiter_banned_ips (gauge)
+    • rate_limiter_total_violations (counter)
+    • rate_limiter_ddos_attacks_total (counter)
+    • rate_limiter_flood_attacks_total (counter)
+    • rate_limiter_suspicious_ips (gauge)
+    • rate_limiter_subnets_active (gauge)
+    • rate_limiter_requests_per_minute (gauge)
+    • rate_limiter_flood_rate (gauge)
+  - HELP и TYPE аннотации для каждой метрики
+  - Совместимость с Prometheus exposition format
+
+---
+
+## 🟡 В процессе (v2.54.0: stability + security)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
@@ -164,14 +200,14 @@
 
 ### Мониторинг
 - ✅ **Real-time Dashboard** — улучшение веб-панели с live графиками
-  - `proxy/web_dashboard.py` — 10 новых API endpoints (+186 строк)
+  - `proxy/web_dashboard.py` — SSE stream + Metrics History API
   - Rate Limiter API: stats, metrics, ban, unban
   - Metrics History API: history, summary, trend, export
-  - Tests: 21 passed ✅
+  - Prometheus metrics export
 
 ---
 
-## 📊 Статус (23.03.2026 04:00)
+## 📊 Статус (23.03.2026 04:30)
 
 ```
 Модулей: 38 в proxy/ ✅
@@ -181,12 +217,12 @@ Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.52.0 (Metrics History ✅, Real-time Dashboard ✅)
+Version: v2.53.1 (Dashboard Metrics ✅, Prometheus Export ✅)
 ```
 
-**Актуальная версия:** v2.52.0 (dev) — ✅ synced
-**Следующая версия:** v2.53.0 (HTTP/2 + Stability)
-**Последнее обновление:** 23.03.2026 (04:00)
+**Актуальная версия:** v2.53.1 (dev) — ✅ synced
+**Следующая версия:** v2.54.0 (HTTP/2 + Stability)
+**Последнее обновление:** 23.03.2026 (04:30)
 
 ---
 
