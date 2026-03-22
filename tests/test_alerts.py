@@ -124,7 +124,8 @@ class TestDCLatencyAlerts:
         assert data["metadata"]["latency_ms"] == 175.0
         assert "timestamp" in data
 
-    def test_alert_manager_statistics(self):
+    @pytest.mark.asyncio
+    async def test_alert_manager_statistics(self):
         """Test alert statistics after DC latency alerts."""
         import proxy.alerts
         proxy.alerts._alert_manager = None
@@ -132,10 +133,10 @@ class TestDCLatencyAlerts:
         # Generate some alerts
         alert_dc_latency(1, 175.0)
         alert_dc_latency(2, 250.0)
-        
+
         manager = get_alert_manager()
         stats = manager.get_statistics()
-        
+
         assert "total_alerts" in stats
         assert "alerts_last_hour" in stats
         assert "alerts_last_day" in stats
