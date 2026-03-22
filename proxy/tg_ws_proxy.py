@@ -12,7 +12,7 @@ import ssl
 import struct
 import sys
 import time
-from typing import Callable
+from typing import Any, Callable
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
