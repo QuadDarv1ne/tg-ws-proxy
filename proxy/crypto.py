@@ -50,16 +50,6 @@ class EncryptedData:
 
 
 @dataclass
-class CryptoConfig:
-    """Cryptographic configuration."""
-    algorithm: EncryptionType = EncryptionType.AES_256_GCM
-    key_size: int = 32  # 256 bits
-    nonce_size: int = 12  # 96 bits for GCM
-    tag_size: int = 16  # 128 bits authentication tag
-    kdf_iterations: int = 100_000  # PBKDF2 iterations
-    key_derivation: str = "hkdf"  # hkdf, pbkdf2, or raw
-
-
 class CryptoError(Exception):
     """Base exception for cryptographic errors."""
     pass
@@ -68,6 +58,101 @@ class CryptoError(Exception):
 class DecryptionError(CryptoError):
     """Raised when decryption fails."""
     pass
+
+
+class KeyWrapError(CryptoError):
+    """Raised when key wrapping fails."""
+    pass
+
+
+@dataclass
+class CryptoConfig:
+    """Cryptographic configuration."""
+    algorithm: EncryptionType = EncryptionType.AES_256_GCM
+    key_size: int = 32  # 256 bits
+    nonce_size: int = 12  # 96 bits for GCM
+    tag_size: int = 16  # 128 bits authentication tag
+    kdf_iterations: int = 100_000  # PBKDF2 iterations
+    key_derivation: str = "hkdf"  # hkdf, pbkdf2, or raw
+    kdf_salt_size: int = 16  # salt size for KDF
+    kdf_info: bytes = b"tg-ws-proxy-v1"  # context info for HKDF
+
+
+class KeyWrapError(CryptoError):
+    """Raised when key wrapping fails."""
+    pass
+
+
+class KeyWrapper:
+    """
+    Key Wrapping for secure key storage.
+    
+    Uses AES-256-KW (Key Wrap) or AES-GCM for key encryption.
+    """
+    
+    @staticmethod
+    def wrap(key: bytes, wrapping_key: bytes) -> bytes:
+        """
+        Wrap key using AES-256-GCM.
+        
+        Args:
+            key: Key to wrap
+            wrapping_key: Key encryption key (KEK)
+            
+        Returns:
+            Wrapped key with nonce and tag
+        """
+        if len(wrapping_key) != 32:
+            raise KeyWrapError("Wrapping key must be 32 bytes")
+        
+        nonce = secrets.token_bytes(12)
+        
+        cipher = Cipher(
+            algorithms.AES(wrapping_key),
+            modes.GCM(nonce),
+            backend=default_backend()
+        )
+        encryptor = cipher.encryptor()
+        
+        wrapped = encryptor.update(key) + encryptor.finalize()
+        
+        # Return nonce + tag + wrapped key
+        return nonce + encryptor.tag + wrapped
+    
+    @staticmethod
+    def unwrap(wrapped_data: bytes, wrapping_key: bytes) -> bytes:
+        """
+        Unwrap key using AES-256-GCM.
+        
+        Args:
+            wrapped_data: Wrapped key (nonce + tag + ciphertext)
+            wrapping_key: Key encryption key (KEK)
+            
+        Returns:
+            Unwrapped key
+        """
+        if len(wrapping_key) != 32:
+            raise KeyWrapError("Wrapping key must be 32 bytes")
+        
+        if len(wrapped_data) < 28:  # 12 nonce + 16 tag
+            raise KeyWrapError("Wrapped data too short")
+        
+        nonce = wrapped_data[:12]
+        tag = wrapped_data[12:28]
+        ciphertext = wrapped_data[28:]
+        
+        cipher = Cipher(
+            algorithms.AES(wrapping_key),
+            modes.GCM(nonce, tag),
+            backend=default_backend()
+        )
+        decryptor = cipher.decryptor()
+        
+        try:
+            key = decryptor.update(ciphertext) + decryptor.finalize()
+            return key
+        except Exception as e:
+            raise KeyWrapError(f"Key unwrap failed: {e}") from e
 
 
 class BaseCipher(ABC):
