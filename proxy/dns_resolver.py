@@ -100,7 +100,8 @@ class DNSResolver:
         domain: str,
         port: int = 443,
         timeout: float = 5.0,
-        use_cache: bool = True
+        use_cache: bool = True,
+        aggressive_cache: bool = True  # Новый параметр для агрессивного кэширования
     ) -> list[tuple[str, int]]:
         """
         Resolve domain to IP addresses.
@@ -110,6 +111,7 @@ class DNSResolver:
             port: Target port
             timeout: Resolution timeout
             use_cache: Whether to use cache
+            aggressive_cache: Use extended TTL for known-good domains
 
         Returns:
             List of (ip, port) tuples
@@ -137,7 +139,9 @@ class DNSResolver:
                 self._metrics.total_resolution_time += time.monotonic() - start_time
 
             if ips and use_cache:
-                await self._add_to_cache(domain, ips)
+                # Use aggressive caching for known domains
+                cache_ttl = self._get_aggressive_ttl(domain) if aggressive_cache else self.ttl
+                await self._add_to_cache(domain, ips, ttl=cache_ttl)
 
             return [(ip, port) for ip in ips]
 
@@ -146,6 +150,35 @@ class DNSResolver:
                 self._metrics.failed_queries += 1
             log.debug("DNS resolution failed for %s: %s", domain, e)
             return []
+
+    def _get_aggressive_ttl(self, domain: str) -> float:
+        """
+        Get extended TTL for known-good domains.
+
+        Telegram domains are stable and can be cached longer.
+
+        Args:
+            domain: Domain name
+
+        Returns:
+            Extended TTL in seconds
+        """
+        # Known stable domains - cache for 1 hour
+        stable_domains = [
+            'telegram.org',
+            'telesco.pe',
+            't.me',
+            'web.telegram.org',
+            'graph.org',
+            'cdn-telegram.org',
+        ]
+
+        for stable in stable_domains:
+            if domain.endswith(stable) or stable in domain:
+                return 3600.0  # 1 hour for stable domains
+
+        # Default TTL for other domains
+        return self.ttl
 
     async def _get_from_cache(self, domain: str) -> list[str] | None:
         """
@@ -172,16 +205,17 @@ class DNSResolver:
 
         return None
 
-    async def _add_to_cache(self, domain: str, ips: list[str]) -> None:
+    async def _add_to_cache(self, domain: str, ips: list[str], ttl: float | None = None) -> None:
         """
         Add IPs to cache.
 
         Args:
             domain: Domain name
             ips: List of IP addresses
+            ttl: Custom TTL in seconds (optional)
         """
         now = time.monotonic()
-        expiry = now + self.ttl
+        expiry = now + (ttl if ttl is not None else self.ttl)
 
         async with self._lock:
             # Evict oldest entry if cache is full
@@ -194,7 +228,7 @@ class DNSResolver:
                 log.debug("DNS cache evicted: %s", oldest_domain)
 
             self._cache[domain] = DNSCacheEntry(ips=ips, expiry=expiry)
-            log.debug("DNS cached %s -> %s (TTL: %ds)", domain, ips, int(self.ttl))
+            log.debug("DNS cached %s -> %s (TTL: %ds)", domain, ips, int(ttl if ttl else self.ttl))
 
     async def _resolve_direct(self, domain: str, timeout: float) -> list[str]:
         """

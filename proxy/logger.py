@@ -111,7 +111,7 @@ class PerformanceLogger:
         matching = [m for m in self._metrics if m['operation'] == operation]
         if not matching:
             return None
-        return sum(m['duration_ms'] for m in matching) / len(matching)
+        return sum(m['duration_ms'] for m in matching) / len(matching)  # type: ignore[no-any-return]
 
     def get_metrics(self) -> list[dict[str, Any]]:
         """Get all performance metrics."""
