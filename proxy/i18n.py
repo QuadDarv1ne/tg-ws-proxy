@@ -11,7 +11,7 @@ import os
 from typing import Literal
 
 # Supported languages
-Language = Literal["ru", "en"]
+Language = Literal["ru", "en", "zh"]
 
 # Default language
 DEFAULT_LANGUAGE: Language = "ru"
@@ -203,6 +203,99 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "pwa_install_desc": "Add to home screen for quick access",
         "pwa_dismiss": "Dismiss",
     },
+
+    "zh": {
+        # App title and header
+        "app_title": "TG WS Proxy — 控制面板",
+        "app_name": "TG WS Proxy",
+        "app_description": "Telegram Desktop 的本地 SOCKS5 代理",
+
+        # Status
+        "status_ok": "运行正常",
+        "status_degraded": "性能下降",
+        "status_unhealthy": "无法工作",
+        "status_online": "在线",
+        "status_offline": "离线",
+
+        # Statistics
+        "stat_total_connections": "总连接数",
+        "stat_ws_connections": "WebSocket",
+        "stat_tcp_connections": "TCP 回退",
+        "stat_pool_efficiency": "池效率",
+        "stat_traffic": "流量",
+        "stat_bytes_up": "上传",
+        "stat_bytes_down": "下载",
+        "stat_cpu_usage": "CPU",
+        "stat_memory_usage": "内存",
+        "stat_active_connections": "活动连接",
+        "stat_errors": "错误",
+        "stat_latency": "延迟",
+
+        # DC Stats
+        "dc_stats_title": "DC 统计",
+        "dc_id": "DC",
+        "dc_connections": "连接",
+        "dc_latency": "延迟",
+        "dc_error_rate": "错误率",
+        "dc_optimal": "✓ 最佳",
+
+        # Settings
+        "settings_title": "设置",
+        "settings_host": "主机",
+        "settings_port": "端口",
+        "settings_dc_ip": "DC IP 地址",
+        "settings_verbose": "详细日志",
+        "settings_save": "保存",
+        "settings_cancel": "取消",
+        "settings_restart": "重启",
+
+        # Actions
+        "action_refresh": "刷新",
+        "action_export_csv": "导出 CSV",
+        "action_export_json": "导出 JSON",
+        "action_copy_config": "复制配置",
+        "action_qr_code": "二维码",
+        "action_logs": "日志",
+        "action_settings": "设置",
+        "action_exit": "退出",
+
+        # Notifications
+        "notify_update_available": "新版本可用：{version}",
+        "notify_update_download": "下载",
+        "notify_update_later": "稍后",
+        "notify_copied": "已复制",
+        "notify_saved": "已保存",
+        "notify_error": "错误",
+
+        # Live logs
+        "logs_title": "实时日志",
+        "logs_ws_success": "WS 连接",
+        "logs_tcp_fallback": "TCP 回退",
+        "logs_http_rejected": "HTTP 已拒绝",
+        "logs_passthrough": "直通",
+
+        # Health
+        "health_status": "状态",
+        "health_uptime": "运行时间",
+        "health_last_check": "最后检查",
+
+        # Time
+        "time_just_now": "刚刚",
+        "time_minutes_ago": "{min} 分钟前",
+        "time_hours_ago": "{hours} 小时前",
+        "time_days_ago": "{days} 天前",
+
+        # Errors
+        "error_load_stats": "加载统计失败",
+        "error_connection": "连接错误",
+        "error_timeout": "超时",
+        "error_unknown": "未知错误",
+
+        # PWA
+        "pwa_install": "安装应用",
+        "pwa_install_desc": "添加到主屏幕以快速访问",
+        "pwa_dismiss": "关闭",
+    },
 }
 
 
@@ -250,6 +343,7 @@ class I18n:
         names = {
             "ru": "Русский",
             "en": "English",
+            "zh": "中文",
         }
         return names.get(language, language)
 
