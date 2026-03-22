@@ -135,7 +135,7 @@
 
 ---
 
-## 📊 Статус (22.03.2026 18:30)
+## 📊 Статус (22.03.2026 19:00)
 
 ```
 Модулей: 33 в proxy/ ✅
@@ -148,9 +148,9 @@ RuntimeWarnings: 0 ✅
 Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
 ```
 
-**Актуальная версия:** v2.43.0 (dev) — ✅ refactoring complete, alerting added
+**Актуальная версия:** v2.43.0 (dev) — ✅ refactoring complete, alerting added, ruff clean
 **Следующая версия:** v2.44.0 (merge to main + coverage improvement)
-**Последнее обновление:** 22.03.2026 (18:30)
+**Последнее обновление:** 22.03.2026 (19:00)
 
 ---
 
@@ -345,11 +345,12 @@ Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
 - **Модулей:** 33 в `proxy/` (+8 новых модулей)
 - **Тестов:** 31 файл в `tests/` (+7 новых тестовых файлов)
 - **Покрытие:** ~50% (+10% за счёт новых тестов)
-- **Ruff:** 0 ошибок ✅
+- **Ruff:** 0 ошибок ✅ (исправлено 29 ошибок форматирования)
 - **Mypy:** 0 ошибок ✅
 - **RuntimeWarnings:** 0 ✅
 - **Платформы:** Windows, Linux, macOS, Android
-- **Рефакторинг:** tg_ws_proxy.py уменьшен с 2600 до 1400 строк (-46%) ✅
+- **Рефакторинг:** tg_ws_proxy.py уменьшен с 2600 до 1940 строк (-25%) ✅
+- **Код качество:** Все проверки линтеров пройдены ✅
 
 ---
 
@@ -376,7 +377,7 @@ Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
 
 ---
 
-**Последнее обновление:** 22.03.2026 18:30
+**Последнее обновление:** 22.03.2026 19:00
 **Автор:** Dupley Maxim Igorevich
 
 ## 📈 Прогресс v2.43.0
@@ -386,9 +387,10 @@ Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
 2. ✅ Рефакторинг завершён (4 новых модуля)
 3. ✅ Добавлено 95+ новых тестов
 4. ✅ Покрытие увеличено с 40% до 50%
-5. ✅ tg_ws_proxy.py уменьшен на 46%
+5. ✅ tg_ws_proxy.py уменьшен на 25% (2600 → 1940 строк)
 6. ✅ Alerting система для DC latency
 7. ✅ Все изменения синхронизированы в dev
+8. ✅ Исправлены все ошибки ruff (29 ошибок → 0)
 
 ### Готово к merge в main:
 - ✅ Все тесты проходят (570+)
@@ -396,6 +398,7 @@ Version: v2.43.0 (MTProto Parser ✅, Alerting ✅, Refactoring Complete ✅)
 - ✅ Mypy: 0 ошибок
 - ✅ RuntimeWarnings: 0
 - ✅ Код review готов
+- ✅ Все изменения синхронизированы с origin/dev
 
 ### Следующие шаги:
 1. Merge dev → main
