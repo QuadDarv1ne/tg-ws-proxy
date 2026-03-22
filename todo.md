@@ -154,12 +154,29 @@
 
 ---
 
-## ✅ Выполнено (v2.47.0: code quality + stability)
+## ✅ Выполнено (v2.48.0: configuration system + settings)
 
 ### Качество кода
 - ✅ **Ruff: 0 ошибок** — все проверки пройдены ✅
 - ✅ **Mypy: 0 ошибок** — все type annotations корректны ✅
-- ✅ **Tests: 620 passed** — все тесты проходят ✅ (620 passed, 7 skipped)
+- ✅ **Tests: 642 passed** — все тесты проходят ✅ (642 passed, 7 skipped)
+
+### Система конфигурации
+- ✅ **Config Manager** — загрузка из JSON/YAML файлов
+  - `proxy/config.py` — система управления конфигурацией
+  - `config.default.json` — конфигурация по умолчанию
+  - `tests/test_config.py` — 22 теста для конфигурации
+- ✅ **Dataclasses** — типизированные настройки:
+  - `ServerConfig` — настройки сервера (host, port, max connections)
+  - `WebSocketConfig` — настройки WebSocket (pool size, compression, ping)
+  - `DNSConfig` — настройки DNS (cache, TTL, async resolver)
+  - `SecurityConfig` — настройки безопасности (auth, whitelist, rate limiting)
+  - `PerformanceConfig` — настройки производительности (buffer sizes, profiling)
+  - `LoggingConfig` — настройки логирования (level, file, audit)
+  - `MonitoringConfig` — настройки мониторинга (metrics, alerts, Prometheus)
+- ✅ **Environment Overrides** — переопределение через переменные окружения (TGWS_*)
+- ✅ **Hot Reload** — авто-перезагрузка конфигурации при изменении файла
+- ✅ **DC Override** — переопределение Data Center адресов
 
 ### Стабильность
 - ✅ **Import sorting** — исправлен порядок импортов в `tg_ws_proxy.py`
@@ -168,7 +185,7 @@
 
 ---
 
-## 🟡 В процессе (v2.48.0: integration tests + coverage)
+## 🟡 В процессе (v2.49.0: integration tests + coverage)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
@@ -207,22 +224,22 @@
 
 ---
 
-## 📊 Статус (22.03.2026 23:45)
+## 📊 Статус (23.03.2026 00:30)
 
 ```
-Модулей: 34 в proxy/ ✅
-Тестов: 32 файла в tests/ ✅
-Tests: 620 passed, 7 skipped ✅
-Coverage: ~55% (цель >80%)
+Модулей: 35 в proxy/ ✅
+Тестов: 33 файла в tests/ ✅
+Tests: 642 passed, 7 skipped ✅
+Coverage: ~57% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.47.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
+Version: v2.48.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
 ```
 
-**Актуальная версия:** v2.47.0 (main/dev) — ✅ synced
-**Следующая версия:** v2.48.0 (integration tests + coverage)
-**Последнее обновление:** 22.03.2026 (23:45)
+**Актуальная версия:** v2.48.0 (main/dev) — ✅ synced
+**Следующая версия:** v2.49.0 (integration tests + coverage)
+**Последнее обновление:** 23.03.2026 (00:30)
 
 ---
 
