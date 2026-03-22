@@ -7,6 +7,27 @@ plugins {
 
 apply from: "variables.gradle"
 
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                if (it.hasProperty('buildTypes')) {
+                    buildTypes {
+                        release {
+                            if (it.hasProperty('proguardFiles')) {
+                                def files = proguardFiles
+                                if (files.contains('proguard-android.txt')) {
+                                    proguardFiles files.collect { it == 'proguard-android.txt' ? 'proguard-android-optimize.txt' : it }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
