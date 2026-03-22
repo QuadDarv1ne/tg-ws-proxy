@@ -149,14 +149,73 @@
 
 ---
 
-## 🟡 В процессе (v2.53.0: dashboard + stability)
+## ✅ Выполнено (v2.53.0: dashboard metrics + prometheus)
+
+### Мониторинг
+- ✅ **Dashboard Metrics History API** — API для работы с историей метрик
+  - `GET /api/metrics/history` — история метрик с фильтрацией
+    • metric: имя метрики (default: rate_limiter_rps)
+    • hours: временной диапазон (default: 24)
+    • resolution: raw/minute/hour/auto
+    • Response: history, summary (min/max/avg/p50/p95/p99), trend
+  
+  - `GET /api/metrics/history/export` — экспорт данных
+    • format: json/csv
+    • Response: file download
+  
+  - `GET /api/metrics/trend` — анализ трендов
+    • multiple metrics support
+    • Response: trends per metric
+  
+- ✅ **Prometheus Metrics Export** — экспорт метрик rate limiter
+  - `get_prometheus_metrics()` метод
+  - 10 метрик для экспорта:
+    • rate_limiter_active_connections (gauge)
+    • rate_limiter_unique_ips (gauge)
+    • rate_limiter_banned_ips (gauge)
+    • rate_limiter_total_violations (counter)
+    • rate_limiter_ddos_attacks_total (counter)
+    • rate_limiter_flood_attacks_total (counter)
+    • rate_limiter_suspicious_ips (gauge)
+    • rate_limiter_subnets_active (gauge)
+    • rate_limiter_requests_per_minute (gauge)
+    • rate_limiter_flood_rate (gauge)
+  - HELP и TYPE аннотации для каждой метрики
+  - Совместимость с Prometheus exposition format
+
+---
+
+## 🟡 В процессе (v2.54.0: stability + security)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
 ### Безопасность
-- [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
+- ✅ **Аудит зависимостей** — `pip-audit` интеграция в CI
+  - `.github/workflows/ci.yml` — enhanced security workflow
+  - `scripts/security_audit.py` — локальный аудит безопасности
+  - `SECURITY.md` — security policy документ
+
+  **CI/CD Security:**
+  • pip-audit + safety dual checking
+  • JSON report generation (30-day retention)
+  • Dev requirements auditing
+  • Artifact upload for security reports
+
+  **Local Security Audit:**
+  • pip-audit integration с JSON отчётом
+  • safety check для дополнительной проверки
+  • Автоматическая установка инструментов
+  • Поддержка multiple requirements файлов
+  • Report generation (security-audit-report.json)
+
+  **Security Policy:**
+  • Vulnerability reporting guidelines (48h response)
+  • Security best practices для пользователей и разработчиков
+  • Automated scanning instructions
+  • Dependency management policy (Critical: 24h, High: 7d)
+  • Security checklist для релизов
 
 ### Тестирование
 - [ ] **Coverage Improvement** — увеличение покрытия с 55% до 60%
@@ -164,14 +223,14 @@
 
 ### Мониторинг
 - ✅ **Real-time Dashboard** — улучшение веб-панели с live графиками
-  - `proxy/web_dashboard.py` — 10 новых API endpoints (+186 строк)
+  - `proxy/web_dashboard.py` — SSE stream + Metrics History API
   - Rate Limiter API: stats, metrics, ban, unban
   - Metrics History API: history, summary, trend, export
-  - Tests: 21 passed ✅
+  - Prometheus metrics export
 
 ---
 
-## 📊 Статус (23.03.2026 04:00)
+## 📊 Статус (23.03.2026 05:00)
 
 ```
 Модулей: 38 в proxy/ ✅
@@ -181,12 +240,12 @@ Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.52.0 (Metrics History ✅, Real-time Dashboard ✅)
+Version: v2.53.1 (Security Audit ✅, Dashboard Metrics ✅)
 ```
 
-**Актуальная версия:** v2.52.0 (dev) — ✅ synced
-**Следующая версия:** v2.53.0 (HTTP/2 + Stability)
-**Последнее обновление:** 23.03.2026 (04:00)
+**Актуальная версия:** v2.53.1 (dev) — ✅ synced
+**Следующая версия:** v2.54.0 (HTTP/2 + Stability)
+**Последнее обновление:** 23.03.2026 (05:00)
 
 ---
 

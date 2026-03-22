@@ -2854,6 +2854,111 @@ class WebDashboard:
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 
+        @self.app.route('/api/metrics/history')
+        def api_metrics_history() -> Response:
+            """Get metrics history with optional filtering."""
+            try:
+                from .metrics_history import get_metrics_history
+                
+                metric_name = request.args.get('metric', 'rate_limiter_rps')
+                hours = float(request.args.get('hours', '24'))
+                resolution = request.args.get('resolution', 'auto')
+                
+                metrics = get_metrics_history()
+                history = metrics.get_metric_history(metric_name, hours, resolution=resolution)
+                summary = metrics.get_metric_summary(metric_name, hours)
+                trend = metrics.get_trend(metric_name, hours)
+                
+                return jsonify({
+                    'status': 'success',
+                    'metric_name': metric_name,
+                    'time_range_hours': hours,
+                    'data_points': len(history),
+                    'history': history,
+                    'summary': {
+                        'count': summary.count if summary else 0,
+                        'min': summary.min_value if summary else 0,
+                        'max': summary.max_value if summary else 0,
+                        'avg': summary.avg_value if summary else 0,
+                        'p50': summary.p50_value if summary else 0,
+                        'p95': summary.p95_value if summary else 0,
+                        'p99': summary.p99_value if summary else 0,
+                    } if summary else None,
+                    'trend': trend,
+                })
+            except Exception as e:
+                log.error("Metrics history API error: %s", e)
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/metrics/history/export')
+        def api_metrics_history_export() -> Response:
+            """Export metrics history to JSON or CSV."""
+            try:
+                from .metrics_history import get_metrics_history
+                
+                metric_name = request.args.get('metric', 'rate_limiter_rps')
+                hours = float(request.args.get('hours', '24'))
+                format_type = request.args.get('format', 'json')
+                
+                metrics = get_metrics_history()
+                
+                if format_type == 'csv':
+                    filepath = metrics.export_to_csv(metric_name, hours)
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    return Response(
+                        content,
+                        mimetype='text/csv',
+                        headers={'Content-Disposition': f'attachment; filename={metric_name}_history.csv'}
+                    )
+                else:
+                    filepath = metrics.export_to_json(metric_name, hours)
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    return Response(
+                        content,
+                        mimetype='application/json',
+                        headers={'Content-Disposition': f'attachment; filename={metric_name}_history.json'}
+                    )
+            except Exception as e:
+                log.error("Metrics export API error: %s", e)
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/metrics/trend')
+        def api_metrics_trend() -> Response:
+            """Get trend analysis for multiple metrics."""
+            try:
+                from .metrics_history import get_metrics_history
+                
+                hours = float(request.args.get('hours', '24'))
+                metrics_list = request.args.getlist('metric')
+                
+                if not metrics_list:
+                    metrics_list = [
+                        'rate_limiter_rps',
+                        'rate_limiter_cps',
+                        'rate_limiter_violations',
+                        'rate_limiter_bans',
+                    ]
+                
+                metrics = get_metrics_history()
+                trends = {}
+                
+                for metric_name in metrics_list:
+                    trend = metrics.get_trend(metric_name, hours)
+                    trends[metric_name] = trend
+                
+                return jsonify({
+                    'status': 'success',
+                    'time_range_hours': hours,
+                    'trends': trends,
+                })
+            except Exception as e:
+                log.error("Metrics trend API error: %s", e)
+                return jsonify({'error': str(e)}), 500
+
         @self.app.route('/metrics')
         def prometheus_metrics() -> Response:
             """

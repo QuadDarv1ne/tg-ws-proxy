@@ -92,12 +92,39 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install pip-audit
-        run: pip install pip-audit
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install pip-audit safety
 
       - name: Run pip-audit
-        run: pip-audit -r requirements.txt --desc
+        run: |
+          echo "=== Running pip-audit ==="
+          pip-audit -r requirements.txt --desc -f json > pip-audit-results.json || true
+          pip-audit -r requirements.txt --desc
         continue-on-error: true
+
+      - name: Run pip-audit (dev requirements)
+        run: |
+          echo "=== Running pip-audit (dev) ==="
+          pip-audit -r requirements-dev.txt --desc || true
+        continue-on-error: true
+
+      - name: Run Safety check
+        run: |
+          echo "=== Running Safety check ==="
+          safety check -r requirements.txt || true
+          safety check -r requirements-dev.txt || true
+        continue-on-error: true
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-report
+          path: pip-audit-results.json
+          retention-days: 30
 
   build-test:
     name: Build Test

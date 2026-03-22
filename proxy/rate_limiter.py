@@ -610,6 +610,78 @@ class RateLimiter:
             "suspicious_ips": suspicious_count,
         }
 
+    def get_prometheus_metrics(self) -> str:
+        """
+        Export rate limiter metrics in Prometheus format.
+        
+        Returns:
+            String with Prometheus metrics exposition format
+        """
+        now = time.time()
+        lines = []
+        stats = self.get_global_stats()
+        
+        # Active connections
+        lines.append('# HELP rate_limiter_active_connections Current number of active connections')
+        lines.append('# TYPE rate_limiter_active_connections gauge')
+        lines.append(f'rate_limiter_active_connections {stats["total_active_connections"]}')
+        lines.append('')
+        
+        # Unique IPs
+        lines.append('# HELP rate_limiter_unique_ips Number of unique IPs seen')
+        lines.append('# TYPE rate_limiter_unique_ips gauge')
+        lines.append(f'rate_limiter_unique_ips {stats["unique_ips"]}')
+        lines.append('')
+        
+        # Banned IPs
+        lines.append('# HELP rate_limiter_banned_ips Number of currently banned IPs')
+        lines.append('# TYPE rate_limiter_banned_ips gauge')
+        lines.append(f'rate_limiter_banned_ips {stats["banned_ips"]}')
+        lines.append('')
+        
+        # Total violations
+        lines.append('# HELP rate_limiter_total_violations Total number of rate limit violations')
+        lines.append('# TYPE rate_limiter_total_violations counter')
+        lines.append(f'rate_limiter_total_violations {stats["total_violations"]}')
+        lines.append('')
+        
+        # DDoS attacks detected
+        lines.append('# HELP rate_limiter_ddos_attacks_total Number of DDoS attacks detected')
+        lines.append('# TYPE rate_limiter_ddos_attacks_total counter')
+        lines.append(f'rate_limiter_ddos_attacks_total {stats["ddos_attacks_detected"]}')
+        lines.append('')
+        
+        # Flood attacks detected
+        lines.append('# HELP rate_limiter_flood_attacks_total Number of flood attacks detected')
+        lines.append('# TYPE rate_limiter_flood_attacks_total counter')
+        lines.append(f'rate_limiter_flood_attacks_total {stats["flood_attacks_detected"]}')
+        lines.append('')
+        
+        # Suspicious IPs
+        lines.append('# HELP rate_limiter_suspicious_ips Number of IPs with suspicious score')
+        lines.append('# TYPE rate_limiter_suspicious_ips gauge')
+        lines.append(f'rate_limiter_suspicious_ips {stats["suspicious_ips"]}')
+        lines.append('')
+        
+        # Active subnets
+        lines.append('# HELP rate_limiter_subnets_active Number of active subnets')
+        lines.append('# TYPE rate_limiter_subnets_active gauge')
+        lines.append(f'rate_limiter_subnets_active {stats["subnets_active"]}')
+        lines.append('')
+        
+        # Requests per minute
+        lines.append('# HELP rate_limiter_requests_per_minute Requests in the last minute')
+        lines.append('# TYPE rate_limiter_requests_per_minute gauge')
+        lines.append(f'rate_limiter_requests_per_minute {stats["requests_last_minute"]}')
+        lines.append('')
+        
+        # Connection flood rate (CPS)
+        lines.append('# HELP rate_limiter_flood_rate Current connection flood rate (per second)')
+        lines.append('# TYPE rate_limiter_flood_rate gauge')
+        lines.append(f'rate_limiter_flood_rate {stats["connection_flood_rate"]}')
+        
+        return '\n'.join(lines)
+
     def record_request(self, ip: str, success: bool = True) -> None:
         """Record request for metrics tracking."""
         stats = self._ip_stats[ip]
