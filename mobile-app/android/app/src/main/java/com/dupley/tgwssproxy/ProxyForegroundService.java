@@ -206,11 +206,11 @@ public class ProxyForegroundService extends Service {
     private void updateNotificationWithStats() {
         try {
             Python py = Python.getInstance();
-            PyObject stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
-            PyObject portObj = stats.get(py.getBuiltins().get("str").call("port"));
-            PyObject connObj = stats.get(py.getBuiltins().get("str").call("connections_ws"));
-            PyObject upObj = stats.get(py.getBuiltins().get("str").call("bytes_up"));
-            PyObject downObj = stats.get(py.getBuiltins().get("str").call("bytes_down"));
+            Map<Object, PyObject> stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
+            PyObject portObj = stats.get("port");
+            PyObject connObj = stats.get("connections_ws");
+            PyObject upObj = stats.get("bytes_up");
+            PyObject downObj = stats.get("bytes_down");
             
             if (portObj == null || connObj == null) return;
 

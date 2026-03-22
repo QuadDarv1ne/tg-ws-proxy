@@ -77,11 +77,10 @@ public class ProxyPlugin extends Plugin {
             GenerativeModel gm = new GenerativeModel("gemini-1.5-flash", apiKey);
             GenerativeModelFutures model = GenerativeModelFutures.from(gm);
 
-            String prompt = "На основе этой статистики прокси: " + stats.toString() + 
+            Content content = new Content.Builder().addText("На основе этой статистики прокси: " + stats.toString() + 
                            "\nСделай предиктивный анализ: есть ли риск обрыва соединения или блокировки? " +
-                           "Ответь очень кратко на русском.";
-
-            Content content = new Content.Builder().addText(prompt).build();
+                           "Ответь очень кратко на русском.").build();
+            
             ListenableFuture<GenerateContentResponse> response = model.generateContent(content);
             Futures.addCallback(response, new FutureCallback<GenerateContentResponse>() {
                 @Override
@@ -182,18 +181,28 @@ public class ProxyPlugin extends Plugin {
         try {
             if (Python.isStarted()) {
                 PyObject statsObj = Python.getInstance().getModule("android_entry").callAttr("get_proxy_stats_dict");
-                Map<PyObject, PyObject> statsMap = statsObj.asMap();
-                for (Map.Entry<PyObject, PyObject> entry : statsMap.entrySet()) {
+                Map<Object, PyObject> statsMap = statsObj.asMap();
+                for (Map.Entry<Object, PyObject> entry : statsMap.entrySet()) {
                     String key = entry.getKey().toString();
                     PyObject val = entry.getValue();
+                    
                     if (val.isInstance(Python.getInstance().getBuiltins().get("list"))) {
                         JSArray jsArray = new JSArray();
                         for (PyObject item : val.asList()) jsArray.put(item.toString());
                         ret.put(key, jsArray);
-                    } else if (val.isTrue() || val.isFalse()) ret.put(key, val.toBoolean());
-                    else if (val.isInstance(Python.getInstance().getBuiltins().get("int"))) ret.put(key, val.toInt());
-                    else if (val.isInstance(Python.getInstance().getBuiltins().get("float"))) ret.put(key, val.toDouble());
-                    else ret.put(key, val.toString());
+                    } else if (val.callAttr("__bool__").toBoolean() && (val.toString().equals("True") || val.toString().equals("False"))) {
+                        ret.put(key, val.toBoolean());
+                    } else {
+                        try {
+                            ret.put(key, val.toInt());
+                        } catch (Exception e1) {
+                            try {
+                                ret.put(key, val.toDouble());
+                            } catch (Exception e2) {
+                                ret.put(key, val.toString());
+                            }
+                        }
+                    }
                 }
             } else ret.put("error", "Python not started");
         } catch (Exception e) { ret.put("error", e.getMessage()); }

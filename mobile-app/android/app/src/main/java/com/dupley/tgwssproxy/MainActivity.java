@@ -55,7 +55,6 @@ public class MainActivity extends BridgeActivity {
         
         setupCrashReporting();
         syncSystemTheme();
-        registerPlugin(ProxyPlugin.class);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         handleIntent(getIntent());
@@ -71,7 +70,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         IntentFilter filter = new IntentFilter(ACTION_STATUS_UPDATE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -83,7 +82,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onPause() {
+    public void onPause() {
         super.onPause();
         unregisterReceiver(statusReceiver);
     }
@@ -92,7 +91,10 @@ public class MainActivity extends BridgeActivity {
         if (bridge != null && bridge.getWebView() != null) {
             JSObject data = new JSObject();
             data.put("status", isRunning ? "running" : "stopped");
-            bridge.triggerWindowStageEvent("proxyStatusChanged", data.toString());
+            bridge.getWebView().post(() -> bridge.getWebView().evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('proxyStatusChanged', {detail: " + data.toString() + "}))", 
+                null
+            ));
         }
     }
 
@@ -182,7 +184,10 @@ public class MainActivity extends BridgeActivity {
             JSObject config = new JSObject();
             config.put("server", server);
             config.put("port", Integer.parseInt(port));
-            bridge.triggerWindowStageEvent("deepLinkConfig", config.toString());
+            bridge.getWebView().post(() -> bridge.getWebView().evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('deepLinkConfig', {detail: " + config.toString() + "}))", 
+                null
+            ));
         }
     }
 
