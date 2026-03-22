@@ -28,39 +28,60 @@
 
 ---
 
-## ✅ Выполнено (v2.49.0: health check + autotune integration)
+## ✅ Выполнено (v2.49.0: functional improvements)
 
 ### Надёжность
 - ✅ **Health Check Enhancement** — агрессивная проверка мёртвых соединений
-  - Интервал health check уменьшен с 45с до 30с (нормальный режим)
-  - Агрессивный режим: 15с интервал при обнаружении проблем
+  - Интервал health check: 30с (нормальный), 15с (агрессивный режим)
   - Timeout адаптируется: 5с → 3с в агрессивном режиме
   - Обнаружение stale соединений (>2 минут без активности)
-  - Трекинг последней активности для каждого соединения
+  - Трекинг последней активности для каждого соединения (`_last_activity`)
   - Трекинг consecutive failures для каждого DC
   - Автоматическое включение aggressive mode при >5 failures
   - Очистка старых failed connections (5 минут)
+  - Статистика в `get_stats()`: aggressive_mode, consecutive_failures, failed_connections_recent
 
 ### Производительность
-- ✅ **Connection Timeout Tuning** — интеграция с AutoTuner
-  - `proxy/autotune.py` — авто-тюнинг на основе latency
-  - Адаптивные таймауты для health check (на основе tuned timeout)
-  - Синхронизация pool optimization с autotuner
-  - Запись performance samples в autotuner
-  - Статистика autotune в `get_stats()`
-  - Запуск autotuner при старте сервера (BALANCED mode)
-  - Корректная остановка autotuner при shutdown
+- ✅ **Adaptive Timeout Tuning** — адаптивные таймауты на основе latency
+  - `tg_ws_proxy.py`: `_update_adaptive_timeout()`, `get_adaptive_timeout()`, `get_adaptive_timeout_stats()`
+  - Динамический расчёт: timeout = max(base, min(max, avg_latency * multiplier))
+  - Rolling window последних 100 замеров latency
+  - Smooth transition (изменения только при >1s разнице)
+  - Интеграция в `asyncio.open_connection` (TCP fallback и passthrough)
+  - Статистика в `get_optimization_config()`: adaptive_timeout stats
+
+### Безопасность
+- ✅ **E2E Encryption** — локальное шифрование трафика между клиентом и прокси
+  - `proxy/e2e_encryption.py` — новый модуль (470+ строк)
+  - X25519 ECDH key exchange для сессионных ключей
+  - HKDF key derivation (SHA256, 256-bit keys)
+  - AES-256-GCM authenticated encryption
+  - Replay attack protection (nonce tracking)
+  - Session management с automatic key rotation (10000 messages)
+  - Session timeout (1 hour) и cleanup
+  - Handshake protocol с server signature verification
+  - API: `get_e2e()`, `init_e2e()`, `E2EEncryption` класс
+
+### Мониторинг
+- ✅ **Diagnostic Report** — расширенная диагностика с экспортом
+  - `proxy/diagnostics_advanced.py` — новый модуль (550+ строк)
+  - Full connectivity testing: DNS, TCP, WebSocket
+  - Health assessment: 5 уровней (EXCELLENT, GOOD, DEGRADED, CRITICAL, DOWN)
+  - Automated recommendations engine
+  - Export to JSON/CSV форматы
+  - Historical data tracking (last 100 reports)
+  - Network interface discovery
+  - DC-specific testing с latency measurement
+  - API: `get_diagnostics()`, `DiagnosticsAdvanced` класс
 
 ### Интеграция
-- ✅ **AutoTuner + ConnectionPool** — полная интеграция
-  - `connection_pool.py` использует `get_autotuner()`
-  - Адаптивный timeout для health check (50% от tuned timeout, cap 10s)
-  - Performance samples записываются при оптимизации пула
-  - Статистика autotune доступна в pool stats
+- ✅ **Code Quality** — type annotations в `autotune.py`
+  - Добавлены аннотации для `_current_pool_size`, `_current_timeout_ms`, `_current_max_retries`
+  - Аннотации для `_tuning_applied_count`, `_running`
 
 ---
 
-## 🟡 В процессе (v2.49.0: integration tests + coverage)
+## 🟡 В процессе (v2.50.0: dashboard + stability)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
