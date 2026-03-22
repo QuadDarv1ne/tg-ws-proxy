@@ -5,4 +5,4 @@ Author: Dupley Maxim Igorevich
 © 2026 Dupley Maxim Igorevich. All rights reserved.
 """
 
-__version__ = "2.43.0"
+__version__ = "2.57.0"
