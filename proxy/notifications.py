@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import smtplib
+from asyncio import Coroutine
 from dataclasses import dataclass, field
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -263,7 +264,7 @@ Metadata:
 class NotificationManager:
     """Centralized notification management."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._notifiers: list[TelegramBotNotifier | DiscordWebhookNotifier | EmailNotifier] = []
         self._notification_history: list[Notification] = []
         self._max_history = 100
@@ -297,7 +298,7 @@ class NotificationManager:
             return False
 
         # Send to all notifiers
-        tasks = []
+        tasks: list[Coroutine[Any, Any, bool]] = []
         for notifier in self._notifiers:
             tasks.append(notifier.send(notification))
 

@@ -85,7 +85,7 @@ class AlertThreshold:
 class AlertManager:
     """Centralized alert management system."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.alerts: list[Alert] = []
         self.alert_history: list[Alert] = []
         self.max_history = 1000

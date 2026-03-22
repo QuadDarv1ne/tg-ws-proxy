@@ -286,7 +286,7 @@ class LoggingPlugin(Plugin):
 class MetricsPlugin(Plugin):
     """Plugin for collecting metrics."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._metrics: dict[str, Any] = {
             "connections": 0,
             "disconnections": 0,
