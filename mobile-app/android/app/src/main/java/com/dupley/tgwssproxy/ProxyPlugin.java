@@ -181,16 +181,16 @@ public class ProxyPlugin extends Plugin {
         try {
             if (Python.isStarted()) {
                 PyObject statsObj = Python.getInstance().getModule("android_entry").callAttr("get_proxy_stats_dict");
-                Map<Object, PyObject> statsMap = statsObj.asMap();
-                for (Map.Entry<Object, PyObject> entry : statsMap.entrySet()) {
+                Map<PyObject, PyObject> statsMap = statsObj.asMap();
+                for (Map.Entry<PyObject, PyObject> entry : statsMap.entrySet()) {
                     String key = entry.getKey().toString();
                     PyObject val = entry.getValue();
                     
-                    if (val.isInstance(Python.getInstance().getBuiltins().get("list"))) {
+                    if (val.callAttr("__class__").toString().contains("list")) {
                         JSArray jsArray = new JSArray();
                         for (PyObject item : val.asList()) jsArray.put(item.toString());
                         ret.put(key, jsArray);
-                    } else if (val.callAttr("__bool__").toBoolean() && (val.toString().equals("True") || val.toString().equals("False"))) {
+                    } else if (val.callAttr("__class__").toString().contains("bool")) {
                         ret.put(key, val.toBoolean());
                     } else {
                         try {

@@ -16,6 +16,8 @@ import androidx.annotation.RequiresApi;
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
 
+import java.util.Map;
+
 @RequiresApi(api = Build.VERSION_CODES.N)
 public class ProxyTileService extends TileService {
     private static final String TAG = "ProxyTile";
@@ -100,10 +102,16 @@ public class ProxyTileService extends TileService {
         try {
             if (!Python.isStarted()) return null;
             Python py = Python.getInstance();
-            PyObject stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
+            Map<PyObject, PyObject> stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
             
-            PyObject speedUp = stats.get(py.getBuiltins().get("str").call("speed_up"));
-            PyObject speedDown = stats.get(py.getBuiltins().get("str").call("speed_down"));
+            PyObject speedUp = null;
+            PyObject speedDown = null;
+
+            for (Map.Entry<PyObject, PyObject> entry : stats.entrySet()) {
+                String key = entry.getKey().toString();
+                if (key.equals("speed_up")) speedUp = entry.getValue();
+                else if (key.equals("speed_down")) speedDown = entry.getValue();
+            }
             
             if (speedUp != null && speedDown != null) {
                 Object[] upList = speedUp.asList().toArray();

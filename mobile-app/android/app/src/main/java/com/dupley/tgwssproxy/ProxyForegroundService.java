@@ -206,11 +206,20 @@ public class ProxyForegroundService extends Service {
     private void updateNotificationWithStats() {
         try {
             Python py = Python.getInstance();
-            Map<Object, PyObject> stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
-            PyObject portObj = stats.get("port");
-            PyObject connObj = stats.get("connections_ws");
-            PyObject upObj = stats.get("bytes_up");
-            PyObject downObj = stats.get("bytes_down");
+            Map<PyObject, PyObject> stats = py.getModule("android_entry").callAttr("get_proxy_stats_dict").asMap();
+            
+            PyObject portObj = null;
+            PyObject connObj = null;
+            PyObject upObj = null;
+            PyObject downObj = null;
+
+            for (Map.Entry<PyObject, PyObject> entry : stats.entrySet()) {
+                String key = entry.getKey().toString();
+                if (key.equals("port")) portObj = entry.getValue();
+                else if (key.equals("connections_ws")) connObj = entry.getValue();
+                else if (key.equals("bytes_up")) upObj = entry.getValue();
+                else if (key.equals("bytes_down")) downObj = entry.getValue();
+            }
             
             if (portObj == null || connObj == null) return;
 

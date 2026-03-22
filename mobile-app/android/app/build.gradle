@@ -33,7 +33,6 @@ android {
                 src false
                 pip true
             }
-            // Optimization for v2.38.0
             extractPackages "cryptography", "psutil", "zeroconf"
         }
     }
@@ -54,7 +53,9 @@ android {
     sourceSets {
         main {
             python {
-                srcDirs = ["src/main/python", "../../../proxy"]
+                srcDirs = ["src/main/python", "../../.."]
+                include "android_entry.py"
+                include "proxy/**"
             }
         }
     }
