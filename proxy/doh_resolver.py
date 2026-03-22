@@ -30,18 +30,50 @@ class DoHProvider:
     priority: int = 0  # Lower = higher priority
     timeout: float = 5.0
     enabled: bool = True
-    
+
     # Statistics
     success_count: int = 0
     failure_count: int = 0
     last_success: float = 0.0
     last_failure: float = 0.0
     
+    # Latency tracking
+    latency_samples: list[float] = field(default_factory=list)
+    avg_latency_ms: float = 0.0
+
     @property
     def success_rate(self) -> float:
         """Calculate success rate."""
         total = self.success_count + self.failure_count
         return self.success_count / total if total > 0 else 1.0
+    
+    def record_latency(self, latency_ms: float) -> None:
+        """Record latency sample."""
+        self.latency_samples.append(latency_ms)
+        # Keep last 10 samples
+        if len(self.latency_samples) > 10:
+            self.latency_samples.pop(0)
+        # Calculate average
+        self.avg_latency_ms = sum(self.latency_samples) / len(self.latency_samples)
+    
+    def get_score(self) -> float:
+        """
+        Calculate provider score for selection.
+        
+        Lower score = better provider.
+        Combines success rate, latency, and priority.
+        """
+        # Base score from priority
+        score = self.priority * 10.0
+        
+        # Adjust by success rate (0-10 penalty)
+        score += (1.0 - self.success_rate) * 10.0
+        
+        # Adjust by latency (0-5 penalty for >100ms)
+        if self.avg_latency_ms > 100:
+            score += min(5.0, (self.avg_latency_ms - 100) / 100)
+        
+        return score
 
 
 @dataclass
@@ -76,7 +108,7 @@ class DNSOverHTTPSResolver:
     """
     
     # Default DoH providers
-    DEFAULT_PROVIDERS: list[DoHProvider] = field(default_factory=lambda: [
+    DEFAULT_PROVIDERS = [
         DoHProvider(
             name="Cloudflare",
             url="https://cloudflare-dns.com/dns-query",
@@ -92,7 +124,7 @@ class DNSOverHTTPSResolver:
             url="https://dns.quad9.net/dns-query",
             priority=3,
         ),
-    ])
+    ]
     
     def __init__(
         self,
@@ -101,30 +133,36 @@ class DNSOverHTTPSResolver:
         max_cache_size: int = 1000,
         enable_dnssec: bool = False,
         fallback_to_system: bool = True,
+        bootstrap_dns: list[str] | None = None,
     ):
         """
         Initialize DoH resolver.
-        
+
         Args:
             providers: List of DoH providers (uses defaults if None)
             cache_ttl: Default cache TTL in seconds
             max_cache_size: Maximum cache entries
             enable_dnssec: Enable DNSSEC validation
             fallback_to_system: Fallback to system DNS on DoH failure
+            bootstrap_dns: Initial DNS servers for DoH hostname resolution
         """
-        self.providers = providers or self.DEFAULT_PROVIDERS.copy()
+        self.providers = providers.copy() if providers else [p for p in self.DEFAULT_PROVIDERS]
         self.cache_ttl = cache_ttl
         self.max_cache_size = max_cache_size
         self.enable_dnssec = enable_dnssec
         self.fallback_to_system = fallback_to_system
-        
+        self.bootstrap_dns = bootstrap_dns or ['1.1.1.1', '8.8.8.8', '9.9.9.9']
+
         # Cache
         self._cache: dict[str, DNSCacheEntry] = {}
         self._cache_lock = asyncio.Lock()
-        
+
         # HTTP session (lazy initialized)
         self._session: Any = None
         
+        # Bootstrap DNS cache (pre-resolved DoH hostnames)
+        self._bootstrap_cache: dict[str, list[str]] = {}
+
         # Statistics
         self._total_queries = 0
         self._cache_hits = 0
@@ -132,12 +170,13 @@ class DNSOverHTTPSResolver:
         self._doh_failure = 0
         self._fallback_success = 0
         self._fallback_failure = 0
-        
+
         log.info(
-            "DoH resolver initialized: %d providers, DNSSEC=%s, fallback=%s",
+            "DoH resolver initialized: %d providers, DNSSEC=%s, fallback=%s, bootstrap=%s",
             len(self.providers),
             enable_dnssec,
-            fallback_to_system
+            fallback_to_system,
+            self.bootstrap_dns
         )
     
     async def _get_session(self) -> Any:
@@ -145,25 +184,157 @@ class DNSOverHTTPSResolver:
         if self._session is None:
             try:
                 import aiohttp  # type: ignore[import-not-found]
-                
+
                 # Create session with connection pooling
                 timeout = aiohttp.ClientTimeout(total=10)
                 self._session = aiohttp.ClientSession(timeout=timeout)
-                
+
                 log.debug("DoH aiohttp session created")
             except ImportError:
                 log.warning("aiohttp not available, DoH will use urllib")
                 self._session = None
-        
+
         return self._session
     
+    async def pre_resolve_hosts(self) -> dict[str, list[str]]:
+        """
+        Pre-resolve DoH provider hostnames.
+        
+        This helps avoid chicken-and-egg problem when you need DNS
+        to resolve the DoH provider hostname.
+        
+        Returns:
+            Dict mapping hostnames to IP addresses
+        """
+        import re
+        
+        hostnames = set()
+        for provider in self.providers:
+            # Extract hostname from URL
+            match = re.search(r'https?://([^/]+)', provider.url)
+            if match:
+                hostnames.add(match.group(1))
+        
+        results = {}
+        for hostname in hostnames:
+            try:
+                # Use bootstrap DNS
+                loop = asyncio.get_event_loop()
+                ips = await loop.getaddrinfo(hostname, 443, family=2)  # AF_INET
+                ip_list = list({r[4][0] for r in ips})
+                results[hostname] = ip_list
+                self._bootstrap_cache[hostname] = ip_list
+                log.debug("Pre-resolved %s -> %s", hostname, ip_list)
+            except Exception as e:
+                log.warning("Failed to pre-resolve %s: %s", hostname, e)
+        
+        return results
+    
+    def get_bootstrap_cache(self) -> dict[str, list[str]]:
+        """Get bootstrap DNS cache."""
+        return self._bootstrap_cache.copy()
+    
+    def clear_bootstrap_cache(self) -> None:
+        """Clear bootstrap DNS cache."""
+        self._bootstrap_cache.clear()
+        log.debug("Bootstrap DNS cache cleared")
+
     async def close(self) -> None:
         """Close HTTP session."""
         if self._session:
             await self._session.close()
             self._session = None
             log.debug("DoH session closed")
+
+    def get_stats(self) -> dict[str, Any]:
+        """
+        Get resolver statistics.
+        
+        Returns:
+            Dict with statistics
+        """
+        # Calculate totals
+        total_doh = self._doh_success + self._doh_failure
+        doh_success_rate = self._doh_success / total_doh if total_doh > 0 else 1.0
+        
+        total_fallback = self._fallback_success + self._fallback_failure
+        fallback_success_rate = self._fallback_success / total_fallback if total_fallback > 0 else 1.0
+        
+        return {
+            'total_queries': self._total_queries,
+            'cache_hits': self._cache_hits,
+            'cache_hit_rate': self._cache_hits / self._total_queries if self._total_queries > 0 else 0.0,
+            'doh_success': self._doh_success,
+            'doh_failure': self._doh_failure,
+            'doh_success_rate': doh_success_rate,
+            'fallback_success': self._fallback_success,
+            'fallback_failure': self._fallback_failure,
+            'fallback_success_rate': fallback_success_rate,
+            'providers': len(self.providers),
+            'cache_size': len(self._cache),
+        }
     
+    def get_provider_stats(self) -> list[dict[str, Any]]:
+        """
+        Get statistics for each provider.
+        
+        Returns:
+            List of provider statistics
+        """
+        stats = []
+        for provider in self.providers:
+            stats.append({
+                'name': provider.name,
+                'url': provider.url,
+                'enabled': provider.enabled,
+                'priority': provider.priority,
+                'success_count': provider.success_count,
+                'failure_count': provider.failure_count,
+                'success_rate': provider.success_rate,
+                'avg_latency_ms': provider.avg_latency_ms,
+                'score': provider.get_score(),
+            })
+        return stats
+    
+    def add_provider(self, provider: DoHProvider) -> None:
+        """Add new DoH provider."""
+        self.providers.append(provider)
+        log.info("Added DoH provider: %s", provider.name)
+    
+    def remove_provider(self, name: str) -> bool:
+        """Remove provider by name."""
+        for i, p in enumerate(self.providers):
+            if p.name == name:
+                del self.providers[i]
+                log.info("Removed DoH provider: %s", name)
+                return True
+        return False
+    
+    def enable_provider(self, name: str) -> bool:
+        """Enable provider by name."""
+        for p in self.providers:
+            if p.name == name:
+                p.enabled = True
+                log.info("Enabled DoH provider: %s", name)
+                return True
+        return False
+    
+    def disable_provider(self, name: str) -> bool:
+        """Disable provider by name."""
+        for p in self.providers:
+            if p.name == name:
+                p.enabled = False
+                log.info("Disabled DoH provider: %s", name)
+                return True
+        return False
+    
+    def get_best_provider(self) -> DoHProvider | None:
+        """Get best provider by score."""
+        enabled = [p for p in self.providers if p.enabled]
+        if not enabled:
+            return None
+        return min(enabled, key=lambda p: p.get_score())
+
     async def resolve(
         self,
         domain: str,
@@ -195,39 +366,44 @@ class DNSOverHTTPSResolver:
                 self._cache_hits += 1
                 log.debug("DoH cache hit for %s: %s", domain, cached)
                 return [(ip, port) for ip in cached]
-        
-        # Try DoH providers in priority order
+
+        # Try DoH providers in score order (best first)
         sorted_providers = sorted(
             [p for p in self.providers if p.enabled],
-            key=lambda p: p.priority
+            key=lambda p: p.get_score()
         )
-        
+
         last_error: Exception | None = None
-        
+
         for provider in sorted_providers:
+            start_time = time.monotonic()
             try:
                 ips = await self._query_provider(provider, domain, timeout)
-                
+
                 if ips:
+                    # Record latency
+                    latency_ms = (time.monotonic() - start_time) * 1000
+                    provider.record_latency(latency_ms)
+                    
                     provider.success_count += 1
                     provider.last_success = time.monotonic()
                     self._doh_success += 1
-                    
+
                     # Cache results
                     await self._add_to_cache(domain, ips, self.cache_ttl)
-                    
+
                     log.debug(
-                        "DoH resolved %s via %s: %s",
-                        domain, provider.name, ips
+                        "DoH resolved %s via %s: %s (%.1fms)",
+                        domain, provider.name, ips, latency_ms
                     )
                     return [(ip, port) for ip in ips]
-                
+
             except Exception as e:
                 provider.failure_count += 1
                 provider.last_failure = time.monotonic()
                 self._doh_failure += 1
                 last_error = e
-                
+
                 log.debug(
                     "DoH provider %s failed for %s: %s",
                     provider.name, domain, e

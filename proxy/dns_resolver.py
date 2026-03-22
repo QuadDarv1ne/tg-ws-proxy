@@ -61,6 +61,7 @@ class DNSResolver:
     - TTL-based caching
     - Metrics tracking
     - aiodns support (optional)
+    - DNS-over-HTTPS fallback (optional)
     - Thread-safe operations
     """
 
@@ -68,7 +69,8 @@ class DNSResolver:
         self,
         ttl: float = 300.0,
         max_cache_size: int = 1000,
-        enable_metrics: bool = True
+        enable_metrics: bool = True,
+        use_doh_fallback: bool = True,
     ):
         """
         Initialize DNS resolver.
@@ -77,15 +79,18 @@ class DNSResolver:
             ttl: Cache TTL in seconds
             max_cache_size: Maximum cache entries
             enable_metrics: Enable metrics tracking
+            use_doh_fallback: Use DoH fallback on DNS failure
         """
         self.ttl = ttl
         self.max_cache_size = max_cache_size
         self.enable_metrics = enable_metrics
+        self.use_doh_fallback = use_doh_fallback
 
         self._cache: dict[str, DNSCacheEntry] = {}
         self._lock = asyncio.Lock()
         self._metrics = DNSMetrics()
         self._aiodns_resolver: Any = None
+        self._doh_resolver: Any = None
 
         # Try to initialize aiodns
         try:
@@ -94,6 +99,16 @@ class DNSResolver:
             log.debug("aiodns resolver initialized")
         except ImportError:
             log.debug("aiodns not available, using asyncio.getaddrinfo()")
+        
+        # Initialize DoH fallback if enabled
+        if self.use_doh_fallback:
+            try:
+                from .doh_resolver import get_doh_resolver
+                self._doh_resolver = get_doh_resolver()
+                log.debug("DoH fallback resolver initialized")
+            except Exception as e:
+                log.debug("DoH fallback not available: %s", e)
+                self._doh_resolver = None
 
     async def resolve(
         self,
@@ -149,6 +164,20 @@ class DNSResolver:
             if self.enable_metrics:
                 self._metrics.failed_queries += 1
             log.debug("DNS resolution failed for %s: %s", domain, e)
+            
+            # Try DoH fallback if enabled
+            if self.use_doh_fallback and self._doh_resolver:
+                log.info("Trying DoH fallback for %s", domain)
+                try:
+                    doh_result = await self._doh_resolver.resolve(domain, port, timeout)
+                    if doh_result:
+                        log.info("DoH fallback succeeded for %s: %s", domain, doh_result)
+                        if use_cache:
+                            await self._add_to_cache(domain, [ip for ip, _ in doh_result], ttl=60.0)
+                        return doh_result
+                except Exception as doh_error:
+                    log.debug("DoH fallback failed for %s: %s", domain, doh_error)
+            
             return []
 
     def _get_aggressive_ttl(self, domain: str) -> float:

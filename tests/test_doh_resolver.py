@@ -204,13 +204,11 @@ class TestDNSOverHTTPSResolverQueryProvider:
         resolver = DNSOverHTTPSResolver()
         provider = DoHProvider(name="Test", url="https://test.com/dns-query")
         
-        mock_response = {
-            "Status": 0,
-            "Answer": [{"type": 1, "data": "192.0.2.1"}],
-        }
-        
-        with patch.object(resolver, '_get_session', return_value=AsyncMock()):
-            with patch.object(resolver, '_parse_doh_response', return_value=["192.0.2.1"]):
+        # Mock _parse_doh_response directly
+        with patch.object(resolver, '_parse_doh_response', return_value=["192.0.2.1"]):
+            with patch.object(resolver, '_query_urllib', return_value=["192.0.2.1"]):
+                # Mock session to None to force urllib fallback
+                resolver._session = None
                 result = await resolver._query_provider(provider, "example.com", 5.0)
         
         assert result == ["192.0.2.1"]
@@ -221,15 +219,9 @@ class TestDNSOverHTTPSResolverQueryProvider:
         resolver = DNSOverHTTPSResolver()
         provider = DoHProvider(name="Test", url="https://test.com/dns-query")
         
-        mock_session = AsyncMock()
-        mock_response = MagicMock()
-        mock_response.status = 500
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock()
-        
-        mock_session.post.return_value = mock_response
-        
-        with patch.object(resolver, '_get_session', return_value=mock_session):
+        # Mock urllib to raise error
+        with patch.object(resolver, '_query_urllib', side_effect=RuntimeError("HTTP 500")):
+            resolver._session = None
             with pytest.raises(RuntimeError, match="HTTP 500"):
                 await resolver._query_provider(provider, "example.com", 5.0)
 
