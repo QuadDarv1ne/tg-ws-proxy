@@ -6,7 +6,13 @@
 
 ---
 
-## ✅ Выполнено (v2.38.0)
+## ✅ Выполнено (v2.39.0)
+
+### Refactoring
+- ✅ websocket_client.py — выделен RawWebSocket и WsHandshakeError
+- ✅ socks5_handler.py — выделен SOCKS5 handler
+- ✅ test_websocket_client.py — тесты WebSocket клиента
+- ✅ test_socks5_handler.py — тесты SOCKS5 handler
 
 ### Performance & Stability
 - ✅ Zero-copy буферизация WebSocket
@@ -35,7 +41,7 @@
 
 ---
 
-## 🟡 В процессе (v2.39.0: optimization & resilience)
+## 🟡 В процессе (v2.40.0: optimization & resilience)
 
 ### Производительность
 - [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP (R&D)
@@ -67,11 +73,11 @@ Tests: 476 passed, 7 skipped, 0 errors ✅
 Coverage: ~40% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 15 ошибок (type annotations, Any usage)
-Version: v2.38.0 (sync complete ✅)
+Version: v2.39.0 (sync complete ✅)
 ```
 
-**Актуальная версия:** v2.38.0 (main) — ✅ merged
-**Следующая версия:** v2.39.0 (planning)
+**Актуальная версия:** v2.39.0 (main) — ✅ merged
+**Следующая версия:** v2.40.0 (planning)
 
 ---
 
@@ -141,7 +147,7 @@ Version: v2.38.0 (sync complete ✅)
 
 ---
 
-## 🔴 Высокий приоритет (v2.38.0: Performance & Android)
+## 🔴 Высокий приоритет (v2.39.0: Refactoring & Testing)
 
 ### [ПЛАН РЕАЛИЗАЦИИ: 15 ШАГОВ]
 1.  [x] **Dev Env Sync**: Тесты и окружение готовы.
@@ -152,13 +158,13 @@ Version: v2.38.0 (sync complete ✅)
 6.  [x] **Crash Watchdog**: Внедрен авто-рестарт.
 7.  [x] **DoH Integration**: DNS over HTTPS.
 8.  [x] **Pool Tests**: Тесты переполнения и очистки пула.
-9.  [ ] **HTTP/2 Multiplexing**: (Перенесено в v2.39).
-10. [x] **VpnService Routing**: Нативный TUN-интерфейс на Android.
+9.  [x] **WebSocket Client**: Выделен websocket_client.py ✅
+10. [x] **SOCKS5 Handler**: Выделен socks5_handler.py ✅
 11. [x] **Dynamic Tile**: Живая статистика скорости в шторке.
 12. [x] **Auto-TLS**: Локальное шифрование сертификатами.
 13. [x] **Memory Profiling**: Поиск утечек в пуле ✅
 14. [x] **CI Validation**: Ruff/Mypy/Pytest (476 тестов ✅).
-15. [x] **Release**: Merge dev -> main ✅ (v2.38.0).
+15. [x] **Release**: Merge dev -> main ✅ (v2.39.0).
 
 ### ✅ Исправлено v2.38.0
 - [x] **test_profiler.py::test_start_stop** — добавлен @pytest.mark.asyncio
