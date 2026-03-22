@@ -546,22 +546,22 @@
 
 ---
 
-## 📊 Статус (23.03.2026 16:30)
+## 📊 Статус (22.03.2026 00:00)
 
 ```
 Модулей: 48 в proxy/ ✅
-Тестов: 35 файлов в tests/ ✅
+Тестов: 38 файлов в tests/ ✅
 Tests: 678 passed, 7 skipped ✅
 Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.56.0 (Proxy Chain ✅, Cloudflare ✅, MTProto ✅, Anti-censorship ✅)
+Version: v2.57.0 (Gaming Console ✅, i18n CN ✅, Proxy Chain ✅, Anti-censorship ✅)
 ```
 
-**Актуальная версия:** v2.56.0 (dev) — ✅ synced
-**Следующая версия:** v2.57.0 (Integration Tests + Coverage Improvement)
-**Последнее обновление:** 23.03.2026 (16:30)
+**Актуальная версия:** v2.57.0 (dev) — ✅ synced
+**Следующая версия:** v2.58.0 (Integration Tests + Coverage Improvement)
+**Последнее обновление:** 22.03.2026 (00:00)
 
 ---
 
