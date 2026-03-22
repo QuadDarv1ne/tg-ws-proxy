@@ -132,7 +132,7 @@ class DNSResolver:
         start_time = time.monotonic()
         try:
             ips = await self._resolve_direct(domain, timeout)
-            
+
             if self.enable_metrics:
                 self._metrics.total_resolution_time += time.monotonic() - start_time
 

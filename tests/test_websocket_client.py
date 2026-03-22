@@ -77,10 +77,10 @@ def test_xor_mask():
     """Test XOR masking function."""
     data = b'Hello, World!'
     mask = b'\x12\x34\x56\x78'
-    
+
     masked = _xor_mask(data, mask)
     assert masked != data
-    
+
     # Masking twice should return original
     unmasked = _xor_mask(masked, mask)
     assert unmasked == data
@@ -103,7 +103,7 @@ async def test_websocket_send():
 
     written = writer.get_written_data()
     assert len(written) > 0
-    
+
     # Check frame structure
     assert written[0] == 0x82  # FIN=1, OPCODE=BINARY
     assert written[1] & 0x80 == 0x80  # MASK=1
@@ -121,7 +121,7 @@ async def test_websocket_send_batch():
 
     written = writer.get_written_data()
     assert len(written) > 0
-    
+
     # Should contain multiple frames
     # Each frame starts with 0x82 (FIN=1, OPCODE=BINARY)
     assert written.count(b'\x82') == 3
@@ -136,7 +136,7 @@ async def test_websocket_recv_binary():
         0x82,  # FIN=1, OPCODE=BINARY
         len(payload)  # Length
     ]) + payload
-    
+
     reader = MockStreamReader(frame)
     writer = MockStreamWriter()
     ws = RawWebSocket(reader, writer)
@@ -153,7 +153,7 @@ async def test_websocket_recv_close():
         0x88,  # FIN=1, OPCODE=CLOSE
         0x00   # Length=0
     ])
-    
+
     reader = MockStreamReader(frame)
     writer = MockStreamWriter()
     ws = RawWebSocket(reader, writer)
@@ -171,12 +171,12 @@ async def test_websocket_recv_ping():
         0x89,  # FIN=1, OPCODE=PING
         0x04   # Length=4
     ]) + b'ping'
-    
+
     binary_frame = bytes([
         0x82,  # FIN=1, OPCODE=BINARY
         0x04   # Length=4
     ]) + b'data'
-    
+
     reader = MockStreamReader(ping_frame + binary_frame)
     writer = MockStreamWriter()
     ws = RawWebSocket(reader, writer)
@@ -184,7 +184,7 @@ async def test_websocket_recv_ping():
     # Should skip ping and return binary data
     data = await ws.recv()
     assert data == b'data'
-    
+
     # Check that pong was sent
     written = writer.get_written_data()
     assert len(written) > 0
@@ -202,7 +202,7 @@ async def test_websocket_close():
 
     assert ws._closed
     assert writer.closed
-    
+
     # Check that close frame was sent
     written = writer.get_written_data()
     assert len(written) > 0
@@ -230,7 +230,7 @@ async def test_websocket_recv_incomplete():
         0x82,  # FIN=1, OPCODE=BINARY
         0x04   # Length=4 (but no payload)
     ])
-    
+
     reader = MockStreamReader(frame)
     writer = MockStreamWriter()
     ws = RawWebSocket(reader, writer)
@@ -245,7 +245,7 @@ async def test_websocket_build_frame_small():
     """Test building small frame (<126 bytes)."""
     payload = b'small'
     frame = RawWebSocket._build_frame(RawWebSocket.OP_BINARY, payload, mask=False)
-    
+
     assert frame[0] == 0x82  # FIN=1, OPCODE=BINARY
     assert frame[1] == len(payload)
     assert frame[2:] == payload
@@ -256,7 +256,7 @@ async def test_websocket_build_frame_medium():
     """Test building medium frame (126-65535 bytes)."""
     payload = b'x' * 200
     frame = RawWebSocket._build_frame(RawWebSocket.OP_BINARY, payload, mask=False)
-    
+
     assert frame[0] == 0x82  # FIN=1, OPCODE=BINARY
     assert frame[1] == 126   # Extended length indicator
     length = struct.unpack('>H', frame[2:4])[0]
@@ -268,7 +268,7 @@ async def test_websocket_build_frame_large():
     """Test building large frame (>65535 bytes)."""
     payload = b'x' * 70000
     frame = RawWebSocket._build_frame(RawWebSocket.OP_BINARY, payload, mask=False)
-    
+
     assert frame[0] == 0x82  # FIN=1, OPCODE=BINARY
     assert frame[1] == 127   # Extended length indicator
     length = struct.unpack('>Q', frame[2:10])[0]
@@ -278,7 +278,7 @@ async def test_websocket_build_frame_large():
 def test_ws_handshake_error():
     """Test WsHandshakeError exception."""
     error = WsHandshakeError(404, "Not Found", {"location": "/new"}, "/new")
-    
+
     assert error.status_code == 404
     assert error.status_line == "Not Found"
     assert error.location == "/new"
@@ -288,7 +288,7 @@ def test_ws_handshake_error():
 def test_ws_handshake_error_redirect():
     """Test WsHandshakeError with redirect."""
     error = WsHandshakeError(302, "Found", {"location": "/redirect"}, "/redirect")
-    
+
     assert error.is_redirect
     assert error.location == "/redirect"
 
@@ -301,12 +301,12 @@ async def test_websocket_recv_pong():
         0x8A,  # FIN=1, OPCODE=PONG
         0x00   # Length=0
     ])
-    
+
     binary_frame = bytes([
         0x82,  # FIN=1, OPCODE=BINARY
         0x04   # Length=4
     ]) + b'data'
-    
+
     reader = MockStreamReader(pong_frame + binary_frame)
     writer = MockStreamWriter()
     ws = RawWebSocket(reader, writer)

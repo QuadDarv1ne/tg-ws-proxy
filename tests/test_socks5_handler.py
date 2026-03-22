@@ -15,7 +15,6 @@ from proxy.socks5_handler import (
     Socks5AddressType,
     Socks5Command,
     Socks5Handler,
-    Socks5Method,
     Socks5Reply,
     build_socks5_reply,
 )
@@ -59,7 +58,7 @@ async def test_negotiate_success():
     """Test successful SOCKS5 negotiation."""
     # Client greeting: VER=5, NMETHODS=1, METHOD=0 (NO_AUTH)
     client_data = bytes([0x05, 0x01, 0x00])
-    
+
     reader = MockStreamReader(client_data)
     writer = MockStreamWriter()
     handler = Socks5Handler(reader, writer)
@@ -67,7 +66,7 @@ async def test_negotiate_success():
     result = await handler.negotiate()
 
     assert result is True
-    
+
     # Check server response: VER=5, METHOD=0
     response = writer.get_written_data()
     assert response == bytes([0x05, 0x00])
@@ -78,7 +77,7 @@ async def test_negotiate_invalid_version():
     """Test negotiation with invalid SOCKS version."""
     # Invalid version: VER=4
     client_data = bytes([0x04, 0x01, 0x00])
-    
+
     reader = MockStreamReader(client_data)
     writer = MockStreamWriter()
     handler = Socks5Handler(reader, writer)
@@ -93,7 +92,7 @@ async def test_negotiate_no_acceptable_method():
     """Test negotiation with no acceptable method."""
     # Client only supports GSSAPI (0x01)
     client_data = bytes([0x05, 0x01, 0x01])
-    
+
     reader = MockStreamReader(client_data)
     writer = MockStreamWriter()
     handler = Socks5Handler(reader, writer)
@@ -101,7 +100,7 @@ async def test_negotiate_no_acceptable_method():
     result = await handler.negotiate()
 
     assert result is False
-    
+
     # Check server response: VER=5, METHOD=0xFF (NO_ACCEPTABLE)
     response = writer.get_written_data()
     assert response == bytes([0x05, 0xFF])
@@ -117,7 +116,7 @@ async def test_read_request_ipv4():
         149, 154, 167, 220,       # IPv4 address
         0x01, 0xBB                # Port 443
     ])
-    
+
     reader = MockStreamReader(request_data)
     writer = MockStreamWriter()
     handler = Socks5Handler(reader, writer)
@@ -141,7 +140,7 @@ async def test_read_request_domain():
         0x05, 0x01, 0x00, 0x03,  # Header
         len(domain)               # Domain length
     ]) + domain + bytes([0x01, 0xBB])  # Port 443
-    
+
     reader = MockStreamReader(request_data)
     writer = MockStreamWriter()
     handler = Socks5Handler(reader, writer)
@@ -164,7 +163,7 @@ async def test_read_request_invalid_command():
         127, 0, 0, 1,             # IPv4 address
         0x00, 0x50                # Port 80
     ])
-    
+
     reader = MockStreamReader(request_data)
     writer = MockStreamWriter()
     handler = Socks5Handler(reader, writer)
@@ -172,7 +171,7 @@ async def test_read_request_invalid_command():
     request = await handler.read_request()
 
     assert request is None
-    
+
     # Check that error reply was sent
     response = writer.get_written_data()
     assert len(response) > 0
@@ -189,7 +188,7 @@ async def test_send_reply_success():
     await handler.send_reply(Socks5Reply.SUCCESS, '127.0.0.1', 1080)
 
     response = writer.get_written_data()
-    
+
     # Check response format
     assert response[0] == 0x05  # SOCKS5 version
     assert response[1] == Socks5Reply.SUCCESS
@@ -228,7 +227,7 @@ async def test_send_failure():
 def test_build_socks5_reply():
     """Test legacy build_socks5_reply function."""
     reply = build_socks5_reply(Socks5Reply.SUCCESS)
-    
+
     assert len(reply) == 10
     assert reply[0] == 0x05  # SOCKS5 version
     assert reply[1] == Socks5Reply.SUCCESS
@@ -257,7 +256,7 @@ async def test_read_request_incomplete():
         0x05, 0x01, 0x00, 0x01,  # Header
         127, 0, 0, 1              # IPv4 address (missing port)
     ])
-    
+
     reader = MockStreamReader(request_data)
     writer = MockStreamWriter()
     handler = Socks5Handler(reader, writer)
@@ -272,7 +271,7 @@ async def test_multiple_auth_methods():
     """Test negotiation with multiple authentication methods."""
     # Client supports NO_AUTH (0x00) and USERNAME_PASSWORD (0x02)
     client_data = bytes([0x05, 0x02, 0x00, 0x02])
-    
+
     reader = MockStreamReader(client_data)
     writer = MockStreamWriter()
     handler = Socks5Handler(reader, writer)
@@ -280,7 +279,7 @@ async def test_multiple_auth_methods():
     result = await handler.negotiate()
 
     assert result is True
-    
+
     # Server should select NO_AUTH
     response = writer.get_written_data()
     assert response == bytes([0x05, 0x00])
