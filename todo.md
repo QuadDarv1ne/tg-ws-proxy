@@ -550,9 +550,9 @@
 
 ```
 Модулей: 48 в proxy/ ✅
-Тестов: 38 файлов в tests/ ✅
-Tests: 678 passed, 7 skipped ✅
-Coverage: ~59% (цель >80%)
+Тестов: 39 файлов в tests/ ✅
+Tests: 961 passed, 7 skipped ✅
+Coverage: ~47% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅

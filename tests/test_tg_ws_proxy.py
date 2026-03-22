@@ -581,7 +581,224 @@ class TestProxyServerRun:
             dc_opt={2: '149.154.167.220'},
             port=0,
         )
-        
+
         # Server should have get_stats method
         assert hasattr(server, 'get_stats')
         assert callable(server.get_stats)
+
+
+class TestProxyServerCircuitBreakers:
+    """Tests for ProxyServer circuit breakers."""
+
+    def test_circuit_breaker_init(self):
+        """Test circuit breakers are initialized."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        assert 'websocket' in server._circuit_breakers
+        assert 'tcp' in server._circuit_breakers
+        assert 'dns' in server._circuit_breakers
+
+    def test_get_circuit_breaker(self):
+        """Test getting circuit breaker by name."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        cb = server.get_circuit_breaker('websocket')
+        assert cb is not None
+
+    def test_get_circuit_breaker_unknown(self):
+        """Test getting unknown circuit breaker."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        cb = server.get_circuit_breaker('unknown')
+        assert cb is None
+
+
+class TestProxyServerWsPool:
+    """Tests for ProxyServer WebSocket pool."""
+
+    def test_ws_pool_property_exists(self):
+        """Test WebSocket pool property exists."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        # Pool should be accessible via property
+        assert hasattr(server, 'ws_pool')
+
+
+class TestProxyServerEncryption:
+    """Tests for ProxyServer encryption setup."""
+
+    def test_encryption_setup_with_valid_config(self):
+        """Test encryption setup with valid config."""
+        config = {
+            'encryption_enabled': True,
+            'encryption_type': 'aes-256-gcm',
+            'key_rotation_interval': 3600,
+        }
+
+        server = ProxyServer(
+            dc_opt={2: '149.154.167.220'},
+            encryption_config=config,
+        )
+
+        assert server.encryption_enabled is True
+        assert server.crypto_manager is not None
+
+    def test_encryption_setup_with_invalid_type(self):
+        """Test encryption setup with invalid type falls back to default."""
+        config = {
+            'encryption_enabled': True,
+            'encryption_type': 'invalid-type',
+        }
+
+        server = ProxyServer(
+            dc_opt={2: '149.154.167.220'},
+            encryption_config=config,
+        )
+
+        # Should fall back to default (aes-256-gcm)
+        assert server.encryption_enabled is True
+        assert server.crypto_manager is not None
+
+    def test_encryption_setup_disabled(self):
+        """Test encryption setup when disabled."""
+        config = {
+            'encryption_enabled': False,
+        }
+
+        server = ProxyServer(
+            dc_opt={2: '149.154.167.220'},
+            encryption_config=config,
+        )
+
+        assert server.encryption_enabled is False
+
+
+class TestProxyServerRateLimiter:
+    """Tests for ProxyServer rate limiter."""
+
+    def test_rate_limiter_setup_with_config(self):
+        """Test rate limiter setup with config."""
+        config = {
+            'enabled': True,
+            'max_concurrent_connections': 100,
+        }
+
+        server = ProxyServer(
+            dc_opt={2: '149.154.167.220'},
+            rate_limit_config=config,
+        )
+
+        assert server.rate_limiter is not None
+
+    def test_rate_limiter_setup_disabled(self):
+        """Test rate limiter setup when disabled."""
+        # Rate limiter is always created when config is provided
+        config = {
+            'enabled': False,
+        }
+
+        server = ProxyServer(
+            dc_opt={2: '149.154.167.220'},
+            rate_limit_config=config,
+        )
+
+        # Rate limiter is created but may be disabled internally
+        assert server.rate_limiter is not None
+
+    def test_rate_limiter_not_setup_without_config(self):
+        """Test rate limiter not setup without config."""
+        server = ProxyServer(
+            dc_opt={2: '149.154.167.220'},
+        )
+
+        assert server.rate_limiter is None
+
+
+class TestProxyServerBlacklist:
+    """Tests for ProxyServer WS blacklist."""
+
+    def test_ws_blacklist_add(self):
+        """Test adding to WS blacklist."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        server.ws_blacklist.add((2, False))
+
+        assert (2, False) in server.ws_blacklist
+
+    def test_ws_blacklist_check(self):
+        """Test checking WS blacklist."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        server.ws_blacklist.add((2, True))
+
+        assert (2, True) in server.ws_blacklist
+        assert (2, False) not in server.ws_blacklist
+
+
+class TestProxyServerDcFailUntil:
+    """Tests for ProxyServer DC fail tracking."""
+
+    def test_dc_fail_until_set(self):
+        """Test setting DC fail_until."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        key = (2, False)
+        server.dc_fail_until[key] = time.monotonic() + 60
+
+        assert server.dc_fail_until[key] > time.monotonic()
+
+    def test_dc_fail_until_check(self):
+        """Test checking if DC is in fail state."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        key = (2, False)
+        server.dc_fail_until[key] = time.monotonic() + 60
+
+        # Should be in fail state
+        assert key in server.dc_fail_until
+        assert server.dc_fail_until[key] > time.monotonic()
+
+
+class TestProxyServerOptimizationMetrics:
+    """Tests for ProxyServer optimization metrics."""
+
+    def test_optimization_metrics_init(self):
+        """Test optimization metrics initialization."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        metrics = server.get_optimization_metrics()
+
+        assert 'total_dns_resolutions' in metrics
+        assert 'dns_cache_hits' in metrics
+        assert 'dns_cache_misses' in metrics
+        assert 'avg_connection_time_ms' in metrics
+        assert 'peak_connections' in metrics
+
+    def test_record_dns_cache_hit(self):
+        """Test recording DNS cache hit."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        server.record_dns_cache_hit()
+
+        metrics = server.get_optimization_metrics()
+        assert metrics['dns_cache_hits'] == 1
+        assert metrics['total_dns_resolutions'] == 1
+
+    def test_record_dns_cache_miss(self):
+        """Test recording DNS cache miss."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        server.record_dns_cache_miss()
+
+        metrics = server.get_optimization_metrics()
+        assert metrics['dns_cache_misses'] == 1
+        assert metrics['total_dns_resolutions'] == 1
+
+    def test_update_optimization_metrics(self):
+        """Test updating optimization metrics."""
+        server = ProxyServer(dc_opt={2: '149.154.167.220'})
+
+        server.update_optimization_metrics(peak_connections=100)
+
+        metrics = server.get_optimization_metrics()
+        assert metrics['peak_connections'] == 100
