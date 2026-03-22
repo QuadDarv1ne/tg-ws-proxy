@@ -226,8 +226,8 @@ class RawWebSocket:
             status_code = 0
 
         if status_code == 101:
-            log.debug("WebSocket connected to %s (%s)", domain, ip)
-            return RawWebSocket(reader, writer)
+            log.debug("WebSocket connected to %s (%s)%s", domain, ip, " [compression enabled]" if compress else "")
+            return RawWebSocket(reader, writer, compress=compress)
 
         # Parse headers for error details
         headers: dict[str, str] = {}
