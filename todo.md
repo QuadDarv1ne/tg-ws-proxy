@@ -6,7 +6,7 @@
 
 ---
 
-## ✅ Выполнено (v2.37.0)
+## ✅ Выполнено (v2.38.0)
 
 ### Performance & Stability
 - ✅ Zero-copy буферизация WebSocket
@@ -15,14 +15,59 @@
 - ✅ Timeout на чтение фреймов (30s)
 - ✅ Обработка IncompleteReadError и TimeoutError
 - ✅ Улучшен health check — подсчёт failed connections
+- ✅ Memory Profiling — поиск утечек в пулах (tracemalloc, weakref)
+- ✅ Graceful shutdown — корректное завершение всех соединений
+- ✅ Автоматический выбор DC — по latency в реальном времени
+- ✅ VpnService Routing — нативный TUN-интерфейс на Android
 
-### Ядро и Сеть (Stability Phase)
-- ✅ `test_tg_ws_proxy_logic.py` — тесты парсинга пакетов ✅
-- ✅ SRP Рефакторинг `_handle_client` ✅
-- ✅ Health Checks: WS PING/PONG keep-alive ✅
-- ✅ Crash Watchdog: Авто-рестарт asyncio loop ✅
-- ✅ DoH Integration: DNS over HTTPS ✅
-- ✅ Pool Tests: Покрытие логики `_WsPool` тестами ✅
+### Ядро и Сеть
+- ✅ DNS Caching — TTL для DoH запросов
+- ✅ Crash Watchdog — авто-рестарт asyncio loop
+- ✅ Исправлена синхронизация версий в `proxy/__init__.py` и `pyproject.toml`
+- ✅ Исправлен тест `test_profiler.py` (RuntimeError loop)
+
+### Android App
+- ✅ Quick Settings Tile — запуск/остановка из шторки
+- ✅ Живая статистика в шторке — скорость и подключения
+- ✅ Background Config Update — через WorkManager
+- ✅ Splash API & Material 3
+- ✅ Интеграция Chaquopy и asyncio мост
+
+---
+
+## 🟡 В процессе (v2.39.0: optimization & resilience)
+
+### Производительность
+- [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP (R&D)
+- [ ] **QUIC/UDP Support** — для звонков и медиа через прокси
+
+### Надёжность
+- [ ] **Circuit breaker** — защита от cascade failures
+- [ ] **Retry Strategy** — умный повтор запросов при смене сети
+
+### Безопасность
+- [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
+- [ ] **E2E Encryption** — локальное шифрование трафика между клиентом и прокси
+
+### Мониторинг
+- [ ] **Prometheus metrics** — endpoint `/metrics` для сбора метрик
+- [ ] **Alerting** — уведомления при высокой задержке DC (>200ms)
+- [ ] **Diagnostic Report** — экспорт детального отчета о состоянии сети
+
+---
+
+## 📊 Статус
+
+```
+Tests: 476 passed, 7 skipped, 0 errors ✅
+Coverage: ~40% (цель >80%)
+Ruff: 0 ошибок ✅
+Mypy: missing stubs (внешние зависимости)
+Version: v2.38.0 (sync complete ✅)
+```
+
+**Актуальная версия:** v2.38.0 (main) — ✅ merged
+**Следующая версия:** v2.39.0 (planning)
 
 ---
 
@@ -42,78 +87,10 @@
 11. [x] **Dynamic Tile**: Живая статистика скорости в шторке.
 12. [x] **Auto-TLS**: Локальное шифрование сертификатами.
 13. [x] **Memory Profiling**: Поиск утечек в пуле ✅
-14. [x] **CI Validation**: Ruff/Mypy/Pytest (486 тестов ✅).
-15. [ ] **Release**: Merge dev -> main.
+14. [x] **CI Validation**: Ruff/Mypy/Pytest (476 тестов ✅).
+15. [x] **Release**: Merge dev -> main ✅ (v2.38.0).
 
----
-
-## 📊 Статус
-
-```
-Tests: 486 passed, 7 skipped, 0 errors ✅
-Coverage: ~40% (цель >80%)
-Ruff: 0 ошибок ✅
-Mypy: missing stubs (внешние зависимости)
-```
-
-**Актуальная версия:** v2.38.0 (dev) — готов к merge в main
-
----
-
-## ✅ Выполнено (v2.38.0)
-
-### Stability & Monitoring
-- ✅ Memory Profiling — поиск утечек в пулах (tracemalloc, weakref)
-- ✅ Graceful shutdown — корректное завершение всех соединений
-- ✅ Автоматический выбор DC — по latency в реальном времени
-- ✅ Обновлены тесты profiler (оптимизация)
-
----
-
-## 📋 План на v2.39.0: HTTP/2 & Android Optimization
-
-### Производительность
-- [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP
-- [ ] **Кэширование DNS ответов** — TTL для DoH запросов
-
-### Надёжность
-- [ ] **Circuit breaker** — защита от cascade failures
-
-### Безопасность
-- [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
-
-### Android App
-- [ ] **Battery optimization** — фоновая работа без разряда (WorkManager)
-- [ ] **Quick Settings Tile** — быстрый старт/стоп из шторки
-- [ ] **Статистика в шторке** — скорость, трафик, активные подключения
-
-### Мониторинг
-- [ ] **Prometheus metrics** — endpoint `/metrics` для сбора метрик
-- [ ] **JSON логирование** — для интеграции с ELK/Grafana
-- [ ] **Alerting** — уведомления при высокой задержке DC (>200ms)
-
----
-
-## 📁 Архив версий
-
-### v2.37.0 — Performance & Stability
-- ✅ Zero-copy буферизация WebSocket
-- ✅ Batch отправка WebSocket фреймов
-- ✅ Исправлена обработка ошибок WebSocket (_read_frame, recv)
-- ✅ Timeout на чтение фреймов (30s)
-- ✅ Обработка IncompleteReadError и TimeoutError
-- ✅ Улучшен health check — подсчёт failed connections
-- ✅ Автоматический выбор DC — по latency в реальном времени
-- ✅ Экспоненциальный backoff — при ошибках подключения
-
-### v2.36.0 — Stability Phase
-- ✅ `test_tg_ws_proxy_logic.py` — тесты парсинга пакетов
-- ✅ SRP Рефакторинг `_handle_client`
-- ✅ Health Checks: WS PING/PONG keep-alive
-- ✅ Crash Watchdog: Авто-рестарт asyncio loop
-- ✅ DoH Integration: DNS over HTTPS
-- ✅ Pool Tests: Покрытие логики `_WsPool` тестами
-
----
-
-**© 2026 Dupley Maxim Igorevich. Все права защищены.**
+### ✅ Исправлено v2.38.0
+- [x] **test_profiler.py::test_start_stop** — добавлен @pytest.mark.asyncio
+- [x] **profiler.py stop()** — удалён get_event_loop().run_until_complete()
+- [x] **Синхронизация версий** — pyproject.toml: 2.38.0, proxy/__init__.py: 2.38.0

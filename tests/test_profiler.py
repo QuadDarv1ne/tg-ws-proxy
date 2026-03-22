@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import gc
 
 import pytest
@@ -139,12 +140,17 @@ class TestMemoryProfiler:
 
         assert tracker1 is tracker2
 
-    def test_start_stop(self):
+    @pytest.mark.asyncio
+    async def test_start_stop(self):
         """Test starting and stopping profiler."""
         profiler = MemoryProfiler()
 
+        # Ensure an event loop is running
+        loop = asyncio.get_running_loop()
+
         profiler.start()
         assert profiler._running is True
+        assert profiler._task is not None
 
         profiler.stop()
         assert profiler._running is False

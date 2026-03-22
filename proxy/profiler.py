@@ -34,7 +34,7 @@ class MemorySnapshot:
     top_allocations: list[tuple[str, int, int]]  # (traceback, size, count)
     component_stats: dict[str, dict[str, Any]] = field(default_factory=dict)
     
-    def diff(self, other: 'MemorySnapshot') -> 'MemoryDiff':
+    def diff(self, other: MemorySnapshot) -> MemoryDiff:
         """Calculate difference between two snapshots."""
         return MemoryDiff(
             timestamp_delta=other.timestamp - self.timestamp,
@@ -133,10 +133,8 @@ class MemoryProfiler:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
-                asyncio.get_event_loop().run_until_complete(self._task)
-            except asyncio.CancelledError:
-                pass
+            # Don't use run_until_complete - task will be awaited by caller if needed
+            self._task = None
         tracemalloc.stop()
         log.info("Memory profiler stopped")
     

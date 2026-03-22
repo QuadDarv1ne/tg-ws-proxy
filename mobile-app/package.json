@@ -1,6 +1,6 @@
 {
   "name": "tg-ws-proxy-mobile",
-  "version": "2.36.0",
+  "version": "2.38.0",
   "description": "TG WS Proxy - Mobile App (Android/iOS)",
   "private": true,
   "scripts": {

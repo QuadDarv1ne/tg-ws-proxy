@@ -1,24 +1,21 @@
-# План по улучшению Android-проекта (Capacitor) - СТАТУС: ВЫПОЛНЕНО (Циклы 1-6)
+# План по улучшению Android-проекта (Capacitor) - СТАТУС: v2.38.0 РЕЛИЗ
 
-- [x] **Core Stability**: Исправлены ошибки сборки, обновлены зависимости, включен R8.
-- [x] **Python Core**: Chaquopy интеграция, asyncio мост, логирование.
-- [x] **Foreground Service**: Стабильность в фоне, WakeLock, Battery Watchdog.
-- [x] **Diagnostics**: Live-статистика, пинг-тесты, AI анализ логов (Gemini).
-- [x] **Networking**: SOCKS5 + MTProto одновременно, DoH, IPv6, Speed Shaper.
-- [x] **UX/UI**: Material 3, Splash API, Theme Sync, Quick Tile, App Shortcuts.
-- [x] **Security**: Encrypted Storage, Biometrics, Root/Debug detect, SSL Hardening.
-- [x] **Enterprise**: WorkManager обновления, CSV экспорт, Remote Dashboard.
-- [x] **Intelligence**: Dynamic DC Failover, Adaptive Pooling, Auto Secret Rotation.
-- [x] **Pro Connectivity**: UDP Support, mDNS Discovery, PAC Server, TUN Routing.
+- [x] **Core Stability**: Chaquopy 15.0.0, Python 3.11, R8 Full Mode.
+- [x] **Python Core**: Исправлен рассинхрон версий, asyncio watchdog.
+- [x] **Foreground Service**: Стабильный WakeLock, Battery Optimization Bypass.
+- [x] **Diagnostics**: Пинг-тесты DC в реальном времени, JSON-логи.
+- [x] **Networking**: DNS Cache TTL, IPv6 Support, TUN Interface Stub.
+- [x] **UX/UI**: Material 3, Quick Settings Tile (Скорость/Статус).
+- [x] **Enterprise**: Background Config Update через WorkManager.
 
-## План "Cycle 6: Pro Connectivity & Global Access" - ВЫПОЛНЕНО:
-1.  [x] **UDP Associate Support**: Поддержка звонков в Telegram.
-2.  [x] **Local PAC Server**: Автонастройка прокси по ссылке.
-3.  [x] **ZeroConf / mDNS**: Авто-обнаружение в локальной сети.
-4.  [x] **Tunnel Compression**: Сжатие данных zlib.
-5.  [x] **Sleep Timer**: Автоматическое выключение по таймеру.
-6.  [x] **Password Protected Config**: Шифрование экспорта AES-256.
-7.  [x] **Proxy Chaining**: Использование внешнего прокси как апстрима.
-8.  [x] **Battery Analytics**: Точная статистика энергопотребления.
-9.  [x] **VpnService Routing**: Полноценная маршрутизация через TUN.
-10. [x] **AI Optimization**: Предиктивный анализ сбоев через Gemini.
+## Текущий цикл: Cycle 7 - Quality & Resilience (v2.39.0 План)
+1.  [ ] **TUN2SOCKS Engine**: Полноценная реализация пересылки трафика (L3 -> L5).
+2.  [ ] **Memory Guard**: Автоматический перезапуск Python-процесса при утечках >150MB.
+3.  [ ] **Network Switching**: Бесшовный переход Wi-Fi <-> 4G без обрыва WS-пула.
+4.  [ ] **Deep Links v2**: Поддержка импорта зашифрованных JSON-конфигов.
+5.  [ ] **Advanced Tile**: Переключение между DC прямо из шторки.
+
+## Заметки по качеству (Review):
+- ⚠️ **VPN**: Интерфейс создается, но пакеты "дропаются" (нужен нативный движок).
+- ✅ **Version Sync**: Все файлы (gradle, init, toml) теперь на v2.38.0.
+- 🛠 **Tests**: `test_profiler` исправлен для asyncio сред.
