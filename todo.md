@@ -218,7 +218,13 @@
   • Security checklist для релизов
 
 ### Тестирование
-- [ ] **Coverage Improvement** — увеличение покрытия с 55% до 60%
+- [ ] **Coverage Improvement** — увеличение покрытия с 41% до 60%
+  - ✅ rate_limiter.py: 33 теста (Token Bucket, API Limiting, Connection Scoring, Ban/Unban, Subnet)
+  - [ ] metrics_history.py: требует доработки тестов (сейчас 32% coverage)
+  - [ ] web_dashboard.py: 16 errors — исправить импорты
+  - [ ] connection_pool.py: 39% coverage — добавить тесты
+  - [ ] tg_ws_proxy.py: 22% coverage — критично низкое покрытие
+
 - [ ] **Integration Tests** — сквозные тесты для основных сценариев
 
 ### Мониторинг
@@ -230,22 +236,22 @@
 
 ---
 
-## 📊 Статус (23.03.2026 05:00)
+## 📊 Статус (23.03.2026 06:00)
 
 ```
 Модулей: 38 в proxy/ ✅
-Тестов: 34 файла в tests/ ✅
-Tests: 678 passed, 7 skipped ✅
-Coverage: ~59% (цель >80%)
+Тестов: 35 файлов в tests/ ✅
+Tests: 640 passed, 7 skipped, 16 errors ❌
+Coverage: 41% (цель >60%) ❌
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.53.1 (Security Audit ✅, Dashboard Metrics ✅)
+Version: v2.53.1 (Security Audit ✅, Rate Limiter Tests ✅)
 ```
 
 **Актуальная версия:** v2.53.1 (dev) — ✅ synced
-**Следующая версия:** v2.54.0 (HTTP/2 + Stability)
-**Последнее обновление:** 23.03.2026 (05:00)
+**Следующая версия:** v2.54.0 (Coverage Improvement + Bug Fixes)
+**Последнее обновление:** 23.03.2026 (06:00)
 
 ---
 
