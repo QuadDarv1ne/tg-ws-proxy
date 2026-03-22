@@ -500,22 +500,22 @@
 
 ---
 
-## 📊 Статус (23.03.2026 16:00)
+## 📊 Статус (23.03.2026 17:00)
 
 ```
-Модулей: 45 в proxy/ ✅ (добавлены: system_proxy.py, cloudflare_tunnel.py, dpi_bypass.py)
+Модулей: 48 в proxy/ ✅
 Тестов: 35 файлов в tests/ ✅
 Tests: 678 passed, 7 skipped ✅
 Coverage: ~59% (цель >80%)
-Ruff: 13 warnings (whitespace in docstrings) ⚠️
+Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.55.0 (System Proxy ✅, Cloudflare Tunnel ✅, DPI Bypass ✅)
+Version: v2.57.0 (Gaming Console ✅, i18n CN ✅, Proxy Chain ✅, Anti-censorship ✅)
 ```
 
-**Актуальная версия:** v2.55.0 (dev) — ✅ synced
-**Следующая версия:** v2.56.0 (Integration Tests + Coverage Improvement)
-**Последнее обновление:** 23.03.2026 (16:00)
+**Актуальная версия:** v2.57.0 (dev) — ✅ synced
+**Следующая версия:** v2.58.0 (Integration Tests + Coverage Improvement)
+**Последнее обновление:** 23.03.2026 (17:00)
 
 ---
 
