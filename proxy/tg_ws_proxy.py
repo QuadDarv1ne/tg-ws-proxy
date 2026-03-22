@@ -67,11 +67,25 @@ _OPTIMIZATION_CONFIG = {
     'enable_connection_pooling': True,
     'enable_auto_dc_selection': True,
     'enable_compression': False,  # WebSocket permessage-deflate compression
+    'enable_adaptive_timeout': True,  # Adaptive timeout based on latency
     'pool_min_size': 2,
     'pool_max_size': 8,
     'pool_max_age': 120.0,
     'dns_cache_ttl': 300.0,
     'max_concurrent_connections': 500,
+    'connection_timeout_base': 10.0,  # Base timeout in seconds
+    'connection_timeout_max': 60.0,   # Maximum timeout
+    'connection_timeout_multiplier': 3.0,  # Latency multiplier for timeout
+}
+
+# Adaptive timeout state
+_adaptive_timeout_state = {
+    'avg_latency_ms': 0.0,
+    'min_latency_ms': float('inf'),
+    'max_latency_ms': 0.0,
+    'latency_samples': [],
+    'current_timeout': 10.0,
+    'last_update': 0.0,
 }
 
 
@@ -211,6 +225,7 @@ def get_optimization_config() -> dict:
         **_OPTIMIZATION_CONFIG,
         'dns_cache_ttl': _dns_cache_ttl,
         'dns_cache_size': len(_dns_cache),
+        'adaptive_timeout': get_adaptive_timeout_stats(),
     }
 
 
@@ -332,7 +347,116 @@ async def _measure_all_dc_pings(dc_opt: dict[int, str | None], timeout: float = 
     else:
         log.warning("All DC ping measurements failed")
 
+    # Update adaptive timeout state
+    if results:
+        await _update_adaptive_timeout(list(results.values()))
+
     return results
+
+
+# =========================================================================
+# Adaptive Timeout Management
+# =========================================================================
+
+async def _update_adaptive_timeout(latencies: list[float]) -> None:
+    """
+    Update adaptive timeout based on latency measurements.
+
+    Strategy:
+    - Timeout = max(base_timeout, min(max_timeout, avg_latency * multiplier))
+    - Keeps timeout responsive to network conditions
+    - Prevents too short timeouts during high latency periods
+    - Prevents too long timeouts during low latency periods
+
+    Args:
+        latencies: List of latency measurements in milliseconds
+    """
+    if not _OPTIMIZATION_CONFIG.get('enable_adaptive_timeout', True):
+        return
+
+    if not latencies:
+        return
+
+    now = time.monotonic()
+    state = _adaptive_timeout_state
+
+    # Calculate statistics
+    avg_latency = sum(latencies) / len(latencies)
+    min_latency = min(latencies)
+    max_latency = max(latencies)
+
+    # Update state
+    state['avg_latency_ms'] = avg_latency
+    state['min_latency_ms'] = min(state['min_latency_ms'], min_latency)
+    state['max_latency_ms'] = max(state['max_latency_ms'], max_latency)
+
+    # Keep rolling window of samples (last 100 measurements)
+    state['latency_samples'].extend(latencies)
+    if len(state['latency_samples']) > 100:
+        state['latency_samples'] = state['latency_samples'][-100:]
+
+    # Calculate new timeout
+    base = _OPTIMIZATION_CONFIG['connection_timeout_base']
+    max_timeout = _OPTIMIZATION_CONFIG['connection_timeout_max']
+    multiplier = _OPTIMIZATION_CONFIG['connection_timeout_multiplier']
+
+    # Timeout based on average latency with multiplier
+    latency_based_timeout = (avg_latency / 1000.0) * multiplier
+
+    # Use maximum of base timeout and latency-based timeout
+    new_timeout = max(base, min(max_timeout, latency_based_timeout))
+
+    # Smooth transition (don't change timeout too drastically)
+    old_timeout = state['current_timeout']
+    if abs(new_timeout - old_timeout) > 1.0:  # Only update if change > 1 second
+        state['current_timeout'] = new_timeout
+        state['last_update'] = now
+        log.info(
+            "Adaptive timeout updated: %.1fs -> %.1fs (avg latency: %.0fms)",
+            old_timeout, new_timeout, avg_latency
+        )
+    else:
+        state['current_timeout'] = new_timeout
+
+
+def get_adaptive_timeout() -> float:
+    """
+    Get current adaptive timeout value.
+
+    Returns:
+        Timeout in seconds based on current network conditions
+    """
+    if not _OPTIMIZATION_CONFIG.get('enable_adaptive_timeout', True):
+        return _OPTIMIZATION_CONFIG.get('connection_timeout_base', 10.0)
+
+    state = _adaptive_timeout_state
+
+    # If no measurements yet, use base timeout
+    if state['avg_latency_ms'] == 0.0:
+        return _OPTIMIZATION_CONFIG.get('connection_timeout_base', 10.0)
+
+    return state['current_timeout']
+
+
+def get_adaptive_timeout_stats() -> dict:
+    """
+    Get adaptive timeout statistics.
+
+    Returns:
+        Dictionary with timeout and latency statistics
+    """
+    state = _adaptive_timeout_state
+    samples = state['latency_samples']
+
+    return {
+        'current_timeout': state['current_timeout'],
+        'avg_latency_ms': state['avg_latency_ms'],
+        'min_latency_ms': state['min_latency_ms'] if state['min_latency_ms'] != float('inf') else 0,
+        'max_latency_ms': state['max_latency_ms'],
+        'samples_count': len(samples),
+        'last_update': state['last_update'],
+        'enabled': _OPTIMIZATION_CONFIG.get('enable_adaptive_timeout', True),
+    }
 
 
 async def _close_writer_safe(writer: asyncio.StreamWriter | None) -> None:
@@ -1335,9 +1459,11 @@ async def _tcp_fallback(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     # Create new connection if cache miss
     if rr is None or rw is None:
         try:
+            # Use adaptive timeout based on network conditions
+            timeout = get_adaptive_timeout() if _OPTIMIZATION_CONFIG.get('enable_adaptive_timeout', True) else 10.0
             rr, rw = await asyncio.wait_for(
-                asyncio.open_connection(dst, port), timeout=10)
-            log.debug("[%s] TCP new connection to %s:%d", label, dst, port)
+                asyncio.open_connection(dst, port), timeout=timeout)
+            log.debug("[%s] TCP new connection to %s:%d (timeout=%.1fs)", label, dst, port, timeout)
         except Exception as exc:
             log.warning("[%s] TCP fallback connect to %s:%d failed: %s",
                         label, dst, port, exc)
@@ -1515,8 +1641,10 @@ async def _handle_client(
             stats.connections_passthrough += 1
             log.debug("%s passthrough -> %s:%d", label, dst, port)
             try:
+                # Use adaptive timeout based on network conditions
+                timeout = get_adaptive_timeout() if _OPTIMIZATION_CONFIG.get('enable_adaptive_timeout', True) else 10.0
                 rr, rw = await asyncio.wait_for(
-                    asyncio.open_connection(dst, port), timeout=10)
+                    asyncio.open_connection(dst, port), timeout=timeout)
             except Exception as exc:
                 log.warning("%s passthrough failed to %s: %s: %s", label, dst, type(exc).__name__, str(exc) or "(no message)")
                 writer.write(_socks5_reply(0x05))
@@ -2041,6 +2169,19 @@ async def _run(
 
     asyncio.create_task(cleanup_dns_cache())
 
+    # Start auto-tuner for adaptive performance optimization
+    try:
+        from .autotune import TuningConfig, TuningMode, start_autotuner
+        start_autotuner(TuningConfig(
+            mode=TuningMode.BALANCED,
+            enable_pool_tuning=True,
+            enable_timeout_tuning=True,
+            enable_retry_tuning=True,
+        ))
+        log.info("Auto-tuner started (mode: BALANCED)")
+    except Exception as e:
+        log.debug("Auto-tuner not started: %s", e)
+
     # Warmup WebSocket pool and start health checker
     server_instance.ws_pool.warmup(dc_opt)
     await server_instance.ws_pool.start_health_checker()
@@ -2120,6 +2261,14 @@ async def _run(
                 except asyncio.CancelledError:
                     pass
                 log.info("Health checker stopped")
+
+            # Stop auto-tuner
+            try:
+                from .autotune import stop_autotuner
+                await stop_autotuner()
+                log.info("Auto-tuner stopped")
+            except Exception:
+                pass
 
             # Stop memory profiler
             if server_instance._memory_profiler:

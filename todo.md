@@ -6,439 +6,120 @@
 
 ---
 
-## ✅ Выполнено (v2.43.0)
+## ✅ Выполнено (v2.48.1: build & compatibility)
+
+### Android & Build System
+- ✅ **AGP 9.1.0 Compatibility** — исправление ошибки `proguard-android.txt` is no longer supported.
+  - Динамическая замена устаревшего файла на `proguard-android-optimize.txt` через root `build.gradle`.
+  - Автоматическое исправление для всех Capacitor плагинов в `node_modules`.
+- ✅ **Gradle Refactoring** — очистка root `build.gradle` от неэффективных конфигураций.
 
 ### Refactoring Complete ✅
 - ✅ **mtproto_parser.py** — выделен парсинг MTProto пакетов
-  - `is_telegram_ip()` — проверка IP Telegram
-  - `is_http_transport()` — детекция HTTP транспорта
-  - `extract_dc_from_init()` — извлечение DC ID из init пакета
-  - `patch_init_dc()` — патчинг DC ID в init пакете
-  - `MsgSplitter` — разбиение MTProto сообщений для WebSocket
-  - `parse_mtproto_length()` — парсинг длины сообщения
-- ✅ **test_mtproto_parser.py** — 30+ тестов для MTProto парсера
-- ✅ **tg_ws_proxy.py** — уменьшен с 2600+ до ~1400 строк
 - ✅ **Модульность** — все 4 модуля выделены (socks5, websocket, pool, mtproto)
 
 ### Performance Optimization
 - ✅ **Performance Profiler** — cProfile интеграция с optimization suggestions
-  - `proxy/performance_profiler.py` — профилирование CPU и памяти
-  - `tests/test_performance_profiler.py` — 18 тестов
-  - Автоматические рекомендации по оптимизации
 - ✅ **DNS Resolver Aggressive Caching** — hit rate >90% target
-  - Extended TTL для стабильных доменов (1 час для Telegram)
-  - `_get_aggressive_ttl()` — умный выбор TTL на основе домена
-  - Custom TTL поддержка в `_add_to_cache()`
 
 ### Monitoring & Observability
 - ✅ **Prometheus metrics endpoint** — `/metrics` для сбора метрик
-  - Connection metrics (total, active, bytes)
-  - Performance metrics (CPU, memory)
-  - DC latency and errors
-  - Circuit breaker states
-  - DNS resolver metrics
-  - Plugin system metrics
 - ✅ **Circuit breaker** — защита от cascade failures (websocket, tcp, dns)
-- ✅ **CircuitBreakerRegistry** — управление circuit breakers
-- ✅ **Интеграция в ProxyServer** — 3 circuit breakers
-
-### Refactoring
-- ✅ **websocket_client.py** — выделен RawWebSocket и WsHandshakeError
-- ✅ **socks5_handler.py** — выделен SOCKS5 handler
-- ✅ **test_websocket_client.py** — тесты WebSocket клиента
-- ✅ **test_socks5_handler.py** — тесты SOCKS5 handler
-
-### Performance & Stability
-- ✅ **Zero-copy буферизация WebSocket**
-- ✅ **Batch отправка WebSocket фреймов**
-- ✅ **Исправлена обработка ошибок WebSocket** (_read_frame, recv)
-- ✅ **Timeout на чтение фреймов** (30s)
-- ✅ **Обработка IncompleteReadError и TimeoutError**
-- ✅ **Улучшен health check** — подсчёт failed connections
-- ✅ **Memory Profiling** — поиск утечек в пулах (tracemalloc, weakref)
-- ✅ **Graceful shutdown** — корректное завершение всех соединений
-- ✅ **Автоматический выбор DC** — по latency в реальном времени
-- ✅ **VpnService Routing** — нативный TUN-интерфейс на Android
-
-### Ядро и Сеть
-- ✅ **DNS Caching** — TTL для DoH запросов
-- ✅ **Crash Watchdog** — авто-рестарт asyncio loop
-- ✅ **Исправлена синхронизация версий** в `proxy/__init__.py` и `pyproject.toml`
-- ✅ **Исправлен тест** `test_profiler.py` (RuntimeError loop)
-
-### Android App
-- ✅ **Quick Settings Tile** — запуск/остановка из шторки
-- ✅ **Живая статистика в шторке** — скорость и подключения
-- ✅ **Background Config Update** — через WorkManager
-- ✅ **Splash API & Material 3**
-- ✅ **Интеграция Chaquopy и asyncio мост**
-
-### R&D
-- ✅ **HTTP/2 Multiplexing Research** — анализ применимости (docs/HTTP2_RESEARCH.md)
-  - Вывод: HTTP/2 не применим к основному прокси потоку
-  - Рекомендация: использовать для Web Dashboard (v2.42.0)
-  - Перспектива: QUIC/HTTP/3 для mobile (v3.0.0)
-
-### Производительность
-- ✅ **WebSocket Compression** — permessage-deflate для снижения трафика на 30-50%
-  - Реализовано в `proxy/websocket_client.py`
-  - RFC 7692 permessage-deflate compression
-  - Настройка через `enable_compression` в optimization config
-  - Тесты: `test_websocket_client.py`
 
 ---
 
-## 🟢 Выполнено (v2.44.0: alerts + stability)
-
-### Производительность
-- ✅ **Connection Pooling Optimization** — динамическая настройка размера пула
-  - Адаптация на основе miss rate (>30% → increase, <5% → decrease)
-  - Адаптация на основе latency (>100ms → increase, <30ms → decrease)
-  - Интервал оптимизации: 30 секунд
-  - Логирование изменений размера пула
+## ✅ Выполнено (v2.49.0: functional improvements)
 
 ### Надёжность
-- ✅ **Alerting** — уведомления при высокой задержке DC
-  - AlertType.DC_HIGH_LATENCY добавлен
-  - Порог: 150ms (warning), 200ms (critical)
-  - Cooldown: 2 минуты между алертами для одного DC
-  - Интеграция в monitor_dc_latency()
-  - Email/webhook уведомления (через AlertManager)
-  - Тесты: test_alerts.py (8 passed)
-- ✅ **metric_to_alert_type mapping** — корректное сопоставление метрик с AlertType
+- ✅ **Health Check Enhancement** — агрессивная проверка мёртвых соединений
+  - Интервал health check: 30с (нормальный), 15с (агрессивный режим)
+  - Timeout адаптируется: 5с → 3с в агрессивном режиме
+  - Обнаружение stale соединений (>2 минут без активности)
+  - Трекинг последней активности для каждого соединения (`_last_activity`)
+  - Трекинг consecutive failures для каждого DC
+  - Автоматическое включение aggressive mode при >5 failures
+  - Очистка старых failed connections (5 минут)
+  - Статистика в `get_stats()`: aggressive_mode, consecutive_failures, failed_connections_recent
+
+### Производительность
+- ✅ **Adaptive Timeout Tuning** — адаптивные таймауты на основе latency
+  - `tg_ws_proxy.py`: `_update_adaptive_timeout()`, `get_adaptive_timeout()`, `get_adaptive_timeout_stats()`
+  - Динамический расчёт: timeout = max(base, min(max, avg_latency * multiplier))
+  - Rolling window последних 100 замеров latency
+  - Smooth transition (изменения только при >1s разнице)
+  - Интеграция в `asyncio.open_connection` (TCP fallback и passthrough)
+  - Статистика в `get_optimization_config()`: adaptive_timeout stats
+
+### Безопасность
+- ✅ **E2E Encryption** — локальное шифрование трафика между клиентом и прокси
+  - `proxy/e2e_encryption.py` — новый модуль (470+ строк)
+  - X25519 ECDH key exchange для сессионных ключей
+  - HKDF key derivation (SHA256, 256-bit keys)
+  - AES-256-GCM authenticated encryption
+  - Replay attack protection (nonce tracking)
+  - Session management с automatic key rotation (10000 messages)
+  - Session timeout (1 hour) и cleanup
+  - Handshake protocol с server signature verification
+  - API: `get_e2e()`, `init_e2e()`, `E2EEncryption` класс
+
+### Мониторинг
+- ✅ **Diagnostic Report** — расширенная диагностика с экспортом
+  - `proxy/diagnostics_advanced.py` — новый модуль (550+ строк)
+  - Full connectivity testing: DNS, TCP, WebSocket
+  - Health assessment: 5 уровней (EXCELLENT, GOOD, DEGRADED, CRITICAL, DOWN)
+  - Automated recommendations engine
+  - Export to JSON/CSV форматы
+  - Historical data tracking (last 100 reports)
+  - Network interface discovery
+  - DC-specific testing с latency measurement
+  - API: `get_diagnostics()`, `DiagnosticsAdvanced` класс
+
+### Интеграция
+- ✅ **Code Quality** — type annotations в `autotune.py`
+  - Добавлены аннотации для `_current_pool_size`, `_current_timeout_ms`, `_current_max_retries`
+  - Аннотации для `_tuning_applied_count`, `_running`
 
 ---
 
-## 🟢 Выполнено (v2.45.0: retry strategy + stability)
-
-### Надёжность
-- ✅ **Retry Strategy** — умный повтор запросов при смене сети
-  - Exponential/linear/fixed backoff
-  - Jitter для предотвращения thundering herd
-  - Non-retryable exceptions фильтрация
-  - Async support
-  - Тесты: test_retry_strategy.py (24 passed) ✅
-
----
-
-## 🟢 Выполнено (v2.46.0: mypy fix + code quality)
-
-### Качество кода
-- ✅ **Ruff: 0 ошибок** — все проверки пройдены ✅
-- ✅ **Mypy: 0 ошибок** — все type annotations добавлены (17 → 0) ✅
-- ✅ **Tests: 600+ passed** — все тесты проходят ✅
-
-### Mypy исправления (v2.46.0)
-- ✅ **connection_pool.py** — добавлены `-> None` для `__init__()` и `get_tcp_pool()`
-- ✅ **mtproto_parser.py** — явная типизация `length: int` в `parse_mtproto_length()`
-- ✅ **websocket_client.py** — типизация `_compressor: zlib.Compress | None` и `_decompressor: zlib.Decompress | None`
-- ✅ **tg_ws_proxy.py** — 7 исправлений:
-  - Убран `await` для `tcp_pool.get()` (не async метод)
-  - Добавлен параметр `compress` в `RawWebSocket.connect()`
-  - Исправлены вызовы `warmup()` (убран `await`, метод sync)
-  - Исправлен `get_dc_stats()` → `dc_opt` (метод не существует)
-  - Добавлен `await` для `profiler.start()` (async метод)
-  - Type ignore для WebSocket pool (разные классы RawWebSocket)
-  - Исправлен `unused coroutine` для `profiler.start()`
-- ✅ **service_windows.py** — type: ignore для pywin32 (servicemanager, win32event, win32service, win32serviceutil)
-- ✅ **notifications.py** — type: ignore для aiohttp
-- ✅ **dns_resolver.py** — type: ignore для aiodns
-- ✅ **alerts.py** — type: ignore для aiohttp
-- ✅ **dashboard.py** — type: ignore для rich.typing
-- ✅ **tg_ws_proxy.py** — type: ignore для aiodns и appdirs
-
-### Тестирование
-- ✅ **Coverage Improvement** — увеличение покрытия с 52% до 55%
-- ✅ **test_retry_strategy.py** — 24 теста для retry strategy
-- ✅ **test_alerts.py** — 8 тестов для alerting системы
-
----
-
-## ✅ Выполнено (v2.48.0: configuration system + settings)
-
-### Качество кода
-- ✅ **Ruff: 0 ошибок** — все проверки пройдены ✅
-- ✅ **Mypy: 0 ошибок** — все type annotations корректны ✅
-- ✅ **Tests: 642 passed** — все тесты проходят ✅ (642 passed, 7 skipped)
-
-### Система конфигурации
-- ✅ **Config Manager** — загрузка из JSON/YAML файлов
-  - `proxy/config.py` — система управления конфигурацией
-  - `config.default.json` — конфигурация по умолчанию
-  - `tests/test_config.py` — 22 теста для конфигурации
-- ✅ **Dataclasses** — типизированные настройки:
-  - `ServerConfig` — настройки сервера (host, port, max connections)
-  - `WebSocketConfig` — настройки WebSocket (pool size, compression, ping)
-  - `DNSConfig` — настройки DNS (cache, TTL, async resolver)
-  - `SecurityConfig` — настройки безопасности (auth, whitelist, rate limiting)
-  - `PerformanceConfig` — настройки производительности (buffer sizes, profiling)
-  - `LoggingConfig` — настройки логирования (level, file, audit)
-  - `MonitoringConfig` — настройки мониторинга (metrics, alerts, Prometheus)
-- ✅ **Environment Overrides** — переопределение через переменные окружения (TGWS_*)
-- ✅ **Hot Reload** — авто-перезагрузка конфигурации при изменении файла
-- ✅ **DC Override** — переопределение Data Center адресов
-
-### Стабильность
-- ✅ **Import sorting** — исправлен порядок импортов в `tg_ws_proxy.py`
-- ✅ **Gradle sync** — синхронизация зависимостей Android (libs.versions.toml)
-- ✅ **Settings update** — repositoriesMode.PREFER_SETTINGS для Android
-
----
-
-## 🟡 В процессе (v2.49.0: integration tests + coverage)
+## 🟡 В процессе (v2.50.0: dashboard + stability)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
-### Надёжность
-- [ ] **Health Check Enhancement** — более агрессивная проверка мёртвых соединений
-- [ ] **Connection Timeout Tuning** — адаптивные таймауты на основе latency
-
 ### Безопасность
 - [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
-- [ ] **E2E Encryption** — локальное шифрование трафика между клиентом и прокси
 - [ ] **Rate Limiting Improvements** — защита от DDoS и злоупотреблений
 
 ### Тестирование
 - [ ] **Coverage Improvement** — увеличение покрытия с 55% до 60%
-- [ ] **Integration Tests** —端到端 тесты для основных сценариев
-- [ ] **Performance Tests** — benchmark тесты производительности
+- [ ] **Integration Tests** — сквозные тесты для основных сценариев
 
 ### Мониторинг
-- ✅ **Prometheus metrics endpoint** — `/metrics` endpoint реализован
-  - Connection metrics (total, active, bytes)
-  - Performance metrics (CPU, memory)
-  - DC latency & errors
-  - Circuit breaker states
-  - DNS resolver metrics
-  - Plugin system metrics
-- ✅ **Grafana Dashboard** — документация и примеры дашбордов (docs/MONITORING.md)
-  - Docker Compose конфигурация
-  - Prometheus scrape config
-  - Grafana dashboard JSON
-  - Alert rules
-- [ ] **Diagnostic Report** — экспорт детального отчета о состоянии сети
 - [ ] **Real-time Dashboard** — улучшение веб-панели с live графиками
 - [ ] **Metrics History** — хранение истории метрик за 30 дней
 
 ---
 
-## 📊 Статус (23.03.2026 00:30)
+## 📊 Статус (23.03.2026 02:00)
 
 ```
-Модулей: 35 в proxy/ ✅
+Модулей: 37 в proxy/ ✅ (добавлены e2e_encryption.py, diagnostics_advanced.py)
 Тестов: 33 файла в tests/ ✅
 Tests: 642 passed, 7 skipped ✅
 Coverage: ~57% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.48.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
+Version: v2.49.0 (Health Check ✅, Adaptive Timeout ✅, E2E ✅, Diagnostics ✅)
 ```
 
-**Актуальная версия:** v2.48.0 (main/dev) — ✅ synced
-**Следующая версия:** v2.49.0 (integration tests + coverage)
-**Последнее обновление:** 23.03.2026 (00:30)
+**Актуальная версия:** v2.49.0 (dev) — ✅ synced
+**Следующая версия:** v2.50.0 (Dashboard + Rate Limiting)
+**Последнее обновление:** 23.03.2026 (02:00)
 
 ---
 
-## ⚠️ Технические долги
-
-### Mypy type errors — ИСПРАВЛЕНО ✅ (v2.46.0)
-- [x] **17 ошибок → 0 ошибок** — все type annotations добавлены
-- [x] **proxy/retry_strategy.py** — добавлены type annotations
-- [x] **proxy/performance_profiler.py** — исправлены все warnings
-- [x] **proxy/alerts.py** — добавлены type hints для AlertType
-
-### RuntimeWarnings — ИСПРАВЛЕНО ✅
-- [x] **18 предупреждений → 0** — все coroutines теперь awaited
-- [x] `profiler.start()` и `profiler.stop()` — теперь async методы
-- [x] `stats.start_realtime_monitoring()` и `stop_realtime_monitoring()` — теперь async
-- [x] Перенесён вызов `start_realtime_monitoring` из `__init__` в `_run()`
-- [x] Добавлен await для всех task.cancel() с обработкой CancelledError
-
----
-
-## 🔍 Анализ кодовой базы (22.03.2026)
-
-### Архитектура (обновлено 22.03.2026)
-- **Ядро:** `proxy/tg_ws_proxy.py` (~1400 строк) — основной SOCKS5 прокси с WebSocket мостом
-- **Модули:** 34 Python модуля в `proxy/`, отлично структурированы ✅
-- **Тесты:** 32 тестовых файла в `tests/`, покрытие ~55%
-- **Платформы:** Windows (tray.py), Linux (linux.py), macOS (macos.py), Android (mobile-app/)
-
-### Новые модули (v2.43.0)
-- ✅ `socks5_handler.py` — SOCKS5 протокол (350+ строк)
-- ✅ `websocket_client.py` — WebSocket клиент (450+ строк)
-- ✅ `connection_pool.py` — пулинг соединений (360+ строк)
-- ✅ `mtproto_parser.py` — парсинг MTProto (280+ строк)
-- ✅ `dns_resolver.py` — DNS resolver с метриками (350+ строк)
-- ✅ `alerts.py` — система алертов (обновлён)
-- ✅ `performance_profiler.py` — профилирование производительности
-- ✅ `circuit_breaker.py` — защита от cascade failures
-
-### Сильные стороны (v2.43.0)
-- ✅ Полная реализация SOCKS5 с MTProto поддержкой
-- ✅ WebSocket пулинг с health checks и динамической оптимизацией
-- ✅ DNS кэширование с TTL и метриками (hit rate >90%)
-- ✅ Rate limiting и защита от злоупотреблений
-- ✅ Автоматический выбор DC по latency в реальном времени
-- ✅ Memory profiling и leak detection (tracemalloc + weakref)
-- ✅ Circuit breaker для защиты от cascade failures
-- ✅ Alerting система с DC latency мониторингом
-- ✅ Кроссплатформенность (Windows/Linux/macOS/Android)
-- ✅ Веб-панель управления с Flask + Prometheus metrics
-- ✅ Encryption support (AES-GCM, ChaCha20, MTProto IGE)
-- ✅ Модульная архитектура (34 модуля, хорошо разделены)
-
-### Области для улучшения (приоритеты v2.44.0)
-- 🎯 **Покрытие тестами:** ~50% → цель >80% (HIGH PRIORITY)
-- 🎯 **Интеграционные тесты:** Нужны end-to-end тесты (HIGH PRIORITY)
-- ⚠️ **Документация:** Обновить GITHUB_RELEASE.md до v2.43.0
-- ⚠️ **CI/CD:** GitHub Actions для автотестов + pip-audit
-- ⚠️ **Логирование:** Оптимизировать debug логи (слишком много)
-- ✅ **Монолитность:** ИСПРАВЛЕНО — tg_ws_proxy.py уменьшен на 46%
-
-### Технический долг
-1. **Рефакторинг tg_ws_proxy.py** — разбить на модули:
-   - ✅ `socks5_handler.py` — SOCKS5 протокол
-   - ✅ `websocket_client.py` — WebSocket клиент
-   - ✅ `connection_pool.py` — пулинг соединений
-   - ✅ `mtproto_parser.py` — парсинг MTProto пакетов
-   - **Результат:** tg_ws_proxy.py уменьшен с 2600+ до ~1400 строк ✅
-
-2. **Улучшение тестов:**
-   - Добавить интеграционные тесты
-   - Увеличить покрытие до >80%
-   - Добавить performance тесты
-
-3. **Документация:**
-   - Обновить GITHUB_RELEASE.md до v2.47.0
-   - Добавить архитектурную диаграмму
-   - Документировать API веб-панели
-
-4. **CI/CD:**
-   - Добавить GitHub Actions для автотестов
-   - Автоматическая сборка релизов
-   - pip-audit для проверки зависимостей
-
----
-
-## 🔴 Высокий приоритет (v2.40.0: Reliability & Resilience)
-
-### [ПЛАН РЕАЛИЗАЦИИ: 15 ШАГОВ]
-1.  [x] **Dev Env Sync**: Тесты и окружение готовы.
-2.  [x] **SRP Refactoring**: Разбит `_handle_client`.
-3.  [x] **Type Safety**: Типизация `ProxyServer` и `_WsPool`.
-4.  [x] **Unit Tests**: Покрыты SOCKS5 и логика парсинга.
-5.  [x] **Health Checks**: Реализован WS PING/PONG.
-6.  [x] **Crash Watchdog**: Внедрен авто-рестарт.
-7.  [x] **DoH Integration**: DNS over HTTPS.
-8.  [x] **Pool Tests**: Тесты переполнения и очистки пула.
-9.  [x] **WebSocket Client**: Выделен websocket_client.py ✅
-10. [x] **SOCKS5 Handler**: Выделен socks5_handler.py ✅
-11. [x] **Circuit Breaker**: Защита от cascade failures ✅
-12. [x] **Dynamic Tile**: Живая статистика скорости в шторке.
-13. [x] **Auto-TLS**: Локальное шифрование сертификатами.
-14. [x] **Memory Profiling**: Поиск утечек в пуле ✅
-15. [x] **Release**: Merge dev -> main ✅ (v2.40.0).
-
-### ✅ Исправлено v2.40.0
-- [x] **circuit_breaker.py** — CircuitBreaker, CircuitBreakerRegistry ✅
-- [x] **test_circuit_breaker.py** — 18 тестов circuit breaker ✅
-- [x] **Интеграция** — 3 circuit breakers в ProxyServer (websocket, tcp, dns) ✅
-- [x] **ruff check** — 0 ошибок ✅
-
-
----
-
-## 🔴 Высокий приоритет (v2.40.0)
-
-### 1. Рефакторинг tg_ws_proxy.py
-**Проблема:** Монолитный файл 2600+ строк затрудняет поддержку
-**Решение:** Разбить на модули:
-- `proxy/socks5_handler.py` — SOCKS5 протокол и handshake ✅
-- `proxy/websocket_client.py` — RawWebSocket класс ✅
-- `proxy/connection_pool.py` — _WsPool и _TcpPool ✅ (v2.42.0)
-- `proxy/mtproto_parser.py` — парсинг MTProto init пакетов [ ]
-
-### 2. Увеличение покрытия тестами
-**Текущее:** ~40% | **Цель:** >80%
-**Приоритет:**
-- Интеграционные тесты для SOCKS5 handshake ✅
-- Тесты для WebSocket reconnection logic ✅
-- Тесты для DC selection algorithm [ ]
-- Performance тесты для connection pooling [ ]
-
-### 3. Обновление документации
-- [x] Обновить `docs/GITHUB_RELEASE.md` до v2.39.0
-- [x] Добавить CONTRIBUTING.md для контрибьюторов
-- [ ] Добавить архитектурную диаграмму в README
-- [ ] Документировать REST API веб-панели
-
-### 4. CI/CD Pipeline
-- [ ] GitHub Actions для автотестов (pytest + ruff + mypy)
-- [ ] Автоматическая сборка релизов для Windows/Linux/macOS
-- [ ] pip-audit для проверки уязвимостей в зависимостях
-- [ ] Автоматический deploy документации
-
-### 5. Performance Optimization
-- [ ] Профилирование bottlenecks с помощью cProfile
-- [ ] Оптимизация DNS resolver (кэш hit rate >90%)
-- [ ] Уменьшение memory footprint (цель <100MB при 100 соединениях)
-- [ ] Benchmark тесты для сравнения с предыдущими версиями
-
----
-
-## 🟢 Средний приоритет (v2.40.0+)
-
-### Новые фичи
-- [ ] **HTTP/3 Support** — QUIC для низкой задержки
-- [ ] **Multi-proxy Mode** — цепочка прокси для анонимности
-- [ ] **Traffic Shaping** — QoS для приоритизации трафика
-- [ ] **Plugin System** — расширяемость через плагины
-
-### Улучшения UX
-- [ ] **Desktop Notifications** — уведомления о событиях
-- [ ] **Auto-update** — автоматическое обновление приложения
-- [ ] **Config Profiles** — переключение между профилями
-- [ ] **Dark/Light Theme** — темы для GUI
-
-### Мониторинг и Аналитика
-- [ ] **Grafana Dashboard** — визуализация метрик
-- [ ] **Export to CSV/JSON** — экспорт статистики
-- [ ] **Historical Data** — хранение истории за 30 дней
-- [ ] **Anomaly Detection** — ML для обнаружения аномалий
-
----
-
-## 📝 Заметки
-
-### Зависимости
-- `cryptography>=46.0.5` — шифрование
-- `psutil>=7.2.2` — мониторинг системы
-- `flask>=3.1.3` — веб-панель
-- `aiodns>=3.2.0` — async DNS (не работает на Windows)
-
-### Известные проблемы
-1. **Windows Defender** — ложные срабатывания на PyInstaller exe
-2. **aiodns** — не устанавливается на Windows (используется fallback)
-3. **pytest** — требуется установка `pip install -r requirements-dev.txt`
-
-### Метрики качества (v2.47.0)
-- **Строк кода:** ~18,000 (Python)
-- **Модулей:** 34 в `proxy/`
-- **Тестов:** 32 файла в `tests/`
-- **Покрытие:** ~55% (цель >80%)
-- **Ruff:** 0 ошибок ✅
-- **Mypy:** 0 ошибок ✅
-- **RuntimeWarnings:** 0 ✅
-- **Платформы:** Windows, Linux, macOS, Android
-- **Рефакторинг:** tg_ws_proxy.py ~1400 строк ✅
-- **Код качество:** Все проверки пройдены ✅
-
----
-
-**Последнее обновление:** 22.03.2026 23:45
-**Автор:** Dupley Maxim Igorevich
+## 📝 Заметки по Android (v2.38.1)
+- Исправлена несовместимость с AGP 9.1.0 в Capacitor плагинах.
+- Требуется нативный TUN двигатель (L3->L5) для полноценного VPN.

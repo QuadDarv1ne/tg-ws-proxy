@@ -18,6 +18,7 @@ import logging
 import time
 from typing import Any
 
+from .autotune import AutoTuner, get_autotuner
 from .stats import Stats
 from .websocket_client import RawWebSocket, WsHandshakeError
 
@@ -47,11 +48,21 @@ class _WsPool:
         self._optimization_interval = 30  # Check every 30 seconds
         self._last_optimization = 0.0
 
-        # Health check configuration
-        self._heartbeat_interval = 45.0  # Send PING every 45 seconds
-        self._heartbeat_timeout = 10.0   # Timeout for PONG response
+        # Health check configuration with adaptive intervals
+        self._heartbeat_interval = 30.0  # Send PING every 30 seconds (aggressive)
+        self._heartbeat_timeout = 5.0    # Timeout for PONG response (reduced)
         self._last_heartbeat = 0.0
         self._health_check_task: asyncio.Task | None = None
+
+        # Advanced health monitoring
+        self._consecutive_failures: dict[int, int] = {}  # Track failures per DC
+        self._last_activity: dict[int, float] = {}  # Last activity timestamp per connection
+        self._aggressive_mode = False  # Enable aggressive health checking
+        self._failed_connections: list[tuple[RawWebSocket, float]] = []  # Recently failed connections
+
+        # Auto-tuner integration for adaptive timeouts
+        self._autotuner: AutoTuner = get_autotuner()
+        self._use_adaptive_timeout = True  # Enable adaptive timeout based on latency
 
         # Memory profiling
         try:
@@ -76,31 +87,93 @@ class _WsPool:
         """Send PING frames to all pooled connections and remove unresponsive ones."""
         checked_count = 0
         failed_count = 0
+        stale_count = 0
+        now = time.monotonic()
+
+        # Aggressive mode: check more frequently when failures detected
+        if self._aggressive_mode:
+            self._heartbeat_interval = 15.0  # Check every 15 seconds in aggressive mode
+            base_timeout = 3.0    # Shorter timeout
+        else:
+            self._heartbeat_interval = 30.0  # Normal mode
+            base_timeout = 5.0
+
+        # Adaptive timeout based on current latency (from autotuner)
+        if self._use_adaptive_timeout:
+            tuned_timeout_ms = self._autotuner.get_current_timeout()
+            # Convert to seconds and apply safety margin (2x for health check)
+            adaptive_timeout = max(base_timeout, (tuned_timeout_ms / 1000.0) * 0.5)
+            self._heartbeat_timeout = min(adaptive_timeout, 10.0)  # Cap at 10s
+        else:
+            self._heartbeat_timeout = base_timeout
 
         for key, bucket in list(self._idle.items()):
+            dc = key[0]
             valid_ws: list[tuple[RawWebSocket, float]] = []
+
             for ws, created in bucket:
+                last_activity = self._last_activity.get(id(ws), created)
+                idle_time = now - last_activity
+
+                # Check for stale connections (no activity for > 2 minutes)
+                if idle_time > 120.0:
+                    log.debug("Stale connection detected for DC%d%s (idle=%.0fs)",
+                             dc, 'm' if key[1] else '', idle_time)
+                    asyncio.create_task(self._quiet_close(ws))
+                    stale_count += 1
+                    continue
+
                 if ws._closed:
                     continue
+
                 try:
-                    # Send PING frame
-                    await ws.send(b'', opcode=RawWebSocket.OP_PING)
+                    # Send PING frame with timeout
+                    await asyncio.wait_for(
+                        ws.send(b'', opcode=RawWebSocket.OP_PING),
+                        timeout=self._heartbeat_timeout
+                    )
                     valid_ws.append((ws, created))
                     checked_count += 1
+
+                    # Reset failure counter on success
+                    self._consecutive_failures[dc] = 0
+
                 except asyncio.TimeoutError:
-                    log.debug("Health check timeout for DC%d%s", key[0], 'm' if key[1] else '')
+                    log.debug("Health check timeout for DC%d%s (timeout=%.1fs)",
+                             dc, 'm' if key[1] else '', self._heartbeat_timeout)
                     asyncio.create_task(self._quiet_close(ws))
                     failed_count += 1
+                    self._consecutive_failures[dc] = self._consecutive_failures.get(dc, 0) + 1
+                    self._failed_connections.append((ws, now))
+
                 except Exception as e:
-                    log.debug("Health check failed for DC%d%s: %s", key[0], 'm' if key[1] else '', e)
+                    log.debug("Health check failed for DC%d%s: %s",
+                             dc, 'm' if key[1] else '', e)
                     asyncio.create_task(self._quiet_close(ws))
                     failed_count += 1
+                    self._consecutive_failures[dc] = self._consecutive_failures.get(dc, 0) + 1
+                    self._failed_connections.append((ws, now))
+
             self._idle[key] = valid_ws
 
-        if failed_count > 0:
-            log.info("Health check: %d checked, %d failed", checked_count, failed_count)
+        # Clean up old failed connections (older than 5 minutes)
+        self._failed_connections = [(ws, t) for ws, t in self._failed_connections if now - t < 300]
+
+        # Adjust mode based on failures
+        total_failures = sum(self._consecutive_failures.values())
+        if total_failures > 5:
+            self._aggressive_mode = True
+            log.warning("Aggressive health check mode enabled (%d consecutive failures)", total_failures)
+        elif total_failures == 0 and self._aggressive_mode:
+            self._aggressive_mode = False
+            log.info("Aggressive health check mode disabled (all connections healthy)")
+
+        # Log results
+        if failed_count > 0 or stale_count > 0:
+            log.warning("Health check: %d checked, %d failed, %d stale (aggressive=%s)",
+                       checked_count, failed_count, stale_count, self._aggressive_mode)
         else:
-            log.debug("Health check completed: %d connections checked", checked_count)
+            log.debug("Health check passed: %d connections checked", checked_count)
 
     async def get(self, dc: int, is_media: bool,
                   target_ip: str, domains: list[str]
@@ -116,6 +189,10 @@ class _WsPool:
             if age > WS_POOL_MAX_AGE or ws._closed:
                 asyncio.create_task(self._quiet_close(ws))
                 continue
+
+            # Update last activity time
+            self._last_activity[id(ws)] = now
+
             self.stats.pool_hits += 1
             log.debug("WS pool hit for DC%d%s (age=%.1fs, left=%d)",
                       dc, 'm' if is_media else '', age, len(bucket))
@@ -174,6 +251,8 @@ class _WsPool:
         - If avg latency > 100ms: increase pool to reduce connection overhead
         - If latency < 30ms and low miss rate: decrease to save resources
 
+        Also syncs with auto-tuner for coordinated optimization.
+
         Args:
             avg_latency_ms: Average latency to Telegram DCs in milliseconds
         """
@@ -224,6 +303,27 @@ class _WsPool:
         self._last_miss_count = self.stats.pool_misses
         self._last_optimization = now
 
+        # Sync with auto-tuner (record performance sample)
+        if avg_latency_ms > 0:
+            asyncio.create_task(self._record_autotune_sample(avg_latency_ms, True))
+
+    async def _record_autotune_sample(
+        self,
+        latency_ms: float,
+        success: bool,
+        bytes_transferred: int = 0,
+    ) -> None:
+        """Record a performance sample for auto-tuner."""
+        try:
+            await self._autotuner.record_sample(
+                latency_ms=latency_ms,
+                success=success,
+                bytes_transferred=bytes_transferred,
+                connection_reused=self.stats.pool_hits > 0,
+            )
+        except Exception as e:
+            log.debug("Failed to record autotune sample: %s", e)
+
     async def _connect_one(self, target_ip: str, domains: list[str]) -> RawWebSocket | None:
         """Connect to one WebSocket endpoint."""
         for domain in domains:
@@ -253,6 +353,8 @@ class _WsPool:
         key = (dc, is_media)
         bucket = self._idle.setdefault(key, [])
         if len(bucket) < self._pool_max_size:
+            # Update last activity time when returning to pool
+            self._last_activity[id(ws)] = time.monotonic()
             bucket.append((ws, time.monotonic()))
         else:
             asyncio.create_task(self._quiet_close(ws))
@@ -267,6 +369,8 @@ class _WsPool:
     def get_stats(self) -> dict[str, Any]:
         """Get pool statistics."""
         total = sum(len(b) for b in self._idle.values())
+        autotune_stats = self._autotuner.get_statistics()
+
         return {
             'total_connections': total,
             'pool_size': self._pool_size,
@@ -274,6 +378,18 @@ class _WsPool:
             'buckets': len(self._idle),
             'hits': self.stats.pool_hits,
             'misses': self.stats.pool_misses,
+            'aggressive_mode': self._aggressive_mode,
+            'consecutive_failures': sum(self._consecutive_failures.values()),
+            'failed_connections_recent': len(self._failed_connections),
+            'heartbeat_interval': self._heartbeat_interval,
+            'heartbeat_timeout': self._heartbeat_timeout,
+            'autotune': {
+                'enabled': self._use_adaptive_timeout,
+                'current_timeout_ms': autotune_stats['current_timeout_ms'],
+                'current_pool_size': autotune_stats['current_pool_size'],
+                'tuning_mode': autotune_stats['tuning_mode'],
+                'tuning_applied_count': autotune_stats['tuning_applied_count'],
+            },
         }
 
     def warmup(self, dc_opt: dict[int, str | None]) -> None:
