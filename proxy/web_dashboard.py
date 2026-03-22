@@ -2823,8 +2823,8 @@ class WebDashboard:
             See: https://prometheus.io/docs/instrumenting/exposition_formats/
             """
             try:
-                from proxy.tg_ws_proxy import _server_instance
                 from proxy.stats import get_stats_instance
+                from proxy.tg_ws_proxy import _server_instance
 
                 lines = []
 
