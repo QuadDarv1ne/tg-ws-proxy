@@ -588,7 +588,7 @@ class _WsPool:
         self._idle.clear()
 
     def get_stats(self) -> dict[str, Any]:
-        """Get pool statistics."""
+        """Get pool statistics with Prometheus metrics support."""
         total = sum(len(b) for b in self._idle.values())
         autotune_stats = self._autotuner.get_statistics()
 
@@ -606,6 +606,16 @@ class _WsPool:
                 'recent_failures': len(self._domain_failures.get(domain, [])),
             }
 
+        # Connection scoring stats
+        connection_scores = {
+            ws_id: info['score']
+            for ws_id, info in self._connection_scores.items()
+        }
+        avg_score = (
+            sum(connection_scores.values()) / len(connection_scores)
+            if connection_scores else 0
+        )
+
         return {
             'total_connections': total,
             'pool_size': self._pool_size,
@@ -619,6 +629,11 @@ class _WsPool:
             'heartbeat_interval': self._heartbeat_interval,
             'heartbeat_timeout': self._heartbeat_timeout,
             'domain_stats': domain_stats,
+            'connection_scoring': {
+                'tracked_connections': len(self._connection_scores),
+                'average_score': avg_score,
+                'scores': connection_scores,
+            },
             'autotune': {
                 'enabled': self._use_adaptive_timeout,
                 'current_timeout_ms': autotune_stats['current_timeout_ms'],
@@ -627,6 +642,50 @@ class _WsPool:
                 'tuning_applied_count': autotune_stats['tuning_applied_count'],
             },
         }
+
+    def get_prometheus_metrics(self) -> str:
+        """
+        Export pool metrics in Prometheus format.
+
+        Returns:
+            Prometheus-formatted metrics string
+        """
+        lines = []
+        stats = self.get_stats()
+
+        # Pool connections gauge
+        lines.append("# HELP tg_ws_pool_connections Total connections in pool")
+        lines.append("# TYPE tg_ws_pool_connections gauge")
+        lines.append(f"tg_ws_pool_connections {stats['total_connections']}")
+        lines.append("")
+
+        # Pool hits counter
+        lines.append("# HELP tg_ws_pool_hits_total Total pool hits")
+        lines.append("# TYPE tg_ws_pool_hits_total counter")
+        lines.append(f"tg_ws_pool_hits_total {stats['hits']}")
+        lines.append("")
+
+        # Pool misses counter
+        lines.append("# HELP tg_ws_pool_misses_total Total pool misses")
+        lines.append("# TYPE tg_ws_pool_misses_total counter")
+        lines.append(f"tg_ws_pool_misses_total {stats['misses']}")
+        lines.append("")
+
+        # Average connection score gauge
+        lines.append("# HELP tg_ws_pool_avg_connection_score Average connection score")
+        lines.append("# TYPE tg_ws_pool_avg_connection_score gauge")
+        lines.append(f"tg_ws_pool_avg_connection_score {stats['connection_scoring']['average_score']:.2f}")
+        lines.append("")
+
+        # Domain success rate gauge
+        lines.append("# HELP tg_ws_domain_success_rate Domain success rate")
+        lines.append("# TYPE tg_ws_domain_success_rate gauge")
+        for domain, dstats in stats['domain_stats'].items():
+            safe_domain = domain.replace('.', '_').replace('-', '_')
+            lines.append(f'tg_ws_domain_success_rate{{domain="{safe_domain}"}} {dstats["success_rate"]:.2f}')
+        lines.append("")
+
+        return '\n'.join(lines)
 
     def warmup(self, dc_opt: dict[int, str | None]) -> None:
         """Pre-fill pool for all configured DCs on startup."""

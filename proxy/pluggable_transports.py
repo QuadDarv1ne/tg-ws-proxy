@@ -1027,10 +1027,8 @@ class AdaptiveObfuscationPipeline(ObfuscationPipeline):
         self._consecutive_failures = 0
         self._last_success_time = time.monotonic()
 
-        # Check if we should de-escalate
-        if self.enable_auto_escalation and self._escalation_level > 0:
-            # De-escalate after timeout period of successful connections
-            # (implemented in obfuscate method for simplicity)
+        # De-escalation is handled in obfuscate() method
+        # based on timeout period of successful connections
 
     def obfuscate(self, data: bytes) -> list[bytes]:
         """

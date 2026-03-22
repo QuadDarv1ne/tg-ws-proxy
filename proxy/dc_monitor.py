@@ -408,6 +408,80 @@ class DCHealthMonitor:
             'dcs_with_half_open_circuit': sum(1 for cb in self._circuit_breakers.values() if cb.is_half_open),
         }
 
+    def get_prometheus_metrics(self) -> str:
+        """
+        Export DC monitor metrics in Prometheus format.
+
+        Returns:
+            Prometheus-formatted metrics string
+        """
+        lines = []
+        stats = self.get_statistics()
+
+        # DC health score gauge
+        lines.append("# HELP tg_ws_dc_health_score Data Center health score (0-100)")
+        lines.append("# TYPE tg_ws_dc_health_score gauge")
+        for dc_id, metrics in self._metrics.items():
+            lines.append(f'tg_ws_dc_health_score{{dc_id="{dc_id}"}} {metrics.health_score:.2f}')
+        lines.append("")
+
+        # DC latency gauge
+        lines.append("# HELP tg_ws_dc_latency_ms Data Center latency in milliseconds")
+        lines.append("# TYPE tg_ws_dc_latency_ms gauge")
+        for dc_id, metrics in self._metrics.items():
+            lines.append(f'tg_ws_dc_latency_ms{{dc_id="{dc_id}"}} {metrics.latency_ms:.2f}')
+        lines.append("")
+
+        # DC error rate gauge
+        lines.append("# HELP tg_ws_dc_error_rate Data Center error rate percentage")
+        lines.append("# TYPE tg_ws_dc_error_rate gauge")
+        for dc_id, metrics in self._metrics.items():
+            lines.append(f'tg_ws_dc_error_rate{{dc_id="{dc_id}"}} {metrics.error_rate:.2f}')
+        lines.append("")
+
+        # DC status gauge (0=healthy, 1=degraded, 2=unhealthy, 3=offline)
+        lines.append("# HELP tg_ws_dc_status Data Center status")
+        lines.append("# TYPE tg_ws_dc_status gauge")
+        status_map = {
+            DCStatus.HEALTHY: 0,
+            DCStatus.DEGRADED: 1,
+            DCStatus.UNHEALTHY: 2,
+            DCStatus.OFFLINE: 3,
+        }
+        for dc_id, metrics in self._metrics.items():
+            lines.append(f'tg_ws_dc_status{{dc_id="{dc_id}"}} {status_map[metrics.status]}')
+        lines.append("")
+
+        # Circuit breaker state gauge
+        lines.append("# HELP tg_ws_dc_circuit_breaker_state DC Circuit Breaker state (0=closed, 1=open, 2=half-open)")
+        lines.append("# TYPE tg_ws_dc_circuit_breaker_state gauge")
+        state_map = {
+            CircuitState.CLOSED: 0,
+            CircuitState.OPEN: 1,
+            CircuitState.HALF_OPEN: 2,
+        }
+        for dc_id, cb in self._circuit_breakers.items():
+            lines.append(f'tg_ws_dc_circuit_breaker_state{{dc_id="{dc_id}"}} {state_map[cb.state]}')
+        lines.append("")
+
+        # Summary stats
+        lines.append("# HELP tg_ws_dc_total Total number of Data Centers")
+        lines.append("# TYPE tg_ws_dc_total gauge")
+        lines.append(f"tg_ws_dc_total {stats['total_dcs']}")
+        lines.append("")
+
+        lines.append("# HELP tg_ws_dc_healthy Total healthy Data Centers")
+        lines.append("# TYPE tg_ws_dc_healthy gauge")
+        lines.append(f"tg_ws_dc_healthy {stats['healthy_dcs']}")
+        lines.append("")
+
+        lines.append("# HELP tg_ws_dc_offline Total offline Data Centers")
+        lines.append("# TYPE tg_ws_dc_offline gauge")
+        lines.append(f"tg_ws_dc_offline {stats['offline_dcs']}")
+        lines.append("")
+
+        return '\n'.join(lines)
+
 
 # Global monitor instance
 _monitor: DCHealthMonitor | None = None
