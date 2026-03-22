@@ -18,7 +18,14 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Callable
+from typing import Any, Callable
+
+from .circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitBreakerRegistry,
+    CircuitState,
+)
 
 log = logging.getLogger('tg-dc-monitor')
 
@@ -86,7 +93,7 @@ class DCConfig:
 
 
 class DCHealthMonitor:
-    """Monitor health of Telegram Data Centers."""
+    """Monitor health of Telegram Data Centers with Circuit Breaker protection."""
 
     def __init__(
         self,
@@ -103,10 +110,50 @@ class DCHealthMonitor:
         self._monitor_task: asyncio.Task | None = None
         self._status_history: dict[int, list[DCStatus]] = {}
 
-        # Initialize metrics for each DC
+        # Circuit Breaker integration - one per DC
+        self._circuit_breakers: dict[int, CircuitBreaker] = {}
+        self._cb_registry = CircuitBreakerRegistry()
+
+        # Initialize metrics and circuit breakers for each DC
         for dc_id in dc_ips.keys():
             self._metrics[dc_id] = DCMetrics(dc_id=dc_id)
             self._status_history[dc_id] = []
+            # Create circuit breaker for each DC
+            cb_config = CircuitBreakerConfig(
+                failure_threshold=self.config.failure_threshold,
+                success_threshold=self.config.recovery_threshold,
+                timeout=60.0,  # 1 minute timeout before trying again
+                half_open_max_calls=3,
+            )
+            self._circuit_breakers[dc_id] = CircuitBreaker(
+                name=f"DC{dc_id}",
+                config=cb_config
+            )
+
+    def get_circuit_breaker(self, dc_id: int) -> CircuitBreaker | None:
+        """Get circuit breaker for a specific DC."""
+        return self._circuit_breakers.get(dc_id)
+
+    def is_dc_available(self, dc_id: int) -> bool:
+        """Check if DC is available (circuit breaker not open)."""
+        cb = self._circuit_breakers.get(dc_id)
+        if cb is None:
+            return True
+        return cb.state != CircuitState.OPEN
+
+    async def record_dc_success(self, dc_id: int, latency_ms: float = 0.0) -> None:
+        """Record successful DC operation."""
+        if dc_id in self._metrics:
+            self._metrics[dc_id].success_count += 1
+            self._metrics[dc_id].consecutive_failures = 0
+            if latency_ms > 0:
+                self._metrics[dc_id].latency_ms = latency_ms
+
+    async def record_dc_error(self, dc_id: int, error: Exception | None = None) -> None:
+        """Record failed DC operation."""
+        if dc_id in self._metrics:
+            self._metrics[dc_id].error_count += 1
+            self._metrics[dc_id].consecutive_failures += 1
 
     async def start(self) -> None:
         """Start the DC health monitor."""
@@ -150,8 +197,25 @@ class DCHealthMonitor:
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _check_dc(self, dc_id: int, ip: str) -> None:
-        """Check health of a single DC."""
+        """Check health of a single DC with Circuit Breaker integration."""
         metrics = self._metrics[dc_id]
+        cb = self._circuit_breakers.get(dc_id)
+
+        # Skip check if circuit breaker is open
+        if cb and cb.state == CircuitState.OPEN:
+            retry_after = cb.config.timeout - (time.monotonic() - cb._opened_at)
+            if retry_after > 0:
+                log.debug("DC%d circuit breaker OPEN, skipping check (retry in %.1fs)",
+                         dc_id, retry_after)
+                # Still update status based on existing metrics
+                old_status = metrics.status
+                new_status = self._calculate_status(metrics)
+                if old_status != new_status:
+                    metrics.status = new_status
+                    self._status_history[dc_id].append(new_status)
+                    if self._on_status_change:
+                        self._on_status_change(dc_id, new_status)
+                return
 
         try:
             # Measure latency using asyncio
@@ -165,17 +229,34 @@ class DCHealthMonitor:
                 writer.close()
                 await writer.wait_closed()
 
+                # Record success in metrics
                 metrics.success_count += 1
                 metrics.consecutive_failures = 0
                 metrics.latency_ms = latency
-            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+
+                # Record success in circuit breaker
+                if cb:
+                    cb._on_success()
+
+            except (asyncio.TimeoutError, ConnectionRefusedError, OSError) as e:
+                # Record failure in metrics
                 metrics.error_count += 1
                 metrics.consecutive_failures += 1
+
+                # Record failure in circuit breaker
+                if cb:
+                    cb._on_failure()
+
+                log.debug("DC%d connection failed: %s (circuit state: %s)",
+                         dc_id, e, cb.state.value if cb else "N/A")
 
         except Exception as e:
             log.debug("DC%d check failed: %s", dc_id, e)
             metrics.error_count += 1
             metrics.consecutive_failures += 1
+
+            if cb:
+                cb._on_failure()
 
         metrics.last_check = time.time()
 
@@ -254,9 +335,40 @@ class DCHealthMonitor:
                 'error_rate': round(metrics.error_rate, 2),
                 'health_score': round(metrics.health_score, 2),
                 'consecutive_failures': metrics.consecutive_failures,
+                'circuit_breaker_state': self._circuit_breakers.get(dc_id).state.value
+                    if self._circuit_breakers.get(dc_id) else 'N/A',
             }
             for dc_id, metrics in self._metrics.items()
         }
+
+    async def execute_with_circuit_breaker(
+        self,
+        dc_id: int,
+        func: Callable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Execute function through DC circuit breaker.
+
+        Args:
+            dc_id: Data Center ID
+            func: Async function to execute
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+
+        Returns:
+            Result of function call
+
+        Raises:
+            CircuitBreakerError: If circuit breaker is open
+        """
+        cb = self._circuit_breakers.get(dc_id)
+        if cb is None:
+            # No circuit breaker, execute directly
+            return await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
+
+        return await cb.call(func, *args, **kwargs)
 
     def record_error(self, dc_id: int) -> None:
         """Manually record an error for a DC."""
@@ -271,11 +383,17 @@ class DCHealthMonitor:
             self._metrics[dc_id].consecutive_failures = 0
 
     def get_statistics(self) -> dict:
-        """Get monitor statistics."""
+        """Get monitor statistics with Circuit Breaker info."""
         healthy_count = sum(
             1 for m in self._metrics.values()
             if m.status == DCStatus.HEALTHY
         )
+
+        # Circuit breaker stats
+        cb_stats = {
+            dc_id: cb.get_info()
+            for dc_id, cb in self._circuit_breakers.items()
+        }
 
         return {
             'total_dcs': len(self._metrics),
@@ -285,7 +403,84 @@ class DCHealthMonitor:
             'offline_dcs': sum(1 for m in self._metrics.values() if m.status == DCStatus.OFFLINE),
             'average_latency_ms': sum(m.latency_ms for m in self._metrics.values()) / len(self._metrics) if self._metrics else 0,
             'average_health_score': sum(m.health_score for m in self._metrics.values()) / len(self._metrics) if self._metrics else 0,
+            'circuit_breakers': cb_stats,
+            'dcs_with_open_circuit': sum(1 for cb in self._circuit_breakers.values() if cb.is_open),
+            'dcs_with_half_open_circuit': sum(1 for cb in self._circuit_breakers.values() if cb.is_half_open),
         }
+
+    def get_prometheus_metrics(self) -> str:
+        """
+        Export DC monitor metrics in Prometheus format.
+
+        Returns:
+            Prometheus-formatted metrics string
+        """
+        lines = []
+        stats = self.get_statistics()
+
+        # DC health score gauge
+        lines.append("# HELP tg_ws_dc_health_score Data Center health score (0-100)")
+        lines.append("# TYPE tg_ws_dc_health_score gauge")
+        for dc_id, metrics in self._metrics.items():
+            lines.append(f'tg_ws_dc_health_score{{dc_id="{dc_id}"}} {metrics.health_score:.2f}')
+        lines.append("")
+
+        # DC latency gauge
+        lines.append("# HELP tg_ws_dc_latency_ms Data Center latency in milliseconds")
+        lines.append("# TYPE tg_ws_dc_latency_ms gauge")
+        for dc_id, metrics in self._metrics.items():
+            lines.append(f'tg_ws_dc_latency_ms{{dc_id="{dc_id}"}} {metrics.latency_ms:.2f}')
+        lines.append("")
+
+        # DC error rate gauge
+        lines.append("# HELP tg_ws_dc_error_rate Data Center error rate percentage")
+        lines.append("# TYPE tg_ws_dc_error_rate gauge")
+        for dc_id, metrics in self._metrics.items():
+            lines.append(f'tg_ws_dc_error_rate{{dc_id="{dc_id}"}} {metrics.error_rate:.2f}')
+        lines.append("")
+
+        # DC status gauge (0=healthy, 1=degraded, 2=unhealthy, 3=offline)
+        lines.append("# HELP tg_ws_dc_status Data Center status")
+        lines.append("# TYPE tg_ws_dc_status gauge")
+        status_map = {
+            DCStatus.HEALTHY: 0,
+            DCStatus.DEGRADED: 1,
+            DCStatus.UNHEALTHY: 2,
+            DCStatus.OFFLINE: 3,
+        }
+        for dc_id, metrics in self._metrics.items():
+            lines.append(f'tg_ws_dc_status{{dc_id="{dc_id}"}} {status_map[metrics.status]}')
+        lines.append("")
+
+        # Circuit breaker state gauge
+        lines.append("# HELP tg_ws_dc_circuit_breaker_state DC Circuit Breaker state (0=closed, 1=open, 2=half-open)")
+        lines.append("# TYPE tg_ws_dc_circuit_breaker_state gauge")
+        state_map = {
+            CircuitState.CLOSED: 0,
+            CircuitState.OPEN: 1,
+            CircuitState.HALF_OPEN: 2,
+        }
+        for dc_id, cb in self._circuit_breakers.items():
+            lines.append(f'tg_ws_dc_circuit_breaker_state{{dc_id="{dc_id}"}} {state_map[cb.state]}')
+        lines.append("")
+
+        # Summary stats
+        lines.append("# HELP tg_ws_dc_total Total number of Data Centers")
+        lines.append("# TYPE tg_ws_dc_total gauge")
+        lines.append(f"tg_ws_dc_total {stats['total_dcs']}")
+        lines.append("")
+
+        lines.append("# HELP tg_ws_dc_healthy Total healthy Data Centers")
+        lines.append("# TYPE tg_ws_dc_healthy gauge")
+        lines.append(f"tg_ws_dc_healthy {stats['healthy_dcs']}")
+        lines.append("")
+
+        lines.append("# HELP tg_ws_dc_offline Total offline Data Centers")
+        lines.append("# TYPE tg_ws_dc_offline gauge")
+        lines.append(f"tg_ws_dc_offline {stats['offline_dcs']}")
+        lines.append("")
+
+        return '\n'.join(lines)
 
 
 # Global monitor instance

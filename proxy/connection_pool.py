@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 from .autotune import AutoTuner, get_autotuner
+from .retry_strategy import RetryStrategy, get_websocket_retry_strategy
 from .stats import Stats
 from .websocket_client import RawWebSocket, WsHandshakeError
 
@@ -63,6 +64,17 @@ class _WsPool:
         # Auto-tuner integration for adaptive timeouts
         self._autotuner: AutoTuner = get_autotuner()
         self._use_adaptive_timeout = True  # Enable adaptive timeout based on latency
+
+        # Retry strategy for WebSocket connections
+        self._retry_strategy: RetryStrategy = get_websocket_retry_strategy()
+
+        # Connection attempt tracking per domain
+        self._domain_failures: dict[str, list[float]] = {}  # domain -> [failure_timestamps]
+        self._domain_success_rate: dict[str, float] = {}  # domain -> success_rate (0.0-1.0)
+
+        # Connection scoring for WebSocket quality tracking
+        self._connection_scores: dict[int, dict[str, Any]] = {}  # id(ws) -> scoring info
+        self._latency_history: dict[int, list[float]] = {}  # id(ws) -> [latencies]
 
         # Memory profiling
         try:
@@ -178,24 +190,51 @@ class _WsPool:
     async def get(self, dc: int, is_media: bool,
                   target_ip: str, domains: list[str]
                   ) -> RawWebSocket | None:
-        """Get WebSocket from pool or None if empty."""
+        """Get WebSocket from pool with connection scoring."""
         key = (dc, is_media)
         now = time.monotonic()
 
         bucket: list[tuple[RawWebSocket, float]] = self._idle.get(key, [])
-        while bucket:
-            ws, created = bucket.pop(0)
+        
+        # Score all connections in bucket and sort by score (best first)
+        scored_connections: list[tuple[float, RawWebSocket, float]] = []
+        valid_bucket: list[tuple[RawWebSocket, float]] = []
+        
+        for ws, created in bucket:
             age = now - created
             if age > WS_POOL_MAX_AGE or ws._closed:
                 asyncio.create_task(self._quiet_close(ws))
                 continue
-
+            
+            ws_id = id(ws)
+            latency_ms = self._get_average_latency(ws_id)
+            error_count = self._connection_scores.get(ws_id, {}).get('error_count', 0)
+            score = self._calculate_connection_score(ws_id, latency_ms, error_count, age)
+            scored_connections.append((score, ws, created))
+            valid_bucket.append((ws, created))
+        
+        # Update bucket with valid connections
+        self._idle[key] = valid_bucket
+        
+        # Get best scored connection
+        if scored_connections:
+            # Sort by score (highest first)
+            scored_connections.sort(key=lambda x: x[0], reverse=True)
+            best_score, ws, created = scored_connections[0]
+            
+            # Remove from bucket
+            valid_bucket.remove((ws, created))
+            self._idle[key] = valid_bucket
+            
             # Update last activity time
             self._last_activity[id(ws)] = now
-
+            
             self.stats.pool_hits += 1
-            log.debug("WS pool hit for DC%d%s (age=%.1fs, left=%d)",
-                      dc, 'm' if is_media else '', age, len(bucket))
+            log.debug(
+                "WS pool hit for DC%d%s (score=%.0f, latency=%.0fms, age=%.1fs, left=%d)",
+                dc, 'm' if is_media else '', best_score,
+                self._get_average_latency(id(ws)), now - created, len(valid_bucket)
+            )
             self._schedule_refill(key, target_ip, domains)
             return ws
 
@@ -325,37 +364,219 @@ class _WsPool:
             log.debug("Failed to record autotune sample: %s", e)
 
     async def _connect_one(self, target_ip: str, domains: list[str]) -> RawWebSocket | None:
-        """Connect to one WebSocket endpoint."""
-        for domain in domains:
-            try:
-                ws = await RawWebSocket.connect(target_ip, domain, timeout=8)
+        """
+        Connect to one WebSocket endpoint with retry logic.
+
+        Uses exponential backoff with jitter for resilience.
+        Tracks domain success rates for intelligent domain selection.
+        """
+        # Sort domains by success rate (prefer domains with higher success rate)
+        sorted_domains = sorted(
+            domains,
+            key=lambda d: self._domain_success_rate.get(d, 0.5),
+            reverse=True
+        )
+
+        for domain in sorted_domains:
+            # Clean up old failure records (older than 5 minutes)
+            now = time.monotonic()
+            self._domain_failures[domain] = [
+                t for t in self._domain_failures.get(domain, [])
+                if now - t < 300
+            ]
+
+            # Skip domain if it has too many recent failures (>3 in last 5 minutes)
+            if len(self._domain_failures.get(domain, [])) >= 3:
+                log.debug("Skipping domain %s (too many recent failures)", domain)
+                continue
+
+            # Try to connect with retry strategy
+            connect_success = False
+            ws = None
+
+            async def _connect_attempt() -> RawWebSocket:
+                """Inner connect function for retry strategy."""
+                return await RawWebSocket.connect(target_ip, domain, timeout=8)
+
+            # Execute with retry logic
+            result = await self._retry_strategy.execute_async(_connect_attempt)
+
+            if result.success:
+                ws = result.result
+                connect_success = True
+                # Record success
+                self._domain_success_rate[domain] = min(
+                    self._domain_success_rate.get(domain, 0.5) + 0.1,
+                    1.0
+                )
+                log.debug(
+                    "WS connected to %s after %d attempt(s) "
+                    "(latency=%.0fms, success_rate=%.0f%%)",
+                    domain,
+                    result.attempts,
+                    result.total_time * 1000,
+                    self._domain_success_rate[domain] * 100
+                )
+            else:
+                # Record failure
+                self._domain_failures.setdefault(domain, []).append(now)
+                self._domain_success_rate[domain] = max(
+                    self._domain_success_rate.get(domain, 0.5) - 0.15,
+                    0.0
+                )
+                log.debug(
+                    "WS connect failed to %s after %d attempts: %s "
+                    "(success_rate=%.0f%%)",
+                    domain,
+                    result.attempts,
+                    result.error,
+                    self._domain_success_rate[domain] * 100
+                )
+
+                # Check if it's a redirect (302) - this DC doesn't support WS
+                if result.error and isinstance(result.error, WsHandshakeError):
+                    if result.error.is_redirect:
+                        log.debug("DC returned 302 redirect for %s", domain)
+                        break
+
+            if connect_success and ws:
                 return ws
-            except WsHandshakeError as exc:
-                if exc.is_redirect:
-                    # 302 redirect - this DC doesn't support WS
-                    log.debug("DC returned 302 redirect for %s", domain)
-                    break
-                log.debug("WS connect error for %s: %s", domain, exc)
-            except Exception as e:
-                log.debug("WS connect failed for %s: %s", domain, e)
+
+        # All domains failed
         return None
+
+    def _calculate_connection_score(
+        self,
+        ws_id: int,
+        latency_ms: float,
+        error_count: int,
+        age_seconds: float,
+    ) -> float:
+        """
+        Calculate connection quality score (0-100).
+
+        Higher score = better connection.
+
+        Args:
+            ws_id: WebSocket object ID
+            latency_ms: Connection latency
+            error_count: Number of errors
+            age_seconds: Connection age
+
+        Returns:
+            Score from 0 (bad) to 100 (excellent)
+        """
+        # Latency score (lower is better, max 100 points)
+        if latency_ms < 50:
+            latency_score = 100
+        elif latency_ms < 100:
+            latency_score = 80
+        elif latency_ms < 200:
+            latency_score = 60
+        elif latency_ms < 500:
+            latency_score = 40
+        else:
+            latency_score = max(0, 100 - latency_ms / 10)
+
+        # Error penalty (max 50 points penalty)
+        error_penalty = min(error_count * 10, 50)
+
+        # Age penalty (older connections get stale, max 20 points)
+        # Prefer connections that are not too old (>5 min = penalty)
+        age_penalty = min(max(0, (age_seconds - 300) / 60), 20)
+
+        score = max(0, latency_score - error_penalty - age_penalty)
+
+        # Store scoring info
+        self._connection_scores[ws_id] = {
+            'score': score,
+            'latency_ms': latency_ms,
+            'error_count': error_count,
+            'age_seconds': age_seconds,
+            'calculated_at': time.monotonic(),
+        }
+
+        return score
+
+    def _record_connection_latency(self, ws_id: int, latency_ms: float) -> None:
+        """Record latency sample for connection."""
+        if ws_id not in self._latency_history:
+            self._latency_history[ws_id] = []
+
+        self._latency_history[ws_id].append(latency_ms)
+
+        # Keep only last 20 samples
+        if len(self._latency_history[ws_id]) > 20:
+            self._latency_history[ws_id] = self._latency_history[ws_id][-20:]
+
+    def _get_average_latency(self, ws_id: int) -> float:
+        """Get average latency for connection."""
+        history = self._latency_history.get(ws_id, [])
+        if not history:
+            return 0.0
+        return sum(history) / len(history)
+
+    def _record_connection_error(self, ws_id: int) -> None:
+        """Record error for connection."""
+        if ws_id in self._connection_scores:
+            self._connection_scores[ws_id]['error_count'] = (
+                self._connection_scores[ws_id].get('error_count', 0) + 1
+            )
+
+    def _cleanup_connection_tracking(self, ws_id: int) -> None:
+        """Clean up tracking data for closed connection."""
+        self._connection_scores.pop(ws_id, None)
+        self._latency_history.pop(ws_id, None)
 
     async def _quiet_close(self, ws: RawWebSocket | None) -> None:
         """Quietly close a WebSocket connection."""
         if ws:
+            # Clean up tracking data
+            ws_id = id(ws)
+            self._cleanup_connection_tracking(ws_id)
+
             try:
                 await ws.close()
             except Exception:
                 pass
 
     def put(self, dc: int, is_media: bool, ws: RawWebSocket) -> None:
-        """Return WebSocket to pool."""
+        """Return WebSocket to pool with connection scoring."""
         key = (dc, is_media)
         bucket = self._idle.setdefault(key, [])
+        
         if len(bucket) < self._pool_max_size:
-            # Update last activity time when returning to pool
-            self._last_activity[id(ws)] = time.monotonic()
-            bucket.append((ws, time.monotonic()))
+            now = time.monotonic()
+            ws_id = id(ws)
+            
+            # Update last activity time
+            self._last_activity[ws_id] = now
+            
+            # Get or create connection info
+            created = now  # Default for new connections
+            error_count = 0
+            latency_ms = self._get_average_latency(ws_id)
+            
+            # Find existing connection in bucket to get created time
+            for existing_ws, existing_created in bucket:
+                if id(existing_ws) == ws_id:
+                    created = existing_created
+                    break
+            
+            # Get error count from tracking
+            if ws_id in self._connection_scores:
+                error_count = self._connection_scores[ws_id].get('error_count', 0)
+            
+            # Calculate connection score
+            age = now - created
+            score = self._calculate_connection_score(ws_id, latency_ms, error_count, age)
+            
+            log.debug(
+                "WS returned to pool: DC%d%s, score=%.0f, latency=%.0fms, errors=%d, age=%.0fs",
+                dc, 'm' if is_media else '', score, latency_ms, error_count, age
+            )
+            
+            bucket.append((ws, created))
         else:
             asyncio.create_task(self._quiet_close(ws))
 
@@ -367,9 +588,33 @@ class _WsPool:
         self._idle.clear()
 
     def get_stats(self) -> dict[str, Any]:
-        """Get pool statistics."""
+        """Get pool statistics with Prometheus metrics support."""
         total = sum(len(b) for b in self._idle.values())
         autotune_stats = self._autotuner.get_statistics()
+
+        # Calculate domain statistics
+        now = time.monotonic()
+        domain_stats = {}
+        for domain in set(list(self._domain_success_rate.keys()) + list(self._domain_failures.keys())):
+            # Clean up old failures
+            self._domain_failures[domain] = [
+                t for t in self._domain_failures.get(domain, [])
+                if now - t < 300
+            ]
+            domain_stats[domain] = {
+                'success_rate': self._domain_success_rate.get(domain, 0.5),
+                'recent_failures': len(self._domain_failures.get(domain, [])),
+            }
+
+        # Connection scoring stats
+        connection_scores = {
+            ws_id: info['score']
+            for ws_id, info in self._connection_scores.items()
+        }
+        avg_score = (
+            sum(connection_scores.values()) / len(connection_scores)
+            if connection_scores else 0
+        )
 
         return {
             'total_connections': total,
@@ -383,6 +628,12 @@ class _WsPool:
             'failed_connections_recent': len(self._failed_connections),
             'heartbeat_interval': self._heartbeat_interval,
             'heartbeat_timeout': self._heartbeat_timeout,
+            'domain_stats': domain_stats,
+            'connection_scoring': {
+                'tracked_connections': len(self._connection_scores),
+                'average_score': avg_score,
+                'scores': connection_scores,
+            },
             'autotune': {
                 'enabled': self._use_adaptive_timeout,
                 'current_timeout_ms': autotune_stats['current_timeout_ms'],
@@ -391,6 +642,50 @@ class _WsPool:
                 'tuning_applied_count': autotune_stats['tuning_applied_count'],
             },
         }
+
+    def get_prometheus_metrics(self) -> str:
+        """
+        Export pool metrics in Prometheus format.
+
+        Returns:
+            Prometheus-formatted metrics string
+        """
+        lines = []
+        stats = self.get_stats()
+
+        # Pool connections gauge
+        lines.append("# HELP tg_ws_pool_connections Total connections in pool")
+        lines.append("# TYPE tg_ws_pool_connections gauge")
+        lines.append(f"tg_ws_pool_connections {stats['total_connections']}")
+        lines.append("")
+
+        # Pool hits counter
+        lines.append("# HELP tg_ws_pool_hits_total Total pool hits")
+        lines.append("# TYPE tg_ws_pool_hits_total counter")
+        lines.append(f"tg_ws_pool_hits_total {stats['hits']}")
+        lines.append("")
+
+        # Pool misses counter
+        lines.append("# HELP tg_ws_pool_misses_total Total pool misses")
+        lines.append("# TYPE tg_ws_pool_misses_total counter")
+        lines.append(f"tg_ws_pool_misses_total {stats['misses']}")
+        lines.append("")
+
+        # Average connection score gauge
+        lines.append("# HELP tg_ws_pool_avg_connection_score Average connection score")
+        lines.append("# TYPE tg_ws_pool_avg_connection_score gauge")
+        lines.append(f"tg_ws_pool_avg_connection_score {stats['connection_scoring']['average_score']:.2f}")
+        lines.append("")
+
+        # Domain success rate gauge
+        lines.append("# HELP tg_ws_domain_success_rate Domain success rate")
+        lines.append("# TYPE tg_ws_domain_success_rate gauge")
+        for domain, dstats in stats['domain_stats'].items():
+            safe_domain = domain.replace('.', '_').replace('-', '_')
+            lines.append(f'tg_ws_domain_success_rate{{domain="{safe_domain}"}} {dstats["success_rate"]:.2f}')
+        lines.append("")
+
+        return '\n'.join(lines)
 
     def warmup(self, dc_opt: dict[int, str | None]) -> None:
         """Pre-fill pool for all configured DCs on startup."""

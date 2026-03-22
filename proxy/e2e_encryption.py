@@ -89,20 +89,28 @@ class E2EEncryption:
     def __init__(self, private_key: ec.EllipticCurvePrivateKey | None = None):
         """
         Initialize E2E encryption.
-        
+
         Args:
             private_key: Optional private key for ECDH. If None, generates new one.
         """
         if private_key is None:
-            self._private_key = ec.generate_private_key(ec.X25519(), default_backend())
+            # Try X25519 first (not available on all Windows builds)
+            try:
+                self._private_key = ec.generate_private_key(ec.X25519(), default_backend())
+                self._curve_name = 'X25519'
+            except (AttributeError, TypeError):
+                # Fallback to P256
+                self._private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+                self._curve_name = 'P256'
         else:
             self._private_key = private_key
-            
+            self._curve_name = 'custom'
+
         self._public_key = self._private_key.public_key()
         self._sessions: dict[str, E2ESession] = {}
         self._server_signature_key = secrets.token_bytes(32)  # For signing handshake responses
-        
-        log.debug("E2E encryption initialized (X25519 + AES-256-GCM)")
+
+        log.debug("E2E encryption initialized (%s + AES-256-GCM)", self._curve_name)
     
     def get_public_key(self) -> bytes:
         """Get server's public key in raw format."""
@@ -114,24 +122,29 @@ class E2EEncryption:
     def create_handshake_request(self) -> tuple[bytes, bytes, float]:
         """
         Create client-side handshake request.
-        
+
         Returns:
             Tuple of (public_key_bytes, nonce, timestamp)
         """
-        client_private = ec.generate_private_key(ec.X25519(), default_backend())
-        client_public = client_private.public_key()
+        # Use same curve as initialized
+        if self._curve_name == 'X25519':
+            client_private = ec.generate_private_key(ec.X25519(), default_backend())
+        else:
+            client_private = ec.generate_private_key(ec.SECP256R1(), default_backend())
         
+        client_public = client_private.public_key()
+
         public_bytes = client_public.public_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw
         )
-        
+
         nonce = secrets.token_bytes(self.NONCE_SIZE)
         timestamp = time.time()
-        
+
         # Store private key for later (in real implementation, use secure storage)
         self._client_private = client_private
-        
+
         return public_bytes, nonce, timestamp
     
     def process_handshake_request(
@@ -142,24 +155,27 @@ class E2EEncryption:
     ) -> E2EHandshakeResponse:
         """
         Process client handshake request and create session.
-        
+
         Args:
-            client_public_bytes: Client's X25519 public key
+            client_public_bytes: Client's ECDH public key
             client_nonce: Client's random nonce
             timestamp: Client's timestamp
-            
+
         Returns:
             Handshake response with session info
         """
         # Verify timestamp (prevent replay attacks)
         if abs(time.time() - timestamp) > 60.0:
             raise ValueError("Handshake timestamp too old")
-        
-        # Load client's public key
-        client_public_key = ec.X25519PublicKey.from_public_bytes(
-            client_public_bytes
-        )
-        
+
+        # Load client's public key based on curve
+        if self._curve_name == 'X25519':
+            client_public_key = ec.X25519PublicKey.from_public_bytes(client_public_bytes)
+        else:
+            client_public_key = ec.EllipticCurvePublicKey.from_public_bytes(
+                client_public_bytes, ec.SECP256R1()
+            )
+
         # Perform ECDH key exchange
         shared_secret = self._private_key.exchange(client_public_key)
         
@@ -205,10 +221,10 @@ class E2EEncryption:
     ) -> E2ESession:
         """
         Complete client-side handshake.
-        
+
         Args:
             response: Server's handshake response
-            
+
         Returns:
             Established E2E session
         """
@@ -223,15 +239,20 @@ class E2EEncryption:
             signature_data,
             hashlib.sha256
         ).digest()
-        
+
         if not hmac.compare_digest(response.signature, expected_signature):
             raise ValueError("Invalid server signature")
-        
-        # Load server's public key
-        server_public_key = ec.X25519PublicKey.from_public_bytes(
-            response.server_public_key
-        )
-        
+
+        # Load server's public key based on curve
+        if self._curve_name == 'X25519':
+            server_public_key = ec.X25519PublicKey.from_public_bytes(
+                response.server_public_key
+            )
+        else:
+            server_public_key = ec.EllipticCurvePublicKey.from_public_bytes(
+                response.server_public_key, ec.SECP256R1()
+            )
+
         # Perform ECDH key exchange
         shared_secret = self._client_private.exchange(server_public_key)
         

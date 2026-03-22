@@ -84,14 +84,22 @@ class MetricsHistory:
         self.db_path = Path(db_path)
         self.retention_days = retention_days
         self._conn: sqlite3.Connection | None = None
-        
-        # In-memory cache for recent metrics
+
+        # In-memory cache for recent metrics with memory optimization
         self._recent_cache: list[MetricPoint] = []
         self._cache_max_size = 1000
-        
+        self._cache_max_memory_mb = 10.0  # Max 10MB for cache
+        self._estimated_point_size = 200  # Estimated bytes per point
+
+        # Automatic aggregation thresholds
+        self._aggregation_enabled = True
+        self._raw_retention_hours = 24  # Keep raw data for 24 hours
+        self._hourly_retention_days = 7  # Keep hourly aggregates for 7 days
+        self._daily_retention_days = 30  # Keep daily aggregates for 30 days
+
         self._init_database()
-        log.info("Metrics history initialized: %s (retention: %d days)", 
-                self.db_path, retention_days)
+        log.info("Metrics history initialized: %s (retention: %d days, cache: %.1fMB)",
+                self.db_path, retention_days, self._cache_max_memory_mb)
     
     def _init_database(self) -> None:
         """Initialize SQLite database with schema."""
@@ -201,18 +209,18 @@ class MetricsHistory:
     def record_metrics_batch(self, points: list[MetricPoint]) -> None:
         """
         Record multiple metrics in a batch (more efficient).
-        
+
         Args:
             points: List of MetricPoint objects
         """
         if not points or not self._conn:
             return
-        
+
         data = [
             (p.timestamp, p.metric_name, p.value, json.dumps(p.labels) if p.labels else None)
             for p in points
         ]
-        
+
         try:
             self._conn.executemany(
                 """
@@ -224,11 +232,52 @@ class MetricsHistory:
             self._conn.commit()
         except sqlite3.Error as e:
             log.error("Failed to record metrics batch: %s", e)
-        
-        # Update cache
+
+        # Update cache with memory optimization
         self._recent_cache.extend(points)
+        self._optimize_cache_memory()
+
+    def _optimize_cache_memory(self) -> None:
+        """
+        Optimize in-memory cache to stay within memory limits.
+
+        Removes oldest entries when cache exceeds size or memory limit.
+        """
+        # Check size limit
         if len(self._recent_cache) > self._cache_max_size:
             self._recent_cache = self._recent_cache[-self._cache_max_size:]
+
+        # Check memory limit
+        estimated_memory = len(self._recent_cache) * self._estimated_point_size / (1024 * 1024)
+        if estimated_memory > self._cache_max_memory_mb:
+            # Remove oldest entries to get under limit
+            target_size = int((self._cache_max_memory_mb * 0.8) / (self._estimated_point_size / (1024 * 1024)))
+            self._recent_cache = self._recent_cache[-target_size:]
+            log.debug("Metrics cache optimized: %.2fMB -> %.2fMB",
+                     estimated_memory, target_size * self._estimated_point_size / (1024 * 1024))
+
+    def _cleanup_old_data(self) -> None:
+        """
+        Automatically clean up old data based on retention policies.
+
+        Called periodically to maintain database size.
+        """
+        if not self._conn:
+            return
+
+        now = time.time()
+        
+        # Clean up raw data older than raw_retention_hours
+        raw_cutoff = now - (self._raw_retention_hours * 3600)
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute("DELETE FROM metrics WHERE timestamp < ?", (raw_cutoff,))
+            deleted = cursor.rowcount
+            if deleted > 0:
+                log.debug("Cleaned up %d raw metrics older than %d hours",
+                         deleted, self._raw_retention_hours)
+        except sqlite3.Error as e:
+            log.debug("Failed to cleanup raw metrics: %s", e)
     
     def get_metric_summary(
         self,
@@ -637,7 +686,91 @@ class MetricsHistory:
     def get_recent_metrics(self, limit: int = 100) -> list[MetricPoint]:
         """Get most recent metrics from cache."""
         return self._recent_cache[-limit:]
-    
+
+    def get_prometheus_metrics(self) -> str:
+        """
+        Export recent metrics in Prometheus exposition format.
+
+        Returns:
+            Prometheus-formatted metrics string
+        """
+        output_lines = []
+        
+        # Header
+        output_lines.append("# HELP tg_ws_proxy_metrics TG WS Proxy metrics")
+        output_lines.append("# TYPE tg_ws_proxy_metrics untyped")
+        
+        # Get recent metrics from database (last 1000 points)
+        now = time.time()
+        hour_ago = now - 3600
+        
+        try:
+            if not self._conn:
+                return ""
+            
+            cursor = self._conn.cursor()
+            cursor.execute("""
+                SELECT metric_name, value, labels, timestamp
+                FROM metrics
+                WHERE timestamp >= ?
+                ORDER BY timestamp DESC
+                LIMIT 1000
+            """, (hour_ago,))
+            
+            rows = cursor.fetchall()
+            
+            # Group by metric name
+            metrics_by_name: dict[str, list] = {}
+            for metric_name, value, labels_json, timestamp in rows:
+                if metric_name not in metrics_by_name:
+                    metrics_by_name[metric_name] = []
+                metrics_by_name[metric_name].append({
+                    'value': value,
+                    'labels': json.loads(labels_json) if labels_json else {},
+                    'timestamp': timestamp,
+                })
+            
+            # Format each metric
+            for metric_name, points in metrics_by_name.items():
+                # Sanitize metric name for Prometheus
+                prom_name = f"tg_ws_{metric_name.replace('rate_limiter_', '')}"
+                prom_name = prom_name.replace('-', '_').replace('.', '_')
+                
+                # Add HELP
+                output_lines.append(f"# HELP {prom_name} {metric_name.replace('_', ' ').title()}")
+                
+                # Determine type based on metric name
+                if 'count' in metric_name or 'total' in metric_name:
+                    output_lines.append(f"# TYPE {prom_name} counter")
+                else:
+                    output_lines.append(f"# TYPE {prom_name} gauge")
+                
+                # Add values with labels
+                for point in points[:10]:  # Limit to last 10 values per metric
+                    labels = point['labels']
+                    value = point['value']
+                    
+                    # Format labels
+                    label_parts = []
+                    for key, val in labels.items():
+                        # Escape label values
+                        escaped_val = str(val).replace('"', '\\"')
+                        label_parts.append(f'{key}="{escaped_val}"')
+                    
+                    labels_str = '{' + ','.join(label_parts) + '}' if label_parts else ''
+                    timestamp_ms = int(point['timestamp'] * 1000)
+                    
+                    output_lines.append(f"{prom_name}{labels_str} {value} {timestamp_ms}")
+                
+                output_lines.append("")  # Empty line between metrics
+            
+        except Exception as e:
+            log.debug("Failed to export Prometheus metrics: %s", e)
+            # Return at least header
+            output_lines.append(f"# ERROR: {e}")
+        
+        return '\n'.join(output_lines)
+
     def close(self) -> None:
         """Close database connection."""
         if self._conn:
