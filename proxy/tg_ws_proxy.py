@@ -209,12 +209,13 @@ def update_optimization_config(config: dict) -> None:
     global _dns_cache_ttl, _OPTIMIZATION_CONFIG
 
     for key, value in config.items():
-        if key in _OPTIMIZATION_CONFIG:
+        if key == 'dns_cache_ttl':
+            _dns_cache_ttl = float(value)
+            _OPTIMIZATION_CONFIG[key] = _dns_cache_ttl
+            log.info("DNS cache TTL updated: %s seconds", _dns_cache_ttl)
+        elif key in _OPTIMIZATION_CONFIG:
             _OPTIMIZATION_CONFIG[key] = value
             log.info("Optimization config updated: %s = %s", key, value)
-        elif key == 'dns_cache_ttl':
-            _dns_cache_ttl = float(value)
-            log.info("DNS cache TTL updated: %s seconds", _dns_cache_ttl)
 
     log.debug("Current optimization config: %s", _OPTIMIZATION_CONFIG)
 
