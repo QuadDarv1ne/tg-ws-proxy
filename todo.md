@@ -289,6 +289,52 @@
   • http2_only: false (default)
   • Auto-fallback при блокировке WebSocket
 
+- ✅ **Cloudflare Integration** — обход блокировок через Cloudflare
+  - `proxy/cloudflare_tunnel.py` — Cloudflare Tunnel (550+ строк)
+  - `proxy/cloudflare_warp.py` — Cloudflare WARP (440+ строк)
+
+  **CloudflareTunnel:**
+  • cloudflared binary management (auto-download)
+  • Tunnel configuration and lifecycle
+  • Automatic reconnection and health monitoring
+  • SOCKS5/HTTP proxy via tunnel
+  • Metrics and monitoring support
+
+  **CloudflareWARP:**
+  • WARP SOCKS proxy interface (port 40000)
+  • Cloudflare Zero Trust team support
+  • Domain fronting through Cloudflare CDN
+  • WARP routing configuration
+  • License key and access credentials
+
+- ✅ **MTProxy Protocol** — поддержка MTProto
+  - `proxy/mtproxy.py` — новый модуль (536 строк)
+
+  **MTProto Support:**
+  • MTProto 1.0 и 2.0
+  • Secret generation and parsing
+  • DD-Tags for anti-censorship
+  • TLS obfuscation (disguise as telegram.org)
+  • Proxy link format (tg://proxy)
+  • Upstream proxy chain support
+
+- ✅ **System Proxy Integration** — системные прокси
+  - `proxy/system_proxy.py` — кроссплатформенный (345 строк)
+  - `proxy/windows_proxy.py` — Windows-specific (510 строк)
+
+  **SystemProxy:**
+  • Windows Registry proxy settings
+  • WinHTTP proxy configuration
+  • Proxy enable/disable with rollback
+  • Cross-platform support (Win/Linux/macOS)
+
+  **WindowsProxy:**
+  • WinHTTP proxy settings
+  • Internet Explorer/Edge proxy settings
+  • PAC (Proxy Auto-Config) support
+  • Automatic proxy detection (WPAD)
+  • Bypass list configuration
+
 - ✅ **Anti-censorship Configuration** — гибкая конфигурация
   - `proxy/anticensorship_config.py` — новый модуль (300+ строк)
 
@@ -398,22 +444,22 @@
 
 ---
 
-## 📊 Статус (23.03.2026 15:30)
+## 📊 Статус (23.03.2026 16:00)
 
 ```
-Модулей: 42 в proxy/ ✅
+Модулей: 47 в proxy/ ✅
 Тестов: 35 файлов в tests/ ✅
 Tests: 678 passed, 7 skipped ✅
 Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.54.0 (Pluggable Transports ✅, HTTP/2 ✅, Anti-censorship ✅)
+Version: v2.55.0 (Cloudflare ✅, MTProxy ✅, System Proxy ✅)
 ```
 
-**Актуальная версия:** v2.54.0 (dev) — ✅ synced
-**Следующая версия:** v2.55.0 (Integration Tests + Coverage)
-**Последнее обновление:** 23.03.2026 (15:30)
+**Актуальная версия:** v2.55.0 (dev) — ✅ synced
+**Следующая версия:** v2.56.0 (Integration Tests + Coverage Improvement)
+**Последнее обновление:** 23.03.2026 (16:00)
 
 ---
 
