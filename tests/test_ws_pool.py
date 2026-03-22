@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 from proxy.tg_ws_proxy import _WsPool, RawWebSocket
 from proxy.stats import Stats
 
@@ -58,7 +57,7 @@ class TestWsPoolLogic:
         ws_pool._idle[key] = [(mock_ws, time.monotonic() - 200)]
 
         # Mock _quiet_close to track calls
-        with patch.object(ws_pool, "_quiet_close", new_callable=AsyncMock) as mock_quiet_close:
+        with patch.object(ws_pool, "_quiet_close", new_callable=AsyncMock):
             ws = await ws_pool.get(2, False, "1.1.1.1", ["kws2.web.telegram.org"])
 
             assert ws is None
