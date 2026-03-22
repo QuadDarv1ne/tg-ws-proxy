@@ -117,24 +117,26 @@ class RetryStrategy:
 
         Args:
             exception: Exception that was raised
-            attempt: Current attempt number
+            attempt: Current attempt number (0-based)
 
         Returns:
             True if should retry, False otherwise
         """
-        # Check if we've exhausted attempts
-        if attempt >= self.config.max_attempts:
+        # Check if we've exhausted attempts (attempt is 0-based, so last attempt is max_attempts-1)
+        if attempt >= self.config.max_attempts - 1:
             return False
 
         # Check non-retryable exceptions
         if self.config.non_retryable_exceptions:
             if isinstance(exception, self.config.non_retryable_exceptions):
+                log.debug("Non-retryable exception: %s", exception)
                 return False
 
         # Check retryable exceptions
         if isinstance(exception, self.config.retryable_exceptions):
             return True
 
+        # Default: don't retry unknown exceptions
         return False
 
     def execute(
@@ -159,14 +161,16 @@ class RetryStrategy:
         start_time = time.monotonic()
         delays: list[float] = []
         last_error: Exception | None = None
+        attempts = 0
 
         for attempt in range(self.config.max_attempts):
+            attempts = attempt + 1
             try:
                 result = func(*args, **kwargs)
                 return RetryResult(
                     success=True,
                     result=result,
-                    attempts=attempt + 1,
+                    attempts=attempts,
                     total_time=time.monotonic() - start_time,
                     delays=delays,
                 )
@@ -177,7 +181,7 @@ class RetryStrategy:
                     log.debug("Non-retryable error or max attempts: %s", e)
                     break
 
-                # Calculate and apply delay
+                # Calculate and apply delay (only between attempts, not after last one)
                 delay = self._calculate_delay(attempt)
                 delays.append(delay)
 
@@ -191,7 +195,7 @@ class RetryStrategy:
         return RetryResult(
             success=False,
             error=last_error,
-            attempts=self.config.max_attempts,
+            attempts=attempts,
             total_time=time.monotonic() - start_time,
             delays=delays,
         )
@@ -218,8 +222,10 @@ class RetryStrategy:
         start_time = time.monotonic()
         delays: list[float] = []
         last_error: Exception | None = None
+        attempts = 0
 
         for attempt in range(self.config.max_attempts):
+            attempts = attempt + 1
             try:
                 if asyncio.iscoroutinefunction(func):
                     result = await func(*args, **kwargs)
@@ -228,7 +234,7 @@ class RetryStrategy:
                 return RetryResult(
                     success=True,
                     result=result,
-                    attempts=attempt + 1,
+                    attempts=attempts,
                     total_time=time.monotonic() - start_time,
                     delays=delays,
                 )
@@ -239,7 +245,7 @@ class RetryStrategy:
                     log.debug("Non-retryable error or max attempts: %s", e)
                     break
 
-                # Calculate and apply delay
+                # Calculate and apply delay (only between attempts, not after last one)
                 delay = self._calculate_delay(attempt)
                 delays.append(delay)
 
@@ -253,7 +259,7 @@ class RetryStrategy:
         return RetryResult(
             success=False,
             error=last_error,
-            attempts=self.config.max_attempts,
+            attempts=attempts,
             total_time=time.monotonic() - start_time,
             delays=delays,
         )
