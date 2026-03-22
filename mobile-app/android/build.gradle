@@ -7,23 +7,30 @@ plugins {
 
 apply from: "variables.gradle"
 
-// AGP 9.0+ Fix: intercept and replace the deprecated 'proguard-android.txt' 
-// before Capacitor plugins trigger the evaluation error.
 subprojects {
-    project.configurations.configureEach {
-        if (name == 'implementation') {
-            // This is just to ensure the block runs early enough
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                if (project.android.hasProperty('buildTypes')) {
+                    project.android.buildTypes.all { buildType ->
+                        try {
+                            def files = buildType.getProguardFiles()
+                            def updatedFiles = files.collect { file ->
+                                // AGP 9.1.0+ compatibility: replace deprecated proguard-android.txt
+                                // which is no longer supported because it contains -dontoptimize
+                                if (file.toString().endsWith('proguard-android.txt')) {
+                                    return project.android.getDefaultProguardFile('proguard-android-optimize.txt')
+                                }
+                                return file
+                            }
+                            buildType.setProguardFiles(updatedFiles)
+                        } catch (Exception e) {
+                            // Ignore if the project structure differs
+                        }
+                    }
+                }
+            }
         }
-    }
-}
-
-// We use this to fix the issue in subprojects before they are evaluated if possible,
-// but since the error happens during evaluation of the 'android' block in node_modules,
-// we'll apply a more direct fix in the root project evaluation.
-gradle.beforeProject { project ->
-    if (project.hasProperty('android')) {
-        // We can't easily intercept the 'getDefaultProguardFile' call directly here
-        // as it's a method on the extension.
     }
 }
 
