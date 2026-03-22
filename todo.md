@@ -502,22 +502,27 @@
 
 ---
 
-## 📊 Статус (23.03.2026 00:00)
+## 📊 Статус (22.03.2026 00:00)
 
 ```
 Модулей: 48 в proxy/ ✅
-Тестов: 35 файлов в tests/ ✅
-Tests: 916 passed, 7 skipped ✅
-Coverage: ~45% (цель >80%)
+Тестов: 39 файлов в tests/ ✅
+Tests: 971 passed, 7 skipped ✅
+Coverage: ~47% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.58.0 (Testing Complete ✅, Coverage 45% ✅)
+Version: v2.57.0 (Gaming Console ✅, i18n CN ✅, Proxy Chain ✅, Anti-censorship ✅)
 ```
 
-**Актуальная версия:** v2.58.0 (dev) — ✅ synced
-**Следующая версия:** v2.59.0 (Integration Tests + Coverage >60%)
-**Последнее обновление:** 23.03.2026 (00:00)
+**Актуальная версия:** v2.57.0 (dev) — ✅ synced
+**Следующая версия:** v2.58.0 (Coverage Improvement + Bug Fixes)
+**Последнее обновление:** 22.03.2026 (00:00)
+
+### 🔄 Последние улучшения
+- ✅ **tg_ws_proxy.py coverage**: 16% → 30% (+14%)
+- ✅ **Исправление update_optimization_config**: dns_cache_ttl теперь обновляется корректно
+- ✅ **11 новых тестов** для функций tg_ws_proxy.py
 
 ---
 
