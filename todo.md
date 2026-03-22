@@ -6,7 +6,12 @@
 
 ---
 
-## ✅ Выполнено (v2.39.0)
+## ✅ Выполнено (v2.40.0)
+
+### Reliability
+- ✅ Circuit breaker — защита от cascade failures (websocket, tcp, dns)
+- ✅ CircuitBreakerRegistry — управление circuit breakers
+- ✅ Интеграция в ProxyServer — 3 circuit breakers
 
 ### Refactoring
 - ✅ websocket_client.py — выделен RawWebSocket и WsHandshakeError
@@ -41,7 +46,7 @@
 
 ---
 
-## 🟡 В процессе (v2.40.0: optimization & resilience)
+## 🟡 В процессе (v2.41.0: optimization & resilience)
 
 ### Производительность
 - [ ] **HTTP/2 Multiplexing** — снижение оверхеда TCP (R&D)
@@ -73,12 +78,12 @@ Tests: 522 passed, 7 skipped, 0 errors ✅
 Coverage: ~40% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 15 ошибок (type annotations, Any usage)
-Version: v2.39.0 (sync complete ✅)
+Version: v2.40.0 (sync complete ✅)
 ```
 
-**Актуальная версия:** v2.39.0 (main/dev) — ✅ synced
-**Следующая версия:** v2.40.0 (planning)
-**Последнее обновление:** 22.03.2026 (14:30)
+**Актуальная версия:** v2.40.0 (main/dev) — ✅ synced
+**Следующая версия:** v2.41.0 (planning)
+**Последнее обновление:** 22.03.2026 (15:00)
 
 ---
 
@@ -148,7 +153,7 @@ Version: v2.39.0 (sync complete ✅)
 
 ---
 
-## 🔴 Высокий приоритет (v2.39.0: Refactoring & Testing)
+## 🔴 Высокий приоритет (v2.40.0: Reliability & Resilience)
 
 ### [ПЛАН РЕАЛИЗАЦИИ: 15 ШАГОВ]
 1.  [x] **Dev Env Sync**: Тесты и окружение готовы.
@@ -161,19 +166,17 @@ Version: v2.39.0 (sync complete ✅)
 8.  [x] **Pool Tests**: Тесты переполнения и очистки пула.
 9.  [x] **WebSocket Client**: Выделен websocket_client.py ✅
 10. [x] **SOCKS5 Handler**: Выделен socks5_handler.py ✅
-11. [x] **Dynamic Tile**: Живая статистика скорости в шторке.
-12. [x] **Auto-TLS**: Локальное шифрование сертификатами.
-13. [x] **Memory Profiling**: Поиск утечек в пуле ✅
-14. [x] **CI Validation**: Ruff/Mypy/Pytest (476 тестов ✅).
-15. [x] **Release**: Merge dev -> main ✅ (v2.39.0).
+11. [x] **Circuit Breaker**: Защита от cascade failures ✅
+12. [x] **Dynamic Tile**: Живая статистика скорости в шторке.
+13. [x] **Auto-TLS**: Локальное шифрование сертификатами.
+14. [x] **Memory Profiling**: Поиск утечек в пуле ✅
+15. [x] **Release**: Merge dev -> main ✅ (v2.40.0).
 
-### ✅ Исправлено v2.39.0
-- [x] **websocket_client.py** — выделен RawWebSocket и WsHandshakeError
-- [x] **socks5_handler.py** — выделен SOCKS5 handler
-- [x] **test_websocket_client.py** — тесты WebSocket клиента
-- [x] **test_socks5_handler.py** — тесты SOCKS5 handler
+### ✅ Исправлено v2.40.0
+- [x] **circuit_breaker.py** — CircuitBreaker, CircuitBreakerRegistry ✅
+- [x] **test_circuit_breaker.py** — 18 тестов circuit breaker ✅
+- [x] **Интеграция** — 3 circuit breakers в ProxyServer (websocket, tcp, dns) ✅
 - [x] **ruff check** — 0 ошибок ✅
-- [x] **Синхронизация версий** — pyproject.toml: 2.39.0, proxy/__init__.py: 2.39.0
 
 
 ---
