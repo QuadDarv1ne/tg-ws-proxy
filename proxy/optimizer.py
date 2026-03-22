@@ -459,7 +459,7 @@ class PerformanceOptimizer:
     # Connection Cache (LRU)
     # =========================================================================
 
-    async def cache_get(self, key: str) -> any | None:
+    async def cache_get(self, key: str) -> Any | None:
         """Get connection from cache with LRU support."""
         now = time.time()
         if key in self._connection_cache:
@@ -476,7 +476,7 @@ class PerformanceOptimizer:
                 log.debug("Cache expired for %s", key)
         return None
 
-    async def cache_put(self, key: str, connection: any) -> None:
+    async def cache_put(self, key: str, connection: Any) -> None:
         """Put connection to cache with LRU eviction."""
         now = time.time()
 
