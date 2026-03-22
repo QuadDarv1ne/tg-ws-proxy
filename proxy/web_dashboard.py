@@ -3353,5 +3353,162 @@ if __name__ == '__main__':
             },
         }
 
+
+class AlertsManager:
+    """
+    Alerts and notifications manager.
+    
+    Features:
+    - Real-time alerts
+    - Alert history
+    - Alert categories (security, performance, system)
+    - WebSocket push notifications
+    """
+    
+    def __init__(self, max_history: int = 100):
+        self.max_history = max_history
+        self._alerts: list[dict] = []
+        self._subscribers: list[callable] = []
+        self._lock = threading.Lock()
+    
+    def add_alert(
+        self,
+        category: str,
+        severity: str,
+        message: str,
+        details: dict | None = None,
+    ) -> dict:
+        """
+        Add new alert.
+        
+        Args:
+            category: alert category (security, performance, system)
+            severity: severity level (info, warning, error, critical)
+            message: alert message
+            details: optional additional details
+            
+        Returns:
+            Alert dict
+        """
+        alert = {
+            'id': len(self._alerts) + 1,
+            'timestamp': time.time(),
+            'category': category,
+            'severity': severity,
+            'message': message,
+            'details': details or {},
+            'acknowledged': False,
+        }
+        
+        with self._lock:
+            self._alerts.append(alert)
+            # Trim history
+            if len(self._alerts) > self.max_history:
+                self._alerts = self._alerts[-self.max_history:]
+            
+            # Notify subscribers
+            for callback in self._subscribers:
+                try:
+                    callback(alert)
+                except Exception:
+                    pass
+        
+        return alert
+    
+    def get_alerts(
+        self,
+        category: str | None = None,
+        severity: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Get alerts with optional filtering."""
+        with self._lock:
+            alerts = self._alerts.copy()
+        
+        if category:
+            alerts = [a for a in alerts if a['category'] == category]
+        if severity:
+            alerts = [a for a in alerts if a['severity'] == severity]
+        
+        return alerts[-limit:]
+    
+    def acknowledge_alert(self, alert_id: int) -> bool:
+        """Acknowledge an alert."""
+        with self._lock:
+            for alert in self._alerts:
+                if alert['id'] == alert_id:
+                    alert['acknowledged'] = True
+                    return True
+        return False
+    
+    def get_unacknowledged_count(self) -> int:
+        """Get count of unacknowledged alerts."""
+        with self._lock:
+            return sum(1 for a in self._alerts if not a['acknowledged'])
+    
+    def subscribe(self, callback: callable) -> None:
+        """Subscribe to new alerts."""
+        self._subscribers.append(callback)
+    
+    def unsubscribe(self, callback: callable) -> None:
+        """Unsubscribe from alerts."""
+        if callback in self._subscribers:
+            self._subscribers.remove(callback)
+    
+    def get_stats(self) -> dict:
+        """Get alerts statistics."""
+        with self._lock:
+            total = len(self._alerts)
+            unacknowledged = self.get_unacknowledged_count()
+            by_category = {}
+            by_severity = {}
+            
+            for alert in self._alerts:
+                cat = alert['category']
+                sev = alert['severity']
+                by_category[cat] = by_category.get(cat, 0) + 1
+                by_severity[sev] = by_severity.get(sev, 0) + 1
+        
+        return {
+            'total': total,
+            'unacknowledged': unacknowledged,
+            'by_category': by_category,
+            'by_severity': by_severity,
+        }
+
+
+# Global alerts manager
+_alerts_manager = AlertsManager()
+
+
+def get_alerts_manager() -> AlertsManager:
+    """Get global alerts manager."""
+    return _alerts_manager
+
+
+if __name__ == '__main__':
+    # Demo mode with mock stats
+    def mock_stats() -> dict:
+        return {
+            "connections_total": 150,
+            "connections_active": 12,
+            "bytes_received": 52428800,
+            "bytes_sent": 104857600,
+            "per_secret": {
+                "0123456789abcdef0123456789abcdef": {
+                    "connections_total": 80,
+                    "connections_active": 7,
+                    "bytes_received": 31457280,
+                    "bytes_sent": 62914560,
+                },
+                "fedcba9876543210fedcba9876543210": {
+                    "connections_total": 70,
+                    "connections_active": 5,
+                    "bytes_received": 20971520,
+                    "bytes_sent": 41943040,
+                },
+            },
+        }
+
     logging.basicConfig(level=logging.INFO)
     run_dashboard(mock_stats, open_browser=True)
