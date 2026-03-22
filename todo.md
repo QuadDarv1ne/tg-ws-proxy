@@ -350,6 +350,21 @@
   • Full http2 config
   • Full censorship_detection config
 
+- ✅ **Proxy Chain** — цепочки прокси
+  - `proxy/proxy_chain.py` — новый модуль (447 строк)
+
+  **ProxyHop:**
+  • Protocols: SOCKS5, SOCKS4, HTTP, HTTPS, WebSocket, MTProto, Shadowsocks, VMESS
+  • Host, port, authentication
+  • Performance metrics (latency, success_rate)
+
+  **ProxyChain:**
+  • Multiple proxy hops
+  • Automatic failover
+  • Latency-based selection
+  • Async chain connection
+  • Metrics tracking per hop
+
 ### Производительность
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
@@ -379,6 +394,91 @@
   • Dependency management policy (Critical: 24h, High: 7d)
   • Security checklist для релизов
 
+### System Proxy Integration
+- ✅ **System-wide Proxy** — системный прокси для всех приложений
+  - `proxy/system_proxy.py` — новый модуль (341 строка)
+
+  **Windows Registry Proxy:**
+  • ProxyEnable/ProxyServer/ProxyOverride настройки
+  • WinHTTP конфигурация через netsh
+  • Backup/restore оригинальных настроек
+  • Поддержка SOCKS5 и HTTP прокси
+  • Методы: enable_proxy(), disable_proxy(), backup_settings(), restore_settings()
+
+  **Linux Environment Proxy:**
+  • http_proxy/https_proxy/ftp_proxy переменные
+  • Session-only (до перезапуска терминала)
+  • Методы: enable_proxy(), disable_proxy()
+
+  **macOS NetworkSetup Proxy:**
+  • networksetup API integration
+  • SOCKS firewall proxy
+  • All network services support
+  • Методы: enable_proxy(), disable_proxy()
+
+  **Cross-platform API:**
+  • get_system_proxy() factory function
+  • ProxyConfig dataclass
+  • Unified interface для всех платформ
+
+- ✅ **Cloudflare Tunnel Integration** — обход блокировок через Cloudflare Edge
+  - `proxy/cloudflare_tunnel.py` — новый модуль (551 строка)
+
+  **Cloudflared Management:**
+  • Автоматическая загрузка для Windows/Linux/macOS
+  • Проверка версии
+  • Кэширование бинарника в ~/.cloudflared/
+  • Методы: download_cloudflared(), check_cloudflared(), get_cloudflared_version()
+
+  **Tunnel Lifecycle:**
+  • Создание туннеля (create_tunnel)
+  • Аутентификация (authenticate) — browser flow
+  • Запуск/остановка (start/stop)
+  • Auto-reconnect при обрыве (5 attempts)
+  • Health monitoring
+  • Методы: start(), stop(), get_status(), get_logs()
+
+  **Configuration:**
+  • YAML генерация (generate_config)
+  • Tunnel ID и credentials file
+  • Proxy URL (SOCKS5/HTTP)
+  • Metrics endpoint (optional)
+  • Log level настройка
+  • Методы: generate_config(), _generate_config_yaml()
+
+  **CloudflareWARP:**
+  • warp-cli integration (placeholder)
+  • Connect/disconnect
+  • Proxy mode (set-mode proxy)
+  • Status checking
+  • Методы: connect(), disconnect(), set_proxy_mode(), get_status()
+
+### DPI Bypass
+- ✅ **DPI Bypass Module** — обход Deep Packet Inspection
+  - `proxy/dpi_bypass.py` — новый модуль (418 строк)
+
+  **TLS Obfuscation:**
+  • ClientHello modification
+  • Cipher suite reordering
+  • Extension manipulation
+  • Методы: obfuscate_tls(), create_fake_client_hello()
+
+  **Packet Fragmentation:**
+  • TCP segmentation
+  • TLS record splitting
+  • Random fragment sizes
+  • Методы: fragment_packet(), reassemble_fragments()
+
+  **Timing Attacks:**
+  • Inter-packet delay injection
+  • Random timing patterns
+  • Методы: apply_timing(), remove_timing()
+
+  **Protocol Mimicry:**
+  • HTTPS traffic simulation
+  • Browser fingerprint matching
+  • Методы: mimic_https(), mimic_browser()
+
 ### Тестирование
 - [ ] **Coverage Improvement** — увеличение покрытия с 41% до 60%
   - ✅ rate_limiter.py: 33 теста (Token Bucket, API Limiting, Connection Scoring, Ban/Unban, Subnet)
@@ -386,6 +486,8 @@
   - [ ] web_dashboard.py: 16 errors — исправить импорты
   - [ ] connection_pool.py: 39% coverage — добавить тесты
   - [ ] tg_ws_proxy.py: 22% coverage — критично низкое покрытие
+  - [ ] system_proxy.py: новые тесты для Windows/Linux/macOS
+  - [ ] cloudflare_tunnel.py: тесты для tunnel lifecycle
 
 - [ ] **Integration Tests** — сквозные тесты для основных сценариев
 
@@ -398,22 +500,22 @@
 
 ---
 
-## 📊 Статус (23.03.2026 15:30)
+## 📊 Статус (23.03.2026 16:00)
 
 ```
-Модулей: 42 в proxy/ ✅
+Модулей: 47 в proxy/ ✅ (добавлены: windows_proxy.py, cloudflare_warp.py, mtproxy.py, dpi_bypass.py, proxy_chain.py)
 Тестов: 35 файлов в tests/ ✅
 Tests: 678 passed, 7 skipped ✅
 Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.54.0 (Pluggable Transports ✅, HTTP/2 ✅, Anti-censorship ✅)
+Version: v2.55.0 (System Proxy ✅, Cloudflare WARP ✅, MTProxy ✅, DPI Bypass ✅, Proxy Chain ✅)
 ```
 
-**Актуальная версия:** v2.54.0 (dev) — ✅ synced
-**Следующая версия:** v2.55.0 (Integration Tests + Coverage)
-**Последнее обновление:** 23.03.2026 (15:30)
+**Актуальная версия:** v2.55.0 (dev) — ✅ synced
+**Следующая версия:** v2.56.0 (Integration Tests + Coverage)
+**Последнее обновление:** 23.03.2026 (16:00)
 
 ---
 
