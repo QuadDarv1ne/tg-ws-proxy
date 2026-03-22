@@ -69,7 +69,7 @@
 ## 📊 Статус
 
 ```
-Tests: 476 passed, 7 skipped, 0 errors ✅
+Tests: 522 passed, 7 skipped, 0 errors ✅
 Coverage: ~40% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 15 ошибок (type annotations, Any usage)
