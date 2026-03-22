@@ -122,14 +122,15 @@
 ```
 Tests: 530 passed, 7 skipped, 0 errors ✅
 Coverage: ~43% (цель >80%)
-Ruff: 3 warnings (не критично) ✅
-Mypy: 15 ошибок (type annotations, Any usage)
-Version: v2.42.0 (Connection Pooling ✅, WebSocket Compression ✅, Prometheus Metrics ✅)
+Ruff: 0 ошибок ✅
+Mypy: 0 ошибок ✅
+RuntimeWarnings: 0 ✅
+Version: v2.42.0 (RuntimeWarnings Fixed ✅, Connection Pooling ✅)
 ```
 
 **Актуальная версия:** v2.42.0 (main/dev) — ✅ synced
-**Следующая версия:** v2.43.0 (HTTP/2 Dashboard + Alerting)
-**Последнее обновление:** 22.03.2026 (17:00)
+**Следующая версия:** v2.43.0 (coverage improvement)
+**Последнее обновление:** 22.03.2026 (17:30)
 
 ---
 
@@ -144,9 +145,12 @@ Version: v2.42.0 (Connection Pooling ✅, WebSocket Compression ✅, Prometheus 
 - [x] **proxy/tg_ws_proxy.py** — добавлены annotations, исправлен IncompleteReadError
 - [x] **proxy/web_dashboard.py** — mypy disable-error-code для Flask специфичных ошибок
 
-### RuntimeWarnings (18 предупреждений в тестах)
-- [ ] `coroutine 'open_connection' was never awaited` — gc.collect() в profiler.py
-- [ ] `coroutine 'Stats.start_realtime_monitoring` — не awaited в тестах
+### RuntimeWarnings — ИСПРАВЛЕНО ✅
+- [x] **18 предупреждений → 0** — все coroutines теперь awaited
+- [x] `profiler.start()` и `profiler.stop()` — теперь async методы
+- [x] `stats.start_realtime_monitoring()` и `stop_realtime_monitoring()` — теперь async
+- [x] Перенесён вызов `start_realtime_monitoring` из `__init__` в `_run()`
+- [x] Добавлен await для всех task.cancel() с обработкой CancelledError
 
 ---
 
