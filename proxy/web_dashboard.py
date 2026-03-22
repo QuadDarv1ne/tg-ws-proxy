@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
 import os
 import threading
 import time
+from collections.abc import Generator
 from datetime import datetime
-from typing import Callable, Generator
+from typing import Callable
 
 try:
     from flask import Flask, Response, jsonify, render_template_string, request
@@ -2249,27 +2251,26 @@ class WebDashboard:
             """Server-Sent Events stream for real-time statistics."""
             def event_stream() -> Generator[str, None, None]:
                 """Generate SSE events."""
-                import random
                 last_stats = {}
-                
+
                 while True:
                     try:
                         stats = self.get_stats()
                         stats['timestamp'] = datetime.now().isoformat()
                         stats['version'] = '2.5.5'
-                        
+
                         # Only send if stats changed significantly
                         if stats != last_stats:
                             yield f"data: {json.dumps(stats)}\n\n"
                             last_stats = stats
-                        
+
                         # Send every 2 seconds
                         time.sleep(2)
-                        
+
                     except Exception as e:
                         log.error("SSE stream error: %s", e)
                         break
-            
+
             return Response(
                 event_stream(),
                 mimetype='text/event-stream',
@@ -3086,6 +3087,184 @@ class WebDashboard:
         def service_worker() -> Response:
             """Serve Service Worker."""
             return Response(SERVICE_WORKER, mimetype='application/javascript')
+
+        # Rate Limiter API endpoints
+        @self.app.route('/api/rate-limiter/stats')
+        def api_rate_limiter_stats() -> Response:
+            """Get rate limiter statistics."""
+            try:
+                from .rate_limiter import get_rate_limiter
+                limiter = get_rate_limiter()
+                stats = limiter.get_global_stats()
+
+                # Add per-IP details for top offenders
+                ip = request.args.get('ip')
+                if ip:
+                    stats['ip_details'] = limiter.get_ip_stats(ip)
+
+                return jsonify(stats)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/rate-limiter/metrics')
+        def api_rate_limiter_metrics() -> Response:
+            """Get rate limiter metrics for Prometheus."""
+            try:
+                from .rate_limiter import get_rate_limiter
+                limiter = get_rate_limiter()
+                metrics = limiter.get_metrics_for_prometheus()
+                return jsonify(metrics)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/rate-limiter/ban', methods=['POST'])
+        def api_ban_ip() -> Response:
+            """Ban an IP address."""
+            try:
+                from .rate_limiter import get_rate_limiter
+                data = request.get_json() or {}
+
+                ip = data.get('ip')
+                duration = data.get('duration', 3600)  # Default 1 hour
+
+                if not ip:
+                    return jsonify({'error': 'IP address required'}), 400
+
+                limiter = get_rate_limiter()
+                limiter.ban_ip(ip, duration)
+
+                log.warning("IP %s banned via API for %d seconds", ip, duration)
+                return jsonify({'status': 'success', 'ip': ip, 'duration': duration})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/rate-limiter/unban', methods=['POST'])
+        def api_unban_ip() -> Response:
+            """Unban an IP address."""
+            try:
+                from .rate_limiter import get_rate_limiter
+                data = request.get_json() or {}
+
+                ip = data.get('ip')
+                if not ip:
+                    return jsonify({'error': 'IP address required'}), 400
+
+                limiter = get_rate_limiter()
+                limiter.unban_ip(ip)
+
+                log.info("IP %s unbanned via API", ip)
+                return jsonify({'status': 'success', 'ip': ip})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        # Metrics History API endpoints
+        @self.app.route('/api/metrics/history')
+        def api_metrics_history() -> Response:
+            """Get historical metrics."""
+            try:
+                from .metrics_history import get_metrics_history
+
+                hours = int(request.args.get('hours', 24))
+                metric_name = request.args.get('metric', None)
+
+                history = get_metrics_history()
+
+                if metric_name:
+                    data = history.get_metric_history(metric_name, hours)
+                else:
+                    data = history.get_all_metrics(hours)
+
+                return jsonify({'metrics': data, 'hours': hours})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/metrics/summary')
+        def api_metrics_summary() -> Response:
+            """Get metrics summary with aggregations."""
+            try:
+                from .metrics_history import get_metrics_history
+
+                hours = int(request.args.get('hours', 24))
+                metric_name = request.args.get('metric')
+
+                if not metric_name:
+                    return jsonify({'error': 'metric parameter required'}), 400
+
+                history = get_metrics_history()
+                summary = history.get_metric_summary(metric_name, hours)
+
+                return jsonify({
+                    'metric': metric_name,
+                    'hours': hours,
+                    'summary': summary,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/metrics/trend')
+        def api_metrics_trend() -> Response:
+            """Get metrics trend analysis."""
+            try:
+                from .metrics_history import get_metrics_history
+
+                metric_name = request.args.get('metric')
+                hours = int(request.args.get('hours', 24))
+
+                if not metric_name:
+                    return jsonify({'error': 'metric parameter required'}), 400
+
+                history = get_metrics_history()
+                trend = history.analyze_trend(metric_name, hours)
+
+                return jsonify({
+                    'metric': metric_name,
+                    'hours': hours,
+                    'trend': trend,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/metrics/export')
+        def api_metrics_export() -> Response:
+            """Export metrics history as JSON or CSV."""
+            try:
+                from .metrics_history import get_metrics_history
+
+                format_type = request.args.get('format', 'json')
+                hours = int(request.args.get('hours', 24))
+
+                history = get_metrics_history()
+                data = history.get_all_metrics(hours)
+
+                if format_type == 'csv':
+                    output = io.StringIO()
+                    writer = csv.writer(output)
+                    writer.writerow(['timestamp', 'metric_name', 'value', 'labels'])
+
+                    for point in data:
+                        writer.writerow([
+                            point.get('timestamp', ''),
+                            point.get('metric_name', ''),
+                            point.get('value', ''),
+                            json.dumps(point.get('labels', {})),
+                        ])
+
+                    output.seek(0)
+                    return Response(
+                        output.getvalue(),
+                        mimetype='text/csv',
+                        headers={
+                            'Content-Disposition': f'attachment; filename=metrics_{hours}h.csv'
+                        }
+                    )
+                else:
+                    return jsonify({
+                        'metrics': data,
+                        'hours': hours,
+                        'exported_at': datetime.now().isoformat(),
+                    })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
 
     def start(self) -> None:
         """Start the web dashboard in a background thread."""
