@@ -112,8 +112,10 @@ Windows Defender может ошибочно помечать приложени
 
 ### 📄 Лицензия
 
-MIT License
+MIT License — © 2026 Dupley Maxim Igorevich. Все права защищены.
 
 ---
 
-**Полный список изменений**: [CHANGELOG](https://github.com/Flowseal/tg-ws-proxy/blob/main/RELEASE_NOTES.md)
+**Полный список изменений**: [RELEASE_NOTES.md](https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/RELEASE_NOTES.md)
+
+**Автор:** Dupley Maxim Igorevich
