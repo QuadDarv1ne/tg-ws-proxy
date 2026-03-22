@@ -94,7 +94,18 @@
 - [ ] **Rate Limiting Improvements** — защита от DDoS и злоупотреблений
 
 ### Мониторинг
-- [ ] **Grafana Dashboard** — визуализация Prometheus метрик
+- ✅ **Prometheus metrics endpoint** — `/metrics` endpoint реализован
+  - Connection metrics (total, active, bytes)
+  - Performance metrics (CPU, memory)
+  - DC latency & errors
+  - Circuit breaker states
+  - DNS resolver metrics
+  - Plugin system metrics
+- ✅ **Grafana Dashboard** — документация и примеры дашбордов (docs/MONITORING.md)
+  - Docker Compose конфигурация
+  - Prometheus scrape config
+  - Grafana dashboard JSON
+  - Alert rules
 - [ ] **Alerting** — уведомления при высокой задержке DC (>200ms)
 - [ ] **Diagnostic Report** — экспорт детального отчета о состоянии сети
 - [ ] **Real-time Dashboard** — улучшение веб-панели с live графиками
@@ -105,16 +116,16 @@
 ## 📊 Статус
 
 ```
-Tests: 522 passed, 7 skipped, 0 errors ✅
-Coverage: ~40% (цель >80%)
+Tests: 529 passed, 7 skipped, 0 errors ✅
+Coverage: ~42% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 15 ошибок (type annotations, Any usage)
-Version: v2.40.0 (sync complete ✅)
+Version: v2.41.0 (WebSocket Compression ✅, Prometheus Metrics ✅, Grafana Dashboard ✅)
 ```
 
-**Актуальная версия:** v2.40.0 (main/dev) — ✅ synced
-**Следующая версия:** v2.41.0 (planning)
-**Последнее обновление:** 22.03.2026 (15:30)
+**Актуальная версия:** v2.41.0 (main/dev) — ✅ synced
+**Следующая версия:** v2.42.0 (optimization & resilience)
+**Последнее обновление:** 22.03.2026 (16:00)
 
 ---
 
