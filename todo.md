@@ -505,10 +505,10 @@
 ## 📊 Статус (22.03.2026 00:00)
 
 ```
-Модулей: 48 в proxy/ ✅
-Тестов: 39 файлов в tests/ ✅
-Tests: 971 passed, 7 skipped ✅
-Coverage: ~47% (цель >80%)
+Модулей: 50 в proxy/ ✅
+Тестов: 40 файлов в tests/ ✅
+Tests: 994 passed, 7 skipped ✅
+Coverage: ~46% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
@@ -522,9 +522,11 @@ Version: v2.57.0 (Gaming Console ✅, i18n CN ✅, Proxy Chain ✅, Anti-censors
 ### 🔄 Последние улучшения
 - ✅ **tg_ws_proxy.py coverage**: 16% → 30% (+14%)
 - ✅ **websocket_client.py**: 28 тестов, coverage 53%
+- ✅ **mtproto_proxy.py**: 67 тестов, coverage 48% (+2%)
 - ✅ **Исправление update_optimization_config**: dns_cache_ttl теперь обновляется корректно
 - ✅ **11 новых тестов** для функций tg_ws_proxy.py
 - ✅ **10 новых тестов** для websocket_client.py
+- ✅ **14 новых тестов** для mtproto_proxy.py
 
 ---
 
