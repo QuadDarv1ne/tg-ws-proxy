@@ -67,12 +67,18 @@
   - Рекомендация: использовать для Web Dashboard (v2.42.0)
   - Перспектива: QUIC/HTTP/3 для mobile (v3.0.0)
 
+### Производительность
+- ✅ **WebSocket Compression** — permessage-deflate для снижения трафика на 30-50%
+  - Реализовано в `proxy/websocket_client.py`
+  - RFC 7692 permessage-deflate compression
+  - Настройка через `enable_compression` в optimization config
+  - Тесты: `test_websocket_client.py`
+
 ---
 
 ## 🟡 В процессе (v2.42.0: optimization & resilience)
 
 ### Производительность
-- [ ] **WebSocket Compression** — permessage-deflate для снижения трафика на 30-50%
 - [ ] **Connection Pooling Optimization** — динамическая настройка размера пула
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
