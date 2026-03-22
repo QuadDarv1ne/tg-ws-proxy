@@ -20,6 +20,7 @@ from .circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
 )
+from .connection_pool import _WsPool, get_tcp_pool
 from .constants import (
     _IP_TO_DC,
     DC_FAIL_COOLDOWN,
@@ -37,9 +38,6 @@ from .constants import (
     SEND_BUF_SIZE,
     TCP_NODELAY,
     TG_RANGES,
-    WS_POOL_MAX_AGE,
-    WS_POOL_MAX_SIZE,
-    WS_POOL_SIZE,
 )
 from .crypto import (
     CryptoConfig,
@@ -1238,297 +1236,7 @@ def clear_dns_cache() -> None:
     _clear_dns_cache()
 
 
-class _WsPool:
-    def __init__(self, stats: Stats):
-        self.stats = stats
-        self._idle: dict[tuple[int, bool], list] = {}
-        self._refilling: set[tuple[int, bool]] = set()
-
-        # Dynamic pool sizing
-        self._pool_size = WS_POOL_SIZE  # Current dynamic pool size
-        self._pool_max_size = WS_POOL_MAX_SIZE
-        self._last_hit_count = 0
-        self._last_miss_count = 0
-        self._optimization_interval = 30  # Check every 30 seconds
-        self._last_optimization = 0.0
-
-        # Health check configuration
-        self._heartbeat_interval = 45.0  # Send PING every 45 seconds
-        self._heartbeat_timeout = 10.0   # Timeout for PONG response
-        self._last_heartbeat = 0.0
-        self._health_check_task: asyncio.Task | None = None
-
-        # Memory profiling
-        try:
-            from .profiler import get_profiler
-            profiler = get_profiler()
-            self._profiler = profiler.register_component('WsPool')
-        except Exception:
-            self._profiler = None  # type: ignore[assignment]
-
-    async def start_health_checker(self) -> None:
-        """Start background health check task."""
-        if self._health_check_task is None:
-            self._health_check_task = asyncio.create_task(self._health_check_loop())
-
-    async def _health_check_loop(self) -> None:
-        """Periodically send PING to all pooled connections."""
-        while True:
-            await asyncio.sleep(self._heartbeat_interval)
-            await self._send_heartbeats()
-
-    async def _send_heartbeats(self) -> None:
-        """Send PING frames to all pooled connections and remove unresponsive ones."""
-        checked_count = 0
-        failed_count = 0
-
-        for key, bucket in list(self._idle.items()):
-            valid_ws: list[tuple[RawWebSocket, float]] = []
-            for ws, created in bucket:
-                if ws._closed:
-                    continue
-                try:
-                    # Send PING frame
-                    await ws.send(b'', opcode=RawWebSocket.OP_PING)
-                    valid_ws.append((ws, created))
-                    checked_count += 1
-                except asyncio.TimeoutError:
-                    log.debug("Health check timeout for DC%d%s", key[0], 'm' if key[1] else '')
-                    asyncio.create_task(self._quiet_close(ws))
-                    failed_count += 1
-                except Exception as e:
-                    log.debug("Health check failed for DC%d%s: %s", key[0], 'm' if key[1] else '', e)
-                    asyncio.create_task(self._quiet_close(ws))
-                    failed_count += 1
-            self._idle[key] = valid_ws
-
-        if failed_count > 0:
-            log.info("Health check: %d checked, %d failed", checked_count, failed_count)
-        else:
-            log.debug("Health check completed: %d connections checked", checked_count)
-
-    async def get(self, dc: int, is_media: bool,
-                  target_ip: str, domains: list[str]
-                  ) -> RawWebSocket | None:
-        key = (dc, is_media)
-        now = time.monotonic()
-
-        bucket: list[tuple[RawWebSocket, float]] = self._idle.get(key, [])
-        while bucket:
-            ws, created = bucket.pop(0)
-            age = now - created
-            if age > WS_POOL_MAX_AGE or ws._closed:
-                asyncio.create_task(self._quiet_close(ws))
-                continue
-            self.stats.pool_hits += 1
-            log.debug("WS pool hit for DC%d%s (age=%.1fs, left=%d)",
-                      dc, 'm' if is_media else '', age, len(bucket))
-            self._schedule_refill(key, target_ip, domains)
-            return ws
-
-        self.stats.pool_misses += 1
-        self._schedule_refill(key, target_ip, domains)
-        return None
-
-    def _can_add_to_pool(self, key: tuple[int, bool]) -> bool:
-        """Check if pool can accept more connections."""
-        bucket = self._idle.get(key, [])
-        return len(bucket) < self._pool_max_size
-
-    def _schedule_refill(self, key: tuple[int, bool], target_ip: str, domains: list[str]) -> None:
-        if key in self._refilling:
-            return
-        self._refilling.add(key)
-        asyncio.create_task(self._refill(key, target_ip, domains))
-
-    async def _refill(self, key: tuple[int, bool], target_ip: str, domains: list[str]) -> None:
-        dc, is_media = key
-        try:
-            bucket = self._idle.setdefault(key, [])
-            needed = self._pool_size - len(bucket)
-            if needed <= 0:
-                return
-            tasks = []
-            for _ in range(needed):
-                tasks.append(asyncio.create_task(
-                    self._connect_one(target_ip, domains)))
-            for t in tasks:
-                try:
-                    ws = await t
-                    if ws and self._can_add_to_pool(key):
-                        bucket.append((ws, time.monotonic()))
-                    elif ws:
-                        await self._quiet_close(ws)
-                except Exception:
-                    pass
-            log.debug("WS pool refilled DC%d%s: %d ready",
-                      dc, 'm' if is_media else '', len(bucket))
-        finally:
-            self._refilling.discard(key)
-
-    def _optimize_pool_size(self) -> None:
-        """
-        Dynamically adjust pool size based on hit/miss ratio.
-
-        Strategy:
-        - If miss rate > 30%: increase pool size (up to max)
-        - If miss rate < 5% and pool usage < 50%: decrease pool size
-        """
-        now = time.monotonic()
-        if now - self._last_optimization < self._optimization_interval:
-            return
-
-        total = self.stats.pool_hits + self.stats.pool_misses
-        if total == 0:
-            return
-
-        self.stats.pool_misses / total
-
-        # Calculate change in hits/misses since last check
-        delta_hits = self.stats.pool_hits - self._last_hit_count
-        delta_misses = self.stats.pool_misses - self._last_miss_count
-        delta_total = delta_hits + delta_misses
-
-        if delta_total > 0:
-            current_miss_rate = delta_misses / delta_total
-
-            if current_miss_rate > 0.3 and self._pool_size < self._pool_max_size:
-                # High miss rate - increase pool
-                old_size = self._pool_size
-                self._pool_size = min(self._pool_size + 1, self._pool_max_size)
-                log.info("Pool optimization: miss rate %.1f%% > 30%%, increased size %d→%d",
-                        current_miss_rate * 100, old_size, self._pool_size)
-            elif current_miss_rate < 0.05 and self._pool_size > 2:
-                # Low miss rate - decrease pool to save resources
-                old_size = self._pool_size
-                self._pool_size = max(self._pool_size - 1, 2)
-                log.info("Pool optimization: miss rate %.1f%% < 5%%, decreased size %d→%d",
-                        current_miss_rate * 100, old_size, self._pool_size)
-
-        # Update counters
-        self._last_hit_count = self.stats.pool_hits
-        self._last_miss_count = self.stats.pool_misses
-        self._last_optimization = now
-
-    @staticmethod
-    async def _connect_one(target_ip: str, domains: list[str]) -> RawWebSocket | None:
-        """Connect to WebSocket server with compression support."""
-        # Get compression setting from config
-        compress = _OPTIMIZATION_CONFIG.get('enable_compression', False)
-
-        for domain in domains:
-            try:
-                ws = await RawWebSocket.connect(
-                    target_ip, domain, timeout=8, compress=compress)
-                return ws
-            except WsHandshakeError as exc:
-                if exc.is_redirect:
-                    continue
-                return None
-            except Exception:
-                return None
-        return None
-
-    @staticmethod
-    async def _quiet_close(ws: RawWebSocket) -> None:
-        try:
-            await ws.close()
-        except Exception:
-            pass
-
-    async def warmup(self, dc_opt: dict[int, str | None]) -> None:
-        """Pre-fill pool for all configured DCs on startup."""
-        for dc, target_ip in dc_opt.items():
-            if target_ip is None:
-                continue
-            for is_media in (False, True):
-                domains = _ws_domains(dc, is_media)
-                key = (dc, is_media)
-                self._schedule_refill(key, target_ip, domains)
-        log.info("WS pool warmup started for %d DC(s)", len(dc_opt))
-
-
-class _TcpPool:
-    """
-    Connection pool for TCP fallback connections.
-    Reuses existing TCP connections to reduce latency and connection overhead.
-    """
-
-    def __init__(self, stats: Stats, max_size: int = 4, max_age: float = 60.0):
-        self.stats = stats
-        self.max_size = max_size
-        self.max_age = max_age
-        self._idle: dict[str, list] = {}  # key: "host:port" -> [(reader, writer, created)]
-
-    async def get(self, host: str, port: int) -> tuple | None:
-        """Get a cached TCP connection or None."""
-        key = f"{host}:{port}"
-        now = time.monotonic()
-
-        bucket = self._idle.get(key, [])
-        while bucket:
-            reader, writer, created = bucket.pop(0)
-            age = now - created
-
-            # Check if connection is still valid
-            if age > self.max_age:
-                log.debug("TCP pool: connection expired (age=%.1fs)", age)
-                await self._close_one(writer)
-                continue
-
-            # Check if writer is still open
-            if writer.is_closing() or writer.transport.is_closing():
-                log.debug("TCP pool: connection closed")
-                continue
-
-            log.debug("TCP pool hit for %s (age=%.1fs)", key, age)
-            return reader, writer
-
-        return None
-
-    def put(self, host: str, port: int, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        """Return a connection to the pool."""
-        key = f"{host}:{port}"
-        bucket = self._idle.setdefault(key, [])
-
-        # Limit pool size
-        if len(bucket) >= self.max_size:
-            log.debug("TCP pool full for %s, closing connection", key)
-            asyncio.create_task(self._close_one(writer))
-            return
-
-        bucket.append((reader, writer, time.monotonic()))
-        log.debug("TCP pool: connection returned to %s (size=%d)", key, len(bucket))
-
-    async def _close_one(self, writer: asyncio.StreamWriter) -> None:
-        """Close a single connection."""
-        try:
-            writer.close()
-            await writer.wait_closed()
-        except Exception:
-            pass
-
-    def clear(self) -> None:
-        """Clear all pooled connections (called on shutdown)."""
-        for _key, bucket in self._idle.items():
-            for _, writer, _ in bucket:
-                asyncio.create_task(self._close_one(writer))
-        self._idle.clear()
-        log.info("TCP pool cleared")
-
-
-# Global TCP pool instance (lazy initialized)
-_tcp_pool: _TcpPool | None = None
-
-
-def _get_tcp_pool() -> _TcpPool:
-    """Lazy initialization of global TCP pool."""
-    global _tcp_pool
-    if _tcp_pool is None:
-        from .stats import Stats
-        _tcp_pool = _TcpPool(Stats())
-        log.debug("TCP pool initialized lazily")
-    return _tcp_pool
+# Re-export get_tcp_pool from connection_pool module
 
 
 async def _bridge_ws(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, ws: RawWebSocket, label: str, stats: Stats,
@@ -1744,7 +1452,7 @@ async def _tcp_fallback(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     Throttled by ISP, but functional. Returns True on success.
     """
     # Get TCP pool (lazy initialized)
-    tcp_pool = _get_tcp_pool()
+    tcp_pool = get_tcp_pool()
 
     # Try to get cached connection
     rr, rw = None, None
@@ -2401,11 +2109,21 @@ async def _run(
 
     # Background task for dynamic pool optimization
     async def optimize_pool() -> None:
-        """Periodically optimize WebSocket pool size."""
+        """Periodically optimize WebSocket pool size based on miss rate and latency."""
         while True:
             await asyncio.sleep(30)  # Check every 30 seconds
             try:
-                server_instance.ws_pool._optimize_pool_size()
+                # Get average latency from DC stats
+                dc_stats = server_instance.get_dc_stats()
+                latencies = [
+                    dc.get('latency_ms', 0)
+                    for dc in dc_stats.values()
+                    if isinstance(dc, dict) and 'latency_ms' in dc
+                ]
+                avg_latency = sum(latencies) / len(latencies) if latencies else 0.0
+
+                # Optimize pool based on latency and miss rate
+                server_instance.ws_pool._optimize_pool_size(avg_latency)
             except Exception as e:
                 log.debug("Pool optimization error: %s", e)
 
