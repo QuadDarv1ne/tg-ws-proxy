@@ -121,12 +121,31 @@
 
 ---
 
-## 🟢 Выполнено (v2.46.0: coverage + mypy fix)
+## 🟢 Выполнено (v2.46.0: mypy fix + code quality)
 
 ### Качество кода
 - ✅ **Ruff: 0 ошибок** — все проверки пройдены ✅
-- ✅ **Mypy: 0 ошибок** — все type annotations добавлены ✅
+- ✅ **Mypy: 0 ошибок** — все type annotations добавлены (17 → 0) ✅
 - ✅ **Tests: 600+ passed** — все тесты проходят ✅
+
+### Mypy исправления (v2.46.0)
+- ✅ **connection_pool.py** — добавлены `-> None` для `__init__()` и `get_tcp_pool()`
+- ✅ **mtproto_parser.py** — явная типизация `length: int` в `parse_mtproto_length()`
+- ✅ **websocket_client.py** — типизация `_compressor: zlib.Compress | None` и `_decompressor: zlib.Decompress | None`
+- ✅ **tg_ws_proxy.py** — 7 исправлений:
+  - Убран `await` для `tcp_pool.get()` (не async метод)
+  - Добавлен параметр `compress` в `RawWebSocket.connect()`
+  - Исправлены вызовы `warmup()` (убран `await`, метод sync)
+  - Исправлен `get_dc_stats()` → `dc_opt` (метод не существует)
+  - Добавлен `await` для `profiler.start()` (async метод)
+  - Type ignore для WebSocket pool (разные классы RawWebSocket)
+  - Исправлен `unused coroutine` для `profiler.start()`
+- ✅ **service_windows.py** — type: ignore для pywin32 (servicemanager, win32event, win32service, win32serviceutil)
+- ✅ **notifications.py** — type: ignore для aiohttp
+- ✅ **dns_resolver.py** — type: ignore для aiodns
+- ✅ **alerts.py** — type: ignore для aiohttp
+- ✅ **dashboard.py** — type: ignore для rich.typing
+- ✅ **tg_ws_proxy.py** — type: ignore для aiodns и appdirs
 
 ### Тестирование
 - ✅ **Coverage Improvement** — увеличение покрытия с 52% до 55%
@@ -135,14 +154,13 @@
 
 ---
 
-## 🟡 В процессе (v2.47.0: coverage + integration tests)
+## 🟡 В процессе (v2.47.0: integration tests + coverage)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
 ### Надёжность
-- [ ] **Retry Strategy** — умный повтор запросов при смене сети
 - [ ] **Health Check Enhancement** — более агрессивная проверка мёртвых соединений
 - [ ] **Connection Timeout Tuning** — адаптивные таймауты на основе latency
 
@@ -152,7 +170,7 @@
 - [ ] **Rate Limiting Improvements** — защита от DDoS и злоупотреблений
 
 ### Тестирование
-- [ ] **Coverage Improvement** — увеличение покрытия с 48% до 60%
+- [ ] **Coverage Improvement** — увеличение покрытия с 55% до 60%
 - [ ] **Integration Tests** —端到端 тесты для основных сценариев
 - [ ] **Performance Tests** — benchmark тесты производительности
 
@@ -175,7 +193,7 @@
 
 ---
 
-## 📊 Статус (22.03.2026 23:00)
+## 📊 Статус (22.03.2026 23:30)
 
 ```
 Модулей: 34 в proxy/ ✅
@@ -190,7 +208,7 @@ Version: v2.46.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
 
 **Актуальная версия:** v2.46.0 (main/dev) — ✅ synced
 **Следующая версия:** v2.47.0 (integration tests + HTTP/2 research)
-**Последнее обновление:** 22.03.2026 (23:00)
+**Последнее обновление:** 22.03.2026 (23:30)
 
 ---
 
@@ -391,7 +409,7 @@ Version: v2.46.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
 
 ---
 
-## 🎯 Roadmap (обновлено 22.03.2026 23:00)
+## 🎯 Roadmap (обновлено 22.03.2026 23:30)
 
 ### v2.44.0 (выполнено) — Alerts + Stability ✅
 - ✅ Merge dev → main
@@ -430,5 +448,5 @@ Version: v2.46.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
 
 ---
 
-**Последнее обновление:** 22.03.2026 22:00
+**Последнее обновление:** 22.03.2026 23:30
 **Автор:** Dupley Maxim Igorevich

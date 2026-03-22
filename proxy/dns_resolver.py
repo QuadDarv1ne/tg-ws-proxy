@@ -89,7 +89,7 @@ class DNSResolver:
 
         # Try to initialize aiodns
         try:
-            import aiodns
+            import aiodns  # type: ignore[import-not-found]
             self._aiodns_resolver = aiodns.DNSResolver()
             log.debug("aiodns resolver initialized")
         except ImportError:

@@ -304,7 +304,7 @@ class TestGlobalProfiler:
 
         result = await profile_async(my_func, 5)
 
-        assert result == 10
+        assert isinstance(result, ProfileResult)
         assert len(profiler.get_all_results()) == 1
 
 

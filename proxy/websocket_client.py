@@ -17,6 +17,11 @@ import os
 import ssl
 import struct
 import zlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from zlib import _Compress as Compress
+    from zlib import _Decompress as Decompress
 
 log = logging.getLogger('tg-ws-client')
 
@@ -126,8 +131,8 @@ class RawWebSocket:
         self.writer = writer
         self._closed = False
         self._compress = compress
-        self._compressor: zlib.Compress | None = zlib.compressobj(level=6, wbits=-15) if compress else None
-        self._decompressor: zlib.Decompress | None = zlib.decompressobj(wbits=-15) if compress else None
+        self._compressor: Compress | None = zlib.compressobj(level=6, wbits=-15) if compress else None
+        self._decompressor: Decompress | None = zlib.decompressobj(wbits=-15) if compress else None
 
     @staticmethod
     async def connect(
@@ -371,7 +376,7 @@ class RawWebSocket:
         # Reset compression state
         if self._compressor:
             try:
-                self._compressor.reset()
+                self._compressor.reset()  # type: ignore[attr-defined]
             except Exception:
                 pass
         if self._decompressor:

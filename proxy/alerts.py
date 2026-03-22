@@ -229,7 +229,7 @@ class AlertManager:
 
     async def _send_webhook_notifications(self, alert: Alert) -> None:
         try:
-            import aiohttp
+            import aiohttp  # type: ignore[import-not-found]
             payload = {"alert": alert.to_dict(), "source": "TG WS Proxy"}
             async with aiohttp.ClientSession() as session:
                 for url in self._webhook_urls:

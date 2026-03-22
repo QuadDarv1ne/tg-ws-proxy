@@ -86,7 +86,7 @@ class TelegramBotNotifier:
     async def send(self, notification: Notification) -> bool:
         """Send notification via Telegram."""
         try:
-            import aiohttp
+            import aiohttp  # type: ignore[import-not-found]
 
             # Format message
             priority_emoji = {

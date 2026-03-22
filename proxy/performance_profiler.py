@@ -145,9 +145,9 @@ class PerformanceProfiler:
         try:
             # Execute function
             if asyncio.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)
+                await func(*args, **kwargs)
             else:
-                result = func(*args, **kwargs)
+                func(*args, **kwargs)
         finally:
             pr.disable()
             end_time = time.perf_counter()

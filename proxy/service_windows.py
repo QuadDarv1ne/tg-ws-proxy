@@ -7,10 +7,10 @@ import socket
 import subprocess
 import sys
 
-import servicemanager
-import win32event
-import win32service
-import win32serviceutil
+import servicemanager  # type: ignore[import-untyped]
+import win32event  # type: ignore[import-untyped]
+import win32service  # type: ignore[import-untyped]
+import win32serviceutil  # type: ignore[import-untyped]
 
 
 class TgWsProxyService(win32serviceutil.ServiceFramework):

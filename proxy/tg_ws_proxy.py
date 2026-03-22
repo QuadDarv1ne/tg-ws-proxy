@@ -18,7 +18,8 @@ from .circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
 )
-from .connection_pool import _WsPool, get_tcp_pool
+from .connection_pool import _WsPool
+from .connection_pool import get_tcp_pool as _get_tcp_pool
 from .constants import (
     _IP_TO_DC,
     DC_FAIL_COOLDOWN,
@@ -73,7 +74,7 @@ def _init_async_dns() -> None:
     """Initialize async DNS resolver if aiodns is available."""
     global _dns_resolver
     try:
-        import aiodns
+        import aiodns  # type: ignore[import-not-found]
         _dns_resolver = aiodns.DNSResolver()
         log.debug("Async DNS resolver initialized (aiodns)")
     except ImportError:
@@ -1317,7 +1318,7 @@ async def _tcp_fallback(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     Throttled by ISP, but functional. Returns True on success.
     """
     # Get TCP pool (lazy initialized)
-    tcp_pool = get_tcp_pool()
+    tcp_pool = _get_tcp_pool()
 
     # Try to get cached connection
     rr, rw = None, None
@@ -1593,16 +1594,20 @@ async def _handle_client(
 
         # -- Try WebSocket via direct connection --
         domains = _ws_domains(dc, is_media)
-        target = dc_opt[dc]
-        ws = None
+        target: str | None = dc_opt.get(dc)
+        if target is None:
+            return
+        ws: RawWebSocket | None = None
         ws_failed_redirect = False
         all_redirects = True
 
         # Get compression setting
         compress = _OPTIMIZATION_CONFIG.get('enable_compression', False)
 
-        ws = await ws_pool.get(dc, is_media, target, domains)  # type: ignore[arg-type]
-        if ws:
+        # Try to get WebSocket from pool
+        ws_from_pool = await ws_pool.get(dc, is_media, target, domains)
+        if ws_from_pool:
+            ws = ws_from_pool  # type: ignore[assignment]
             log.info("%s DC%d%s (%s:%d) -> pool hit via %s",
                      label, dc, media_tag, dst, port, target)
         else:
@@ -1613,7 +1618,7 @@ async def _handle_client(
                          " [compression]" if compress else "")
                 try:
                     ws = await RawWebSocket.connect(target, domain,
-                                                    timeout=10, compress=compress)
+                                                    timeout=10, compress=bool(compress))
                     all_redirects = False
                     break
                 except WsHandshakeError as exc:
@@ -1717,7 +1722,7 @@ async def _handle_client(
         await ws.send(init)
 
         # Bidirectional bridge
-        await _bridge_ws(reader, writer, ws, label, stats,  # type: ignore[arg-type]
+        await _bridge_ws(reader, writer, ws, label, stats,
                          dc=dc, dst=dst, port=port, is_media=is_media,
                          splitter=splitter)
 
@@ -1786,7 +1791,7 @@ async def _run(
     # Start real-time monitoring with auto-export
     import os
 
-    import appdirs
+    import appdirs  # type: ignore[import-untyped]
     stats_dir = os.path.join(appdirs.user_data_dir('TgWsProxy', 'Dupley Maxim'), 'stats')
     await server_instance.stats.start_realtime_monitoring(
         check_interval=30.0,  # Check every 30 seconds
@@ -1995,7 +2000,7 @@ async def _run(
                 # Get average latency from DC stats
                 dc_stats = server_instance.dc_opt
                 latencies = [
-                    dc.get('latency_ms', 0)
+                    dc.get('latency_ms', 0)  # type: ignore[union-attr]
                     for dc in dc_stats.values()
                     if isinstance(dc, dict) and 'latency_ms' in dc
                 ]
@@ -2040,7 +2045,7 @@ async def _run(
     try:
         from .profiler import get_profiler
         server_instance._memory_profiler = get_profiler(check_interval=300.0)  # 5 min
-        server_instance._memory_profiler.start()
+        await server_instance._memory_profiler.start()
         log.info("Memory profiler started (interval: 300s)")
     except Exception as e:
         log.debug("Memory profiler not started: %s", e)
