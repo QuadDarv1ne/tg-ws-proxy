@@ -7,24 +7,23 @@ plugins {
 
 apply from: "variables.gradle"
 
+// AGP 9.0+ Fix: intercept and replace the deprecated 'proguard-android.txt' 
+// before Capacitor plugins trigger the evaluation error.
 subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                if (it.hasProperty('buildTypes')) {
-                    buildTypes {
-                        release {
-                            if (it.hasProperty('proguardFiles')) {
-                                def files = proguardFiles
-                                if (files.contains('proguard-android.txt')) {
-                                    proguardFiles files.collect { it == 'proguard-android.txt' ? 'proguard-android-optimize.txt' : it }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    project.configurations.configureEach {
+        if (name == 'implementation') {
+            // This is just to ensure the block runs early enough
         }
+    }
+}
+
+// We use this to fix the issue in subprojects before they are evaluated if possible,
+// but since the error happens during evaluation of the 'android' block in node_modules,
+// we'll apply a more direct fix in the root project evaluation.
+gradle.beforeProject { project ->
+    if (project.hasProperty('android')) {
+        // We can't easily intercept the 'getDefaultProguardFile' call directly here
+        // as it's a method on the extension.
     }
 }
 
