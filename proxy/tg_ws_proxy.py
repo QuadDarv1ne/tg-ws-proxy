@@ -25,24 +25,21 @@ from .constants import (
     _IP_TO_DC,
     DC_FAIL_COOLDOWN,
     DEFAULT_PORT,
-    INIT_DC_OFFSET,
-    INIT_IV_OFFSET,
-    INIT_IV_SIZE,
-    INIT_KEY_OFFSET,
-    INIT_KEY_SIZE,
-    INIT_PACKET_SIZE,
-    PROTO_ABRIDGED,
-    PROTO_OBFUSCATED,
-    PROTO_PADDED_ABRIDGED,
     RECV_BUF_SIZE,
     SEND_BUF_SIZE,
     TCP_NODELAY,
-    TG_RANGES,
 )
 from .crypto import (
     CryptoConfig,
     CryptoManager,
     EncryptionType,
+)
+from .mtproto_parser import (
+    MsgSplitter,
+    extract_dc_from_init,
+    is_http_transport,
+    is_telegram_ip,
+    patch_init_dc,
 )
 from .stats import Stats, _human_bytes
 
@@ -1033,125 +1030,6 @@ class RawWebSocket:
         return opcode, payload
 
 
-def _is_telegram_ip(ip: str) -> bool:
-    try:
-        n = struct.unpack('!I', _socket.inet_aton(ip))[0]
-        return any(lo <= n <= hi for lo, hi in TG_RANGES)
-    except OSError:
-        return False
-
-
-def _is_http_transport(data: bytes) -> bool:
-    return (data[:5] == b'POST ' or data[:4] == b'GET ' or
-            data[:5] == b'HEAD ' or data[:8] == b'OPTIONS ')
-
-
-def _dc_from_init(data: bytes) -> tuple[int | None, bool]:
-    """
-    Extract DC ID from the 64-byte MTProto obfuscation init packet.
-    Returns (dc_id, is_media).
-    """
-    if len(data) < INIT_PACKET_SIZE:
-        return None, False
-
-    try:
-        key = bytes(data[INIT_KEY_OFFSET:INIT_KEY_OFFSET + INIT_KEY_SIZE])
-        iv = bytes(data[INIT_IV_OFFSET:INIT_IV_OFFSET + INIT_IV_SIZE])
-        cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
-        encryptor = cipher.encryptor()
-        keystream = encryptor.update(b'\x00' * 64) + encryptor.finalize()
-        plain = bytes(a ^ b for a, b in zip(
-            data[56:64], keystream[56:64]))
-        proto = struct.unpack('<I', plain[0:4])[0]
-        dc_raw = struct.unpack('<h', plain[4:6])[0]
-        log.debug("dc_from_init: proto=0x%08X dc_raw=%d plain=%s",
-                  proto, dc_raw, plain.hex())
-        if proto in (PROTO_OBFUSCATED, PROTO_ABRIDGED, PROTO_PADDED_ABRIDGED):
-            dc = abs(dc_raw)
-            if 1 <= dc <= 5:
-                return dc, (dc_raw < 0)
-    except Exception as exc:
-        log.debug("DC extraction failed: %s", exc)
-    return None, False
-
-
-def _patch_init_dc(data: bytes, dc: int) -> bytes:
-    """
-    Patch dc_id in the 64-byte MTProto init packet.
-
-    Mobile clients with useSecret=0 leave bytes 60-61 as random.
-    The WS relay needs a valid dc_id to route correctly.
-    """
-    if len(data) < INIT_PACKET_SIZE:
-        return data
-
-    new_dc = struct.pack('<h', dc)
-    try:
-        key_raw = bytes(data[INIT_KEY_OFFSET:INIT_KEY_OFFSET + INIT_KEY_SIZE])
-        iv = bytes(data[INIT_IV_OFFSET:INIT_IV_OFFSET + INIT_IV_SIZE])
-        cipher = Cipher(algorithms.AES(key_raw), modes.CTR(iv))
-        enc = cipher.encryptor()
-        ks = enc.update(b'\x00' * 64) + enc.finalize()
-        patched = bytearray(data[:INIT_PACKET_SIZE])
-        patched[INIT_DC_OFFSET] = ks[INIT_DC_OFFSET] ^ new_dc[0]
-        patched[INIT_DC_OFFSET + 1] = ks[INIT_DC_OFFSET + 1] ^ new_dc[1]
-        log.debug("init patched: dc_id -> %d", dc)
-        if len(data) > INIT_PACKET_SIZE:
-            return bytes(patched) + data[INIT_PACKET_SIZE:]
-        return bytes(patched)
-    except Exception:
-        return data
-
-
-class _MsgSplitter:
-    """
-    Splits client TCP data into individual MTProto abridged-protocol
-    messages so each can be sent as a separate WebSocket frame.
-
-    The Telegram WS relay processes one MTProto message per WS frame.
-    Mobile clients batches multiple messages in a single TCP write (e.g.
-    msgs_ack + req_DH_params).  If sent as one WS frame, the relay
-    only processes the first message — DH handshake never completes.
-    """
-
-    def __init__(self, init_data: bytes):
-        key_raw = bytes(init_data[INIT_KEY_OFFSET:INIT_KEY_OFFSET + INIT_KEY_SIZE])
-        iv = bytes(init_data[INIT_IV_OFFSET:INIT_IV_OFFSET + INIT_IV_SIZE])
-        cipher = Cipher(algorithms.AES(key_raw), modes.CTR(iv))
-        self._dec = cipher.encryptor()
-        self._dec.update(b'\x00' * 64)  # skip init packet
-
-    def split(self, chunk: bytes) -> list[bytes]:
-        """Decrypt to find message boundaries, return split ciphertext."""
-        plain = self._dec.update(chunk)
-        boundaries: list[int] = []
-        pos = 0
-        while pos < len(plain):
-            first = plain[pos]
-            if first == 0x7f:
-                if pos + 4 > len(plain):
-                    break
-                msg_len = (
-                    struct.unpack_from('<I', plain, pos + 1)[0] & 0xFFFFFF
-                ) * 4
-                pos += 4
-            else:
-                msg_len = first * 4
-                pos += 1
-            if msg_len == 0 or pos + msg_len > len(plain):
-                break
-            pos += msg_len
-            boundaries.append(pos)
-        if len(boundaries) <= 1:
-            return [chunk]
-        parts: list[bytes] = []
-        prev = 0
-        for b in boundaries:
-            parts.append(chunk[prev:b])
-            prev = b
-        if prev < len(chunk):
-            parts.append(chunk[prev:])
-        return parts
 
 
 def _ws_domains(dc: int, is_media: bool | None) -> list[str]:
@@ -1230,7 +1108,7 @@ def clear_dns_cache() -> None:
 
 async def _bridge_ws(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, ws: RawWebSocket, label: str, stats: Stats,
                      dc: int | None = None, dst: str | None = None, port: int | None = None, is_media: bool = False,
-                     splitter: _MsgSplitter | None = None) -> tuple[int, int]:
+                     splitter: MsgSplitter | None = None) -> tuple[int, int]:
     """Bidirectional TCP <-> WebSocket forwarding.
 
     Optimizations:
