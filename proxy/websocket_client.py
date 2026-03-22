@@ -395,7 +395,7 @@ class RawWebSocket:
             raise asyncio.TimeoutError("Frame header read timeout") from e
         except asyncio.IncompleteReadError as e:
             raise asyncio.IncompleteReadError(
-                b"", 2, "Connection closed during header read"
+                e.partial, e.expected
             ) from e
 
         opcode = hdr[0] & 0x0F
@@ -413,7 +413,7 @@ class RawWebSocket:
                 )[0]
             except asyncio.IncompleteReadError as e:
                 raise asyncio.IncompleteReadError(
-                    b"", 2, "Connection closed during extended length read"
+                    e.partial, e.expected
                 ) from e
         elif length == 127:
             try:
@@ -426,7 +426,7 @@ class RawWebSocket:
                 )[0]
             except asyncio.IncompleteReadError as e:
                 raise asyncio.IncompleteReadError(
-                    b"", 8, "Connection closed during extended length read"
+                    e.partial, e.expected
                 ) from e
 
         if is_masked:
@@ -442,7 +442,7 @@ class RawWebSocket:
                 return opcode, _xor_mask(payload, mask_key)
             except asyncio.IncompleteReadError as e:
                 raise asyncio.IncompleteReadError(
-                    b"", length, "Connection closed during masked payload read"
+                    e.partial, e.expected
                 ) from e
 
         try:
@@ -452,6 +452,6 @@ class RawWebSocket:
             )
         except asyncio.IncompleteReadError as e:
             raise asyncio.IncompleteReadError(
-                b"", length, "Connection closed during payload read"
+                e.partial, e.expected
             ) from e
         return opcode, payload
