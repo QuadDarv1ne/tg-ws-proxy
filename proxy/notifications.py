@@ -300,7 +300,9 @@ class NotificationManager:
         # Send to all notifiers
         tasks: list[Coroutine[Any, Any, bool]] = []
         for notifier in self._notifiers:
-            tasks.append(notifier.send(notification))
+            task = notifier.send(notification)
+            if task is not None:  # Skip if not a coroutine
+                tasks.append(task)
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
