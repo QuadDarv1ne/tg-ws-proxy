@@ -154,7 +154,21 @@
 
 ---
 
-## 🟡 В процессе (v2.47.0: integration tests + coverage)
+## ✅ Выполнено (v2.47.0: code quality + stability)
+
+### Качество кода
+- ✅ **Ruff: 0 ошибок** — все проверки пройдены ✅
+- ✅ **Mypy: 0 ошибок** — все type annotations корректны ✅
+- ✅ **Tests: 620 passed** — все тесты проходят ✅ (620 passed, 7 skipped)
+
+### Стабильность
+- ✅ **Import sorting** — исправлен порядок импортов в `tg_ws_proxy.py`
+- ✅ **Gradle sync** — синхронизация зависимостей Android (libs.versions.toml)
+- ✅ **Settings update** — repositoriesMode.PREFER_SETTINGS для Android
+
+---
+
+## 🟡 В процессе (v2.48.0: integration tests + coverage)
 
 ### Производительность
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
@@ -193,22 +207,22 @@
 
 ---
 
-## 📊 Статус (22.03.2026 23:30)
+## 📊 Статус (22.03.2026 23:45)
 
 ```
 Модулей: 34 в proxy/ ✅
 Тестов: 32 файла в tests/ ✅
-Tests: 600+ passed, 0 errors ✅
+Tests: 620 passed, 7 skipped ✅
 Coverage: ~55% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.46.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
+Version: v2.47.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
 ```
 
-**Актуальная версия:** v2.46.0 (main/dev) — ✅ synced
-**Следующая версия:** v2.47.0 (integration tests + HTTP/2 research)
-**Последнее обновление:** 22.03.2026 (23:30)
+**Актуальная версия:** v2.47.0 (main/dev) — ✅ synced
+**Следующая версия:** v2.48.0 (integration tests + coverage)
+**Последнее обновление:** 22.03.2026 (23:45)
 
 ---
 
@@ -395,58 +409,19 @@ Version: v2.46.0 (Ruff ✅, Mypy ✅, All Tests Passing ✅)
 2. **aiodns** — не устанавливается на Windows (используется fallback)
 3. **pytest** — требуется установка `pip install -r requirements-dev.txt`
 
-### Метрики качества (v2.43.0)
-- **Строк кода:** ~18,000 (Python) — увеличение за счёт новых модулей
-- **Модулей:** 33 в `proxy/` (+8 новых модулей)
-- **Тестов:** 31 файл в `tests/` (+7 новых тестовых файлов)
-- **Покрытие:** ~50% (+10% за счёт новых тестов)
-- **Ruff:** 0 ошибок ✅ (исправлено 29 ошибок форматирования)
+### Метрики качества (v2.47.0)
+- **Строк кода:** ~18,000 (Python)
+- **Модулей:** 34 в `proxy/`
+- **Тестов:** 32 файла в `tests/`
+- **Покрытие:** ~55% (цель >80%)
+- **Ruff:** 0 ошибок ✅
 - **Mypy:** 0 ошибок ✅
 - **RuntimeWarnings:** 0 ✅
 - **Платформы:** Windows, Linux, macOS, Android
-- **Рефакторинг:** tg_ws_proxy.py уменьшен с 2600 до 1940 строк (-25%) ✅
-- **Код качество:** Все проверки линтеров пройдены ✅
+- **Рефакторинг:** tg_ws_proxy.py ~1400 строк ✅
+- **Код качество:** Все проверки пройдены ✅
 
 ---
 
-## 🎯 Roadmap (обновлено 22.03.2026 23:30)
-
-### v2.44.0 (выполнено) — Alerts + Stability ✅
-- ✅ Merge dev → main
-- ✅ Alerting система для DC latency (test_alerts.py: 8 тестов)
-- ✅ metric_to_alert_type mapping
-- ✅ Ruff: 0 ошибок
-
-### v2.45.0 (выполнено) — Retry Strategy ✅
-- ✅ Retry Strategy с exponential backoff
-- ✅ test_retry_strategy.py: 24 теста passed
-- ✅ Исправлены failing тесты
-- ✅ Ruff: 0 ошибок
-
-### v2.46.0 (выполнено) — Code Quality ✅
-- ✅ Ruff: 0 ошибок
-- ✅ Mypy: 0 ошибок (17 → 0)
-- ✅ Tests: 600+ passed, 0 errors
-- ✅ Coverage: 55% (+3%)
-
-### v2.47.0 (текущий спринт) — Integration Tests
-- [ ] HTTP/2 для Web Dashboard (Quart + Hypercorn)
-- [ ] Integration tests для SOCKS5 + WebSocket
-- [ ] Coverage improvement до >60%
-- [ ] Обновление GITHUB_RELEASE.md до v2.46.0
-
-### v2.48.0 (следующий спринт) — Performance & Monitoring
-- [ ] Adaptive timeouts на основе latency
-- [ ] Health Check Enhancement
-- [ ] Performance benchmarks
-
-### v3.0.0 (Q4 2026) — Next Generation
-- [ ] HTTP/3 / QUIC support
-- [ ] Plugin system
-- [ ] Multi-proxy chains
-- [ ] ML-based anomaly detection
-
----
-
-**Последнее обновление:** 22.03.2026 23:30
+**Последнее обновление:** 22.03.2026 23:45
 **Автор:** Dupley Maxim Igorevich

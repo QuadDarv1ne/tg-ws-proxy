@@ -18,8 +18,12 @@ from .circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
 )
-from .connection_pool import _WsPool
-from .connection_pool import get_tcp_pool as _get_tcp_pool
+from .connection_pool import (
+    _WsPool,
+)
+from .connection_pool import (
+    get_tcp_pool as _get_tcp_pool,
+)
 from .constants import (
     _IP_TO_DC,
     DC_FAIL_COOLDOWN,

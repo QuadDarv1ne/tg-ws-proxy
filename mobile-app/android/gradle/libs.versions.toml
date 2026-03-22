@@ -5,26 +5,26 @@ minSdk = "24"
 targetSdk = "35"
 
 # Libraries
-androidx-activity = "1.13.0"
-androidx-appcompat = "1.7.1"
+androidx-activity = "1.10.0"
+androidx-appcompat = "1.7.0"
 androidx-coordinatorlayout = "1.3.0"
-androidx-core = "1.18.0"
+androidx-core = "1.15.0"
 androidx-fragment = "1.8.5"
-androidx-webkit = "1.15.0"
-androidx-security = "1.1.0"
-androidx-work = "2.11.1"
+androidx-webkit = "1.12.1"
+androidx-security = "1.1.0-alpha06"
+androidx-work = "2.10.0"
 androidx-biometric = "1.2.0-alpha05"
-core-splashscreen = "1.2.0"
+core-splashscreen = "1.0.1"
 junit = "4.13.2"
-androidx-junit = "1.3.0"
-androidx-espresso = "3.7.0"
+androidx-junit = "1.2.1"
+androidx-espresso = "3.6.1"
 leakcanary = "2.14"
 generativeai = "0.9.0"
 chaquopy = "17.0.0"
 
 # Plugins
-android-gradle-plugin = "8.2.2"
-google-services = "4.4.4"
+android-gradle-plugin = "8.7.3"
+google-services = "4.4.2"
 
 [libraries]
 android-gradle-plugin = { group = "com.android.tools.build", name = "gradle", version.ref = "android-gradle-plugin" }
