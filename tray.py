@@ -266,6 +266,33 @@ def _check_port_available(port: int, host: str) -> bool:
         raise
 
 
+def _find_free_port(host: str = '127.0.0.1', start_port: int = 1080, max_attempts: int = 100) -> int:
+    """Find a free port starting from start_port.
+    
+    Args:
+        host: Host to bind to.
+        start_port: Starting port number.
+        max_attempts: Maximum number of ports to try.
+    
+    Returns:
+        A free port number.
+    
+    Raises:
+        OSError: If no free port is found in the range.
+    """
+    for port_offset in range(max_attempts):
+        test_port = start_port + port_offset
+        try:
+            with _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM) as s:
+                s.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+                s.bind((host, test_port))
+            return test_port
+        except OSError as e:
+            if e.errno not in (WSAEADDRINUSE, 98):  # Not "address in use"
+                raise
+    raise OSError(f"No free port found in range {start_port}-{start_port + max_attempts - 1}")
+
+
 def _has_ipv6_enabled() -> bool:
     """Check if IPv6 is enabled on the system."""
     try:
@@ -559,6 +586,7 @@ def start_proxy() -> None:
     host = cfg.get("host", DEFAULT_CONFIG["host"])
     dc_ip_list = cfg.get("dc_ip", DEFAULT_CONFIG["dc_ip"])
     verbose = cfg.get("verbose", False)
+    auto_port = cfg.get("auto_port", False)  # Automatic port selection
 
     try:
         dc_opt = tg_ws_proxy.parse_dc_ip_list(dc_ip_list)
@@ -567,6 +595,22 @@ def start_proxy() -> None:
         _show_error(f"Ошибка конфигурации:\n{e}")
         _set_proxy_status("error")
         return
+
+    # Auto-detect free port if enabled or if configured port is busy
+    if auto_port or not _check_port_available(port, host):
+        try:
+            actual_port = _find_free_port(host, port)
+            if actual_port != port:
+                log.info("Port %d is busy, using port %d instead", port, actual_port)
+                port = actual_port
+                # Save new port to config
+                cfg["port"] = port
+                save_config(cfg)
+        except OSError as e:
+            log.error("Failed to find free port: %s", e)
+            _show_error(f"Не удалось найти свободный порт:\n{e}")
+            _set_proxy_status("error")
+            return
 
     log.info("Starting proxy on %s:%d ...", host, port)
     _set_proxy_status("starting")
@@ -1170,10 +1214,10 @@ def _edit_config_dialog() -> None:
     root = _create_config_window()
     frame = _build_config_frame(root)
 
-    host_var, port_var, dc_textbox, verbose_var, whitelist_textbox = _build_config_fields(frame, cfg)
+    host_var, port_var, dc_textbox, verbose_var, whitelist_textbox, auto_port_var = _build_config_fields(frame, cfg)
 
     def on_save():
-        _save_config_and_restart(host_var, port_var, dc_textbox, verbose_var, whitelist_textbox, root)
+        _save_config_and_restart(host_var, port_var, dc_textbox, verbose_var, whitelist_textbox, auto_port_var, root)
 
     def on_cancel():
         root.destroy()
@@ -1202,7 +1246,7 @@ def _create_config_window() -> ctk.CTk:
     if icon_path.exists():
         root.iconbitmap(str(icon_path))
 
-    w, h = 420, 480
+    w, h = 420, 540
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
@@ -1271,7 +1315,16 @@ def _build_config_fields(
                               font=(UI_FONT_FAMILY, 13), corner_radius=10,
                               fg_color=field_bg, border_color=field_border,
                               border_width=1, text_color=text_primary)
-    port_entry.pack(anchor="w", pady=(0, 12))
+    port_entry.pack(anchor="w", pady=(0, 4))
+    
+    # Auto-port checkbox
+    auto_port_var = ctk.BooleanVar(value=cfg.get("auto_port", False))
+    ctk.CTkCheckBox(frame, text="Автоматический выбор порта (если занят)",
+                    variable=auto_port_var, font=(UI_FONT_FAMILY, 12),
+                    text_color=text_primary,
+                    fg_color=TG_BLUE, hover_color=TG_BLUE_HOVER,
+                    corner_radius=6, border_width=2,
+                    border_color=UI_FIELD_BORDER).pack(anchor="w", pady=(0, 12))
 
     # Quick DC presets
     dc_preset_frame = ctk.CTkFrame(frame, fg_color="transparent")
@@ -1344,7 +1397,7 @@ def _build_config_fields(
                  font=(UI_FONT_FAMILY, 11), text_color=UI_TEXT_SECONDARY,
                  anchor="w").pack(anchor="w", pady=(0, 16))
 
-    return host_var, port_var, dc_textbox, verbose_var, whitelist_textbox
+    return host_var, port_var, dc_textbox, verbose_var, whitelist_textbox, auto_port_var
 
 
 def _save_config_and_restart(
@@ -1353,6 +1406,7 @@ def _save_config_and_restart(
     dc_textbox: ctk.CTkTextbox,
     verbose_var: ctk.BooleanVar,
     whitelist_textbox: ctk.CTkTextbox,
+    auto_port_var: ctk.BooleanVar,
     root: ctk.CTk
 ) -> None:
     """Validate and save configuration, then offer restart."""
@@ -1371,9 +1425,11 @@ def _save_config_and_restart(
         _show_error("Порт должен быть числом 1-65535")
         return
 
-    # Check port availability
-    if not _check_port_available(port_val, host_val):
-        _show_error(f"Порт {host_val}:{port_val} уже используется.\n\nВыберите другой порт.")
+    auto_port_val = auto_port_var.get()
+    
+    # Check port availability only if auto_port is disabled
+    if not auto_port_val and not _check_port_available(port_val, host_val):
+        _show_error(f"Порт {host_val}:{port_val} уже используется.\n\nВыберите другой порт или включите автовыбор.")
         return
 
     lines = [line.strip() for line in dc_textbox.get("1.0", "end").strip().splitlines()
@@ -1398,6 +1454,7 @@ def _save_config_and_restart(
     new_cfg = {
         "host": host_val,
         "port": port_val,
+        "auto_port": auto_port_val,
         "dc_ip": lines,
         "verbose": verbose_var.get(),
         "ip_whitelist": whitelist_lines,
