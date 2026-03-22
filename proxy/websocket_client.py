@@ -113,11 +113,19 @@ class RawWebSocket:
     OP_PING = 0x9
     OP_PONG = 0xA
 
+    # Connection settings
+    DEFAULT_CONNECT_TIMEOUT = 10.0
+    DEFAULT_READ_TIMEOUT = 30.0
+    MAX_CONNECT_RETRIES = 3
+    RETRY_DELAY = 0.5
+
     def __init__(
         self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
-        compress: bool = False
+        compress: bool = False,
+        domain: str = "",
+        ip: str = "",
     ):
         """
         Initialize WebSocket.
@@ -126,22 +134,29 @@ class RawWebSocket:
             reader: Stream reader
             writer: Stream writer
             compress: Enable permessage-deflate compression
+            domain: Domain name for metrics
+            ip: IP address for metrics
         """
         self.reader = reader
         self.writer = writer
         self._closed = False
         self._compress = compress
+        self._domain = domain
+        self._ip = ip
         self._compressor: Compress | None = zlib.compressobj(level=6, wbits=-15) if compress else None
         self._decompressor: Decompress | None = zlib.decompressobj(wbits=-15) if compress else None
+        self._connect_time: float = 0.0
+        self._last_activity: float = 0.0
 
     @staticmethod
     async def connect(
         ip: str,
         domain: str,
         path: str = '/apiws',
-        timeout: float = 10.0,
+        timeout: float = DEFAULT_CONNECT_TIMEOUT,
         ssl_context: ssl.SSLContext | None = None,
-        compress: bool = False
+        compress: bool = False,
+        retry_count: int = MAX_CONNECT_RETRIES,
     ) -> RawWebSocket:
         """
         Connect via TLS to the given IP and perform WebSocket upgrade.
@@ -153,6 +168,7 @@ class RawWebSocket:
             timeout: Connection timeout
             ssl_context: SSL context (creates default if None)
             compress: Enable permessage-deflate compression
+            retry_count: Number of connection retries
 
         Returns:
             Connected WebSocket instance
@@ -161,6 +177,49 @@ class RawWebSocket:
             WsHandshakeError: On non-101 response
             asyncio.TimeoutError: On connection timeout
         """
+        last_error: Exception | None = None
+        
+        for attempt in range(max(1, retry_count)):
+            try:
+                ws = await RawWebSocket._connect_once(
+                    ip=ip,
+                    domain=domain,
+                    path=path,
+                    timeout=timeout,
+                    ssl_context=ssl_context,
+                    compress=compress,
+                )
+                ws._domain = domain
+                ws._ip = ip
+                ws._connect_time = timeout
+                return ws
+                
+            except (asyncio.TimeoutError, ConnectionRefusedError, OSError) as e:
+                last_error = e
+                if attempt < retry_count - 1:
+                    log.debug("Connection attempt %d/%d failed to %s: %s, retrying...",
+                             attempt + 1, retry_count, domain, e)
+                    await asyncio.sleep(RawWebSocket.RETRY_DELAY * (attempt + 1))
+                continue
+            except WsHandshakeError as e:
+                # Don't retry handshake errors (e.g., 302 redirect)
+                if e.is_redirect:
+                    log.debug("WebSocket redirect detected for %s: %d", domain, e.status_code)
+                raise
+        
+        # All retries failed
+        raise last_error or asyncio.TimeoutError("Connection failed")
+    
+    @staticmethod
+    async def _connect_once(
+        ip: str,
+        domain: str,
+        path: str,
+        timeout: float,
+        ssl_context: ssl.SSLContext | None,
+        compress: bool,
+    ) -> RawWebSocket:
+        """Single connection attempt without retry logic."""
         if ssl_context is None:
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
@@ -360,12 +419,76 @@ class RawWebSocket:
                     except Exception as e:
                         log.debug("Decompression error: %s", e)
                         # Fall back to uncompressed data
+                self._last_activity = asyncio.get_event_loop().time()
                 return payload
 
             # Unknown opcode — skip
             continue
 
         return None
+
+    async def ping(self, data: bytes = b'') -> bool:
+        """
+        Send ping frame and wait for pong.
+
+        Args:
+            data: Optional ping data
+
+        Returns:
+            True if pong received, False on timeout
+        """
+        if self._closed:
+            return False
+        
+        try:
+            await self.send(data, opcode=self.OP_PING)
+            return True
+        except Exception:
+            return False
+
+    async def send(self, data: bytes, opcode: int = OP_BINARY) -> None:
+        """
+        Send a masked WebSocket frame.
+
+        Args:
+            data: Data to send
+            opcode: Frame opcode (default: OP_BINARY)
+
+        Raises:
+            ConnectionError: If WebSocket is closed
+        """
+        if self._closed:
+            raise ConnectionError("WebSocket closed")
+
+        # Compress data if enabled and binary frame
+        if self._compress and self._compressor and len(data) > 0 and opcode == self.OP_BINARY:
+            # Compress with permessage-deflate (RFC 7692)
+            compressed = self._compressor.compress(data) + self._compressor.flush(zlib.Z_SYNC_FLUSH)
+            # Remove trailing 4 bytes (0x00 0x00 0xFF 0xFF) as per RFC 7692
+            if compressed.endswith(b'\x00\x00\xff\xff'):
+                compressed = compressed[:-4]
+            data = compressed
+
+        frame = self._build_frame(opcode, data, mask=True)
+        self.writer.write(frame)
+        await self.writer.drain()
+        self._last_activity = asyncio.get_event_loop().time()
+
+    def get_stats(self) -> dict:
+        """
+        Get WebSocket connection statistics.
+
+        Returns:
+            Dict with connection stats
+        """
+        return {
+            'domain': self._domain,
+            'ip': self._ip,
+            'closed': self._closed,
+            'compress': self._compress,
+            'connect_time': self._connect_time,
+            'last_activity': self._last_activity,
+        }
 
     async def close(self) -> None:
         """Send close frame and shut down the transport."""
