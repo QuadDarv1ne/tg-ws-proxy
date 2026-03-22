@@ -192,7 +192,30 @@
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
 ### Безопасность
-- [ ] **Аудит зависимостей** — `pip-audit` интеграция в CI
+- ✅ **Аудит зависимостей** — `pip-audit` интеграция в CI
+  - `.github/workflows/ci.yml` — enhanced security workflow
+  - `scripts/security_audit.py` — локальный аудит безопасности
+  - `SECURITY.md` — security policy документ
+
+  **CI/CD Security:**
+  • pip-audit + safety dual checking
+  • JSON report generation (30-day retention)
+  • Dev requirements auditing
+  • Artifact upload for security reports
+
+  **Local Security Audit:**
+  • pip-audit integration с JSON отчётом
+  • safety check для дополнительной проверки
+  • Автоматическая установка инструментов
+  • Поддержка multiple requirements файлов
+  • Report generation (security-audit-report.json)
+
+  **Security Policy:**
+  • Vulnerability reporting guidelines (48h response)
+  • Security best practices для пользователей и разработчиков
+  • Automated scanning instructions
+  • Dependency management policy (Critical: 24h, High: 7d)
+  • Security checklist для релизов
 
 ### Тестирование
 - [ ] **Coverage Improvement** — увеличение покрытия с 55% до 60%
@@ -207,7 +230,7 @@
 
 ---
 
-## 📊 Статус (23.03.2026 04:30)
+## 📊 Статус (23.03.2026 05:00)
 
 ```
 Модулей: 38 в proxy/ ✅
@@ -217,12 +240,12 @@ Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.53.1 (Dashboard Metrics ✅, Prometheus Export ✅)
+Version: v2.53.1 (Security Audit ✅, Dashboard Metrics ✅)
 ```
 
 **Актуальная версия:** v2.53.1 (dev) — ✅ synced
 **Следующая версия:** v2.54.0 (HTTP/2 + Stability)
-**Последнее обновление:** 23.03.2026 (04:30)
+**Последнее обновление:** 23.03.2026 (05:00)
 
 ---
 
