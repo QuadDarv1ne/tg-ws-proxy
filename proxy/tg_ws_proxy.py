@@ -2025,6 +2025,9 @@ async def _handle_client(
         ws_failed_redirect = False
         all_redirects = True
 
+        # Get compression setting
+        compress = _OPTIMIZATION_CONFIG.get('enable_compression', False)
+
         ws = await ws_pool.get(dc, is_media, target, domains)  # type: ignore[arg-type]
         if ws:
             log.info("%s DC%d%s (%s:%d) -> pool hit via %s",
@@ -2032,11 +2035,12 @@ async def _handle_client(
         else:
             for domain in domains:
                 url = f'wss://{domain}/apiws'
-                log.info("%s DC%d%s (%s:%d) -> %s via %s",
-                         label, dc, media_tag, dst, port, url, target)
+                log.info("%s DC%d%s (%s:%d) -> %s via %s%s",
+                         label, dc, media_tag, dst, port, url, target,
+                         " [compression]" if compress else "")
                 try:
                     ws = await RawWebSocket.connect(target, domain,  # type: ignore[arg-type]
-                                                    timeout=10)
+                                                    timeout=10, compress=compress)
                     all_redirects = False
                     break
                 except WsHandshakeError as exc:
