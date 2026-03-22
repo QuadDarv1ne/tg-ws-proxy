@@ -427,7 +427,7 @@ class Stats:
             "alerts_enabled": self.enable_alerts,
         }
 
-    def start_realtime_monitoring(self, check_interval: float = 10.0, auto_export: bool = False, export_dir: str | None = None) -> None:
+    async def start_realtime_monitoring(self, check_interval: float = 10.0, auto_export: bool = False, export_dir: str | None = None) -> None:
         """
         Start real-time monitoring with automatic threshold checks.
 
@@ -519,11 +519,15 @@ class Stats:
         except Exception as e:
             log.debug("Failed to cleanup old exports: %s", e)
 
-    def stop_realtime_monitoring(self) -> None:
+    async def stop_realtime_monitoring(self) -> None:
         """Stop real-time monitoring."""
         self._monitoring_enabled = False
         if self._monitor_task:
             self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
             self._monitor_task = None
 
     def _check_all_thresholds(self) -> None:

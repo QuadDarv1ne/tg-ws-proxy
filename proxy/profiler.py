@@ -117,7 +117,7 @@ class MemoryProfiler:
             self._component_trackers[name] = ComponentTracker(name)
         return self._component_trackers[name]
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start memory profiling."""
         if not tracemalloc.is_tracing():
             tracemalloc.start(25)  # Store 25 frames
@@ -128,12 +128,15 @@ class MemoryProfiler:
         self._baseline_snapshot = self.take_snapshot()
         log.info("Memory profiler started (interval: %.1fs)", self.check_interval)
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop memory profiling."""
         self._running = False
         if self._task:
             self._task.cancel()
-            # Don't use run_until_complete - task will be awaited by caller if needed
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
             self._task = None
         tracemalloc.stop()
         log.info("Memory profiler stopped")
@@ -279,17 +282,17 @@ def get_profiler(check_interval: float = 60.0) -> MemoryProfiler:
     return _profiler
 
 
-def start_profiling(check_interval: float = 60.0) -> MemoryProfiler:
+async def start_profiling(check_interval: float = 60.0) -> MemoryProfiler:
     """Start memory profiling."""
     profiler = get_profiler(check_interval)
-    profiler.start()
+    await profiler.start()
     return profiler
 
 
-def stop_profiling() -> None:
+async def stop_profiling() -> None:
     """Stop memory profiling."""
     if _profiler:
-        _profiler.stop()
+        await _profiler.stop()
 
 
 def get_memory_stats() -> dict[str, Any]:

@@ -142,15 +142,16 @@ class TestMemoryProfiler:
         """Test starting and stopping profiler."""
         profiler = MemoryProfiler()
 
-        profiler.start()
+        await profiler.start()
         assert profiler._running is True
         assert profiler._task is not None
 
-        profiler.stop()
+        await profiler.stop()
         assert profiler._running is False
 
-    def test_stop_without_start(self):
+    @pytest.mark.asyncio
+    async def test_stop_without_start(self):
         """Test stopping without starting."""
         profiler = MemoryProfiler()
 
-        profiler.stop()  # Should not raise or hang
+        await profiler.stop()  # Should not raise or hang

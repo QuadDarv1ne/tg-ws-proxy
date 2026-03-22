@@ -416,17 +416,6 @@ class ProxyServer:
         # Statistics with memory optimization
         self.stats = Stats(enable_alerts=True, optimize_memory=True)
 
-        # Start real-time monitoring with auto-export
-        import os
-
-        import appdirs
-        stats_dir = os.path.join(appdirs.user_data_dir('TgWsProxy', 'Dupley Maxim'), 'stats')
-        self.stats.start_realtime_monitoring(
-            check_interval=30.0,  # Check every 30 seconds
-            auto_export=True,
-            export_dir=stats_dir
-        )
-
         # Circuit breakers for cascade failure protection
         self._circuit_breakers: dict[str, CircuitBreaker] = {}
         self._init_circuit_breakers()
@@ -1918,6 +1907,16 @@ async def _run(
     )
     _server_instance = server_instance
 
+    # Start real-time monitoring with auto-export
+    import os
+    import appdirs
+    stats_dir = os.path.join(appdirs.user_data_dir('TgWsProxy', 'Dupley Maxim'), 'stats')
+    await server_instance.stats.start_realtime_monitoring(
+        check_interval=30.0,  # Check every 30 seconds
+        auto_export=True,
+        export_dir=stats_dir
+    )
+
     # Start automatic key rotation if encryption is enabled
     await server_instance._start_key_rotation()
 
@@ -2172,7 +2171,7 @@ async def _run(
             log.info("Graceful shutdown initiated...")
 
             # Stop real-time monitoring
-            server_instance.stats.stop_realtime_monitoring()
+            await server_instance.stats.stop_realtime_monitoring()
             log.info("Real-time monitoring stopped")
 
             # Stop rate limiter

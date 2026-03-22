@@ -79,7 +79,11 @@
 ## 🟡 В процессе (v2.42.0: optimization & resilience)
 
 ### Производительность
-- [ ] **Connection Pooling Optimization** — динамическая настройка размера пула
+- ✅ **Connection Pooling Optimization** — динамическая настройка размера пула
+  - Адаптация на основе miss rate (>30% → increase, <5% → decrease)
+  - Адаптация на основе latency (>100ms → increase, <30ms → decrease)
+  - Интервал оптимизации: 30 секунд
+  - Логирование изменений размера пула
 - [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
@@ -116,16 +120,16 @@
 ## 📊 Статус
 
 ```
-Tests: 529 passed, 7 skipped, 0 errors ✅
-Coverage: ~42% (цель >80%)
-Ruff: 0 ошибок ✅
+Tests: 530 passed, 7 skipped, 0 errors ✅
+Coverage: ~43% (цель >80%)
+Ruff: 3 warnings (не критично) ✅
 Mypy: 15 ошибок (type annotations, Any usage)
-Version: v2.41.0 (WebSocket Compression ✅, Prometheus Metrics ✅, Grafana Dashboard ✅)
+Version: v2.42.0 (Connection Pooling ✅, WebSocket Compression ✅, Prometheus Metrics ✅)
 ```
 
-**Актуальная версия:** v2.41.0 (main/dev) — ✅ synced
-**Следующая версия:** v2.42.0 (optimization & resilience)
-**Последнее обновление:** 22.03.2026 (16:00)
+**Актуальная версия:** v2.42.0 (main/dev) — ✅ synced
+**Следующая версия:** v2.43.0 (HTTP/2 Dashboard + Alerting)
+**Последнее обновление:** 22.03.2026 (17:00)
 
 ---
 
