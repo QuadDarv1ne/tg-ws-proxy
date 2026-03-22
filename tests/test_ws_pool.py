@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import time
-import pytest
 from unittest.mock import AsyncMock, patch
-from proxy.tg_ws_proxy import _WsPool, RawWebSocket
+
+import pytest
+
 from proxy.stats import Stats
+from proxy.tg_ws_proxy import RawWebSocket, _WsPool
+
 
 @pytest.fixture
 def stats():
@@ -88,9 +91,10 @@ class TestWsPoolLogic:
             for ws, created in bucket:
                 if not ws._closed:
                     try:
-                        await ws.send(b'', opcode=0x9) # PING
+                        await ws.send(b'', opcode=0x9)  # PING
                         valid.append((ws, created))
-                    except: pass
+                    except Exception:
+                        pass
             ws_pool._idle[k] = valid
 
         assert len(ws_pool._idle[key]) == 1

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
+
 from proxy.tg_ws_proxy import ProxyServer
+
 
 @pytest.fixture
 def proxy_server():
@@ -27,9 +30,9 @@ class TestSocks5Negotiation:
             b'\x05\x01',  # SOCKS5, 1 method
             b'\x00'       # Method 0 (No Auth)
         ]
-        
+
         result = await proxy_server._negotiate_socks5(reader, writer, "[TEST]")
-        
+
         assert result is True
         writer.write.assert_called_with(b'\x05\x00')
 
@@ -37,14 +40,14 @@ class TestSocks5Negotiation:
     async def test_negotiate_wrong_version(self, proxy_server, mock_streams):
         reader, writer = mock_streams
         reader.readexactly.return_value = b'\x04\x01' # SOCKS4
-        
+
         result = await proxy_server._negotiate_socks5(reader, writer, "[TEST]")
-        
+
         assert result is False
 
     @pytest.mark.asyncio
     async def test_negotiate_auth_required_success(self, mock_streams):
-        server = ProxyServer(dc_opt={}, auth_required=True, 
+        server = ProxyServer(dc_opt={}, auth_required=True,
                              auth_credentials={'username': 'user', 'password': 'pass'})
         reader, writer = mock_streams
         reader.readexactly.side_effect = [
@@ -56,9 +59,9 @@ class TestSocks5Negotiation:
             b'\x04',      # Pass length 4
             b'pass'       # Password
         ]
-        
+
         result = await server._negotiate_socks5(reader, writer, "[TEST]")
-        
+
         assert result is True
         # First write is method selection, second is auth result
         writer.write.assert_any_call(b'\x05\x02')
@@ -75,9 +78,9 @@ class TestSocks5Request:
             b'\x7f\x00\x00\x01', # 127.0.0.1
             b'\x04\x38'          # Port 1080
         ]
-        
+
         dst, port = await proxy_server._read_socks5_request(reader, writer, "[TEST]")
-        
+
         assert dst == "127.0.0.1"
         assert port == 1080
 
@@ -90,8 +93,8 @@ class TestSocks5Request:
             b'example.com',      # Domain
             b'\x00\x50'          # Port 80
         ]
-        
+
         dst, port = await proxy_server._read_socks5_request(reader, writer, "[TEST]")
-        
+
         assert dst == "example.com"
         assert port == 80

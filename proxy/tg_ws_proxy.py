@@ -431,7 +431,7 @@ class ProxyServer:
         self._log_stats_task: asyncio.Task | None = None
         self._dc_monitor_task: asyncio.Task | None = None
         self._optimize_pool_task: asyncio.Task | None = None
-        
+
         # Memory profiler
         self._memory_profiler: Any | None = None
 
@@ -960,10 +960,10 @@ class RawWebSocket:
         """Read a single WebSocket frame from the reader."""
         try:
             hdr = await asyncio.wait_for(self.reader.readexactly(2), timeout=30.0)
-        except asyncio.TimeoutError:
-            raise asyncio.TimeoutError("Frame header read timeout")
-        except asyncio.IncompleteReadError:
-            raise asyncio.IncompleteReadError("Connection closed during header read")
+        except asyncio.TimeoutError as e:
+            raise asyncio.TimeoutError("Frame header read timeout") from e
+        except asyncio.IncompleteReadError as e:
+            raise asyncio.IncompleteReadError("Connection closed during header read") from e
 
         opcode = hdr[0] & 0x0F
         is_masked = bool(hdr[1] & 0x80)
@@ -972,26 +972,26 @@ class RawWebSocket:
         if length == 126:
             try:
                 length = struct.unpack('>H', await asyncio.wait_for(self.reader.readexactly(2), timeout=30.0))[0]
-            except asyncio.IncompleteReadError:
-                raise asyncio.IncompleteReadError("Connection closed during extended length read")
+            except asyncio.IncompleteReadError as e:
+                raise asyncio.IncompleteReadError("Connection closed during extended length read") from e
         elif length == 127:
             try:
                 length = struct.unpack('>Q', await asyncio.wait_for(self.reader.readexactly(8), timeout=30.0))[0]
-            except asyncio.IncompleteReadError:
-                raise asyncio.IncompleteReadError("Connection closed during extended length read")
+            except asyncio.IncompleteReadError as e:
+                raise asyncio.IncompleteReadError("Connection closed during extended length read") from e
 
         if is_masked:
             try:
                 mask_key = await asyncio.wait_for(self.reader.readexactly(4), timeout=30.0)
                 payload = await asyncio.wait_for(self.reader.readexactly(length), timeout=30.0)
                 return opcode, _xor_mask(payload, mask_key)
-            except asyncio.IncompleteReadError:
-                raise asyncio.IncompleteReadError("Connection closed during masked payload read")
+            except asyncio.IncompleteReadError as e:
+                raise asyncio.IncompleteReadError("Connection closed during masked payload read") from e
 
         try:
             payload = await asyncio.wait_for(self.reader.readexactly(length), timeout=30.0)
-        except asyncio.IncompleteReadError:
-            raise asyncio.IncompleteReadError("Connection closed during payload read")
+        except asyncio.IncompleteReadError as e:
+            raise asyncio.IncompleteReadError("Connection closed during payload read") from e
         return opcode, payload
 
 
@@ -1206,7 +1206,7 @@ class _WsPool:
         self._heartbeat_timeout = 10.0   # Timeout for PONG response
         self._last_heartbeat = 0.0
         self._health_check_task: asyncio.Task | None = None
-        
+
         # Memory profiling
         try:
             from .profiler import get_profiler
@@ -2272,7 +2272,7 @@ async def _run(
     async def monitor_dc_latency() -> None:
         """Periodically re-measure DC latency and auto-switch to best DC."""
         nonlocal _last_latency_alert, _last_dc_switch, _current_best_dc, dc_opt
-        
+
         while True:
             await asyncio.sleep(300)  # Check every 5 minutes
             log.debug("Re-checking DC latency...")
@@ -2285,7 +2285,7 @@ async def _run(
             # Find best DC by latency
             best_dc = min(dc_pings, key=lambda x: dc_pings[x])
             best_latency = dc_pings[best_dc]
-            
+
             # Store latency in stats
             for dc_id, latency_ms in dc_pings.items():
                 server_instance.stats.record_latency(dc_id, latency_ms)
@@ -2294,7 +2294,7 @@ async def _run(
             if _current_best_dc != best_dc:
                 # Check if we should switch
                 should_switch = False
-                
+
                 # Always switch on first measurement
                 if _current_best_dc is None:
                     should_switch = True
@@ -2303,13 +2303,13 @@ async def _run(
                 elif best_dc in dc_pings and _current_best_dc in dc_pings:
                     current_latency = dc_pings.get(_current_best_dc, float('inf'))
                     latency_diff = current_latency - best_latency
-                    
+
                     # Switch if difference > 50ms and cooldown passed
                     if latency_diff > 50 and (now - _last_dc_switch) > _switch_cooldown:
                         should_switch = True
                         log.info("DC switch: DC%d (%.1fms) -> DC%d (%.1fms) [diff: %.1fms]",
                                 _current_best_dc, current_latency, best_dc, best_latency, latency_diff)
-                
+
                 if should_switch and best_dc in dc_opt:
                     # Update dc_opt to prioritize best DC
                     # Move best DC to first position in routing
@@ -2319,7 +2319,7 @@ async def _run(
                     server_instance.dc_opt = dc_opt
                     _current_best_dc = best_dc
                     _last_dc_switch = now
-                    
+
                     # Warmup WS pool for new best DC
                     asyncio.create_task(server_instance.ws_pool.warmup({best_dc: current_ip}))
                     log.info("DC switched to DC%d (new primary)", best_dc)
@@ -2458,7 +2458,7 @@ async def _run(
             if server_instance._memory_profiler:
                 server_instance._memory_profiler.stop()
                 log.info("Memory profiler stopped")
-                
+
                 # Log final memory report
                 report = server_instance._memory_profiler.get_leak_report()
                 if report != "No memory leaks detected":

@@ -33,7 +33,7 @@ class MemorySnapshot:
     total_count: int
     top_allocations: list[tuple[str, int, int]]  # (traceback, size, count)
     component_stats: dict[str, dict[str, Any]] = field(default_factory=dict)
-    
+
     def diff(self, other: MemorySnapshot) -> MemoryDiff:
         """Calculate difference between two snapshots."""
         return MemoryDiff(
@@ -51,13 +51,13 @@ class MemoryDiff:
     bytes_delta: int
     count_delta: int
     top_grows: list[tuple[str, int, int]]
-    
+
     @property
     def bytes_per_second(self) -> float:
         if self.timestamp_delta <= 0:
             return 0.0
         return self.bytes_delta / self.timestamp_delta
-    
+
     def is_leak_suspected(self, threshold_bytes_per_sec: float = 1024) -> bool:
         """Check if memory leak is suspected (>1KB/s growth)."""
         return self.bytes_per_second > threshold_bytes_per_sec
@@ -65,27 +65,27 @@ class MemoryDiff:
 
 class ComponentTracker:
     """Track memory usage per component."""
-    
+
     def __init__(self, name: str):
         self.name = name
         self._objects: weakref.WeakSet = weakref.WeakSet()
         self._created_count = 0
         self._destroyed_count = 0
-    
+
     def track(self, obj: Any) -> None:
         """Track an object."""
         self._objects.add(obj)
         self._created_count += 1
-    
+
     def untrack(self, obj: Any) -> None:
         """Untrack an object."""
         self._destroyed_count += 1
-    
+
     @property
     def live_count(self) -> int:
         """Get count of live objects."""
         return len(self._objects)
-    
+
     @property
     def stats(self) -> dict[str, Any]:
         """Get component statistics."""
@@ -100,7 +100,7 @@ class ComponentTracker:
 
 class MemoryProfiler:
     """Memory profiler with leak detection."""
-    
+
     def __init__(self, check_interval: float = 60.0):
         self.check_interval = check_interval
         self._snapshots: list[MemorySnapshot] = []
@@ -110,24 +110,24 @@ class MemoryProfiler:
         self._max_snapshots = 100
         self._leak_alerts: list[dict[str, Any]] = []
         self._baseline_snapshot: MemorySnapshot | None = None
-    
+
     def register_component(self, name: str) -> ComponentTracker:
         """Register a component for tracking."""
         if name not in self._component_trackers:
             self._component_trackers[name] = ComponentTracker(name)
         return self._component_trackers[name]
-    
+
     def start(self) -> None:
         """Start memory profiling."""
         if not tracemalloc.is_tracing():
             tracemalloc.start(25)  # Store 25 frames
             log.info("Tracemalloc started (25 frames)")
-        
+
         self._running = True
         self._task = asyncio.create_task(self._profiling_loop())
         self._baseline_snapshot = self.take_snapshot()
         log.info("Memory profiler started (interval: %.1fs)", self.check_interval)
-    
+
     def stop(self) -> None:
         """Stop memory profiling."""
         self._running = False
@@ -137,7 +137,7 @@ class MemoryProfiler:
             self._task = None
         tracemalloc.stop()
         log.info("Memory profiler stopped")
-    
+
     async def _profiling_loop(self) -> None:
         """Background profiling loop."""
         while self._running:
@@ -148,20 +148,20 @@ class MemoryProfiler:
                 break
             except Exception as e:
                 log.debug("Memory check error: %s", e)
-    
+
     async def _check_memory(self) -> None:
         """Check memory usage and detect leaks."""
         snapshot = self.take_snapshot()
-        
+
         # Store snapshot
         self._snapshots.append(snapshot)
         if len(self._snapshots) > self._max_snapshots:
             self._snapshots.pop(0)
-        
+
         # Check for leaks if we have baseline
         if self._baseline_snapshot and len(self._snapshots) >= 2:
             diff = self._snapshots[-2].diff(snapshot)
-            
+
             if diff.is_leak_suspected():
                 alert = {
                     'timestamp': datetime.now().isoformat(),
@@ -176,7 +176,7 @@ class MemoryProfiler:
                     diff.bytes_delta / 1024,
                     diff.top_grows[0][0] if diff.top_grows else "unknown"
                 )
-        
+
         # Log component stats
         for name, tracker in self._component_trackers.items():
             stats = tracker.stats
@@ -185,7 +185,7 @@ class MemoryProfiler:
                     "Component '%s' leak suspected: created=%d, destroyed=%d, live=%d",
                     name, stats['created_total'], stats['destroyed_total'], stats['live_objects']
                 )
-        
+
         # Log summary
         current, peak = tracemalloc.get_traced_memory()
         log.debug(
@@ -194,20 +194,20 @@ class MemoryProfiler:
             peak / 1024 / 1024,
             len(self._snapshots)
         )
-    
+
     def take_snapshot(self) -> MemorySnapshot:
         """Take a memory snapshot."""
         snapshot = tracemalloc.take_snapshot()
         stats = snapshot.statistics('lineno')
-        
+
         top_allocations = [
             (str(entry.traceback), entry.size, entry.count)
             for entry in stats[:20]
         ]
-        
+
         # Force garbage collection
         gc.collect()
-        
+
         return MemorySnapshot(
             timestamp=asyncio.get_event_loop().time(),
             total_bytes=tracemalloc.get_traced_memory()[0],
@@ -218,11 +218,11 @@ class MemoryProfiler:
                 for name, tracker in self._component_trackers.items()
             },
         )
-    
+
     def get_stats(self) -> dict[str, Any]:
         """Get current memory statistics."""
         current, peak = tracemalloc.get_traced_memory()
-        
+
         return {
             'current_bytes': current,
             'peak_bytes': peak,
@@ -237,7 +237,7 @@ class MemoryProfiler:
             },
             'last_leak_alert': self._leak_alerts[-1] if self._leak_alerts else None,
         }
-    
+
     def force_gc(self) -> int:
         """Force garbage collection and return freed objects count."""
         before = len(gc.get_objects())
@@ -249,12 +249,12 @@ class MemoryProfiler:
         if freed > 0:
             log.debug("GC freed %d objects", freed)
         return freed
-    
+
     def get_leak_report(self) -> str:
         """Generate leak report."""
         if not self._leak_alerts:
             return "No memory leaks detected"
-        
+
         lines = ["Memory Leak Report", "=" * 50]
         for alert in self._leak_alerts[-10:]:  # Last 10 alerts
             lines.append(f"Time: {alert['timestamp']}")
@@ -263,7 +263,7 @@ class MemoryProfiler:
             if alert['top_allocations']:
                 lines.append(f"  Top: {alert['top_allocations'][0][0][:100]}")
             lines.append("")
-        
+
         return "\n".join(lines)
 
 

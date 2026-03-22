@@ -5,7 +5,12 @@ from __future__ import annotations
 import struct
 from unittest.mock import MagicMock, patch
 
-from proxy.tg_ws_proxy import _dc_from_init, _patch_init_dc, _is_telegram_ip, _is_http_transport
+from proxy.tg_ws_proxy import (
+    _dc_from_init,
+    _is_http_transport,
+    _is_telegram_ip,
+    _patch_init_dc,
+)
 
 
 class TestPacketParsing:
