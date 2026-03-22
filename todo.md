@@ -177,29 +177,29 @@ Version: v2.39.0 (sync complete ✅)
 
 ---
 
-## 🔴 Высокий приоритет (v2.39.0)
+## 🔴 Высокий приоритет (v2.40.0)
 
 ### 1. Рефакторинг tg_ws_proxy.py
 **Проблема:** Монолитный файл 2600+ строк затрудняет поддержку
 **Решение:** Разбить на модули:
-- `proxy/socks5_handler.py` — SOCKS5 протокол и handshake
-- `proxy/websocket_client.py` — RawWebSocket класс
-- `proxy/connection_pool.py` — _WsPool и _TcpPool
-- `proxy/mtproto_parser.py` — парсинг MTProto init пакетов
+- `proxy/socks5_handler.py` — SOCKS5 протокол и handshake ✅
+- `proxy/websocket_client.py` — RawWebSocket класс ✅
+- `proxy/connection_pool.py` — _WsPool и _TcpPool [ ]
+- `proxy/mtproto_parser.py` — парсинг MTProto init пакетов [ ]
 
 ### 2. Увеличение покрытия тестами
 **Текущее:** ~40% | **Цель:** >80%
 **Приоритет:**
-- Интеграционные тесты для SOCKS5 handshake
-- Тесты для WebSocket reconnection logic
-- Тесты для DC selection algorithm
-- Performance тесты для connection pooling
+- Интеграционные тесты для SOCKS5 handshake ✅
+- Тесты для WebSocket reconnection logic ✅
+- Тесты для DC selection algorithm [ ]
+- Performance тесты для connection pooling [ ]
 
 ### 3. Обновление документации
-- [ ] Обновить `docs/GITHUB_RELEASE.md` до v2.38.0
+- [x] Обновить `docs/GITHUB_RELEASE.md` до v2.39.0
+- [x] Добавить CONTRIBUTING.md для контрибьюторов
 - [ ] Добавить архитектурную диаграмму в README
 - [ ] Документировать REST API веб-панели
-- [ ] Создать CONTRIBUTING.md для контрибьюторов
 
 ### 4. CI/CD Pipeline
 - [ ] GitHub Actions для автотестов (pytest + ruff + mypy)
