@@ -2271,7 +2271,7 @@ async def _run(
 
     async def monitor_dc_latency() -> None:
         """Periodically re-measure DC latency and auto-switch to best DC."""
-        nonlocal _last_latency_alert, _last_dc_switch, _current_best_dc
+        nonlocal _last_latency_alert, _last_dc_switch, _current_best_dc, dc_opt
         
         while True:
             await asyncio.sleep(300)  # Check every 5 minutes
