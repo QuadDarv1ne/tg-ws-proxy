@@ -16,7 +16,7 @@ import psutil
 
 # Import alerts module
 try:
-    from . import alerts as alerts_module  # type: ignore[attr-defined]
+    from . import alerts as alerts_module
     ALERTS_AVAILABLE = True
 except ImportError:
     ALERTS_AVAILABLE = False

@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import smtplib
-from asyncio import Coroutine
+from typing import Any, Coroutine
 from dataclasses import dataclass, field
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText

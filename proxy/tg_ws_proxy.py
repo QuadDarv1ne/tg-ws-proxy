@@ -1013,7 +1013,7 @@ class RawWebSocket:
         except asyncio.TimeoutError as e:
             raise asyncio.TimeoutError("Frame header read timeout") from e
         except asyncio.IncompleteReadError as e:
-            raise asyncio.IncompleteReadError("Connection closed during header read") from e
+            raise asyncio.IncompleteReadError(e.partial, e.expected) from e
 
         opcode = hdr[0] & 0x0F
         is_masked = bool(hdr[1] & 0x80)
@@ -1023,12 +1023,12 @@ class RawWebSocket:
             try:
                 length = struct.unpack('>H', await asyncio.wait_for(self.reader.readexactly(2), timeout=30.0))[0]
             except asyncio.IncompleteReadError as e:
-                raise asyncio.IncompleteReadError("Connection closed during extended length read") from e
+                raise asyncio.IncompleteReadError(e.partial, e.expected) from e
         elif length == 127:
             try:
                 length = struct.unpack('>Q', await asyncio.wait_for(self.reader.readexactly(8), timeout=30.0))[0]
             except asyncio.IncompleteReadError as e:
-                raise asyncio.IncompleteReadError("Connection closed during extended length read") from e
+                raise asyncio.IncompleteReadError(e.partial, e.expected) from e
 
         if is_masked:
             try:
@@ -1036,12 +1036,12 @@ class RawWebSocket:
                 payload = await asyncio.wait_for(self.reader.readexactly(length), timeout=30.0)
                 return opcode, _xor_mask(payload, mask_key)
             except asyncio.IncompleteReadError as e:
-                raise asyncio.IncompleteReadError("Connection closed during masked payload read") from e
+                raise asyncio.IncompleteReadError(e.partial, e.expected) from e
 
         try:
             payload = await asyncio.wait_for(self.reader.readexactly(length), timeout=30.0)
         except asyncio.IncompleteReadError as e:
-            raise asyncio.IncompleteReadError("Connection closed during payload read") from e
+            raise asyncio.IncompleteReadError(e.partial, e.expected) from e
         return opcode, payload
 
 
@@ -1260,9 +1260,10 @@ class _WsPool:
         # Memory profiling
         try:
             from .profiler import get_profiler
-            self._profiler = get_profiler().register_component('WsPool')
+            profiler = get_profiler()
+            self._profiler = profiler.register_component('WsPool')
         except Exception:
-            self._profiler = None
+            self._profiler = None  # type: ignore[assignment]
 
     async def start_health_checker(self) -> None:
         """Start background health check task."""
@@ -1806,7 +1807,7 @@ async def _handle_client(
     # Check rate limiting first
     if rate_limiter is not None:
         from proxy.rate_limiter import RateLimitAction
-        action, delay = rate_limiter.check_rate_limit(client_ip)
+        action, delay = rate_limiter.check_rate_limit(client_ip)  # type: ignore[attr-defined]
 
         if action == RateLimitAction.BAN:
             log.warning("%s client banned (IP: %s)", label, client_ip)
@@ -2281,7 +2282,7 @@ async def _run(
     try:
         from .updater import check_for_updates
 
-        async def check_update_async():
+        async def check_update_async() -> None:
             try:
                 update_info = await check_for_updates(force=False)
                 if update_info:

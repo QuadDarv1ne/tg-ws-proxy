@@ -287,7 +287,7 @@ def load_language_from_config(config_path: str | None = None) -> Language:
         language = config.get('language', DEFAULT_LANGUAGE)
         if language in TRANSLATIONS:
             set_language(language)
-            return language  # type: ignore[return-value, no-any-return]
+            return language  # type: ignore[no-any-return]
     except (OSError, json.JSONDecodeError):
         pass
 

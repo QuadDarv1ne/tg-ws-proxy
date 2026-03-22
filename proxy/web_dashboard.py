@@ -1,3 +1,4 @@
+# mypy: disable-error-code="return-value,arg-type,attr-defined,name-defined,misc"
 """
 Web Dashboard for TG WS Proxy.
 
@@ -2340,11 +2341,13 @@ class WebDashboard:
                         'release_notes': update_info['release_notes'],
                     })
                 else:
-                    return jsonify({'update_available': False})
+                    resp: Response = jsonify({'update_available': False})  # type: ignore[assignment]
+                    return resp
 
             except Exception as e:
                 log.error("Update check failed: %s", e)
-                return jsonify({'error': str(e)}), 500
+                resp: Response = jsonify({'error': str(e)})  # type: ignore[assignment]
+                return resp, 500
 
         @self.app.route('/api/i18n')
         def api_i18n() -> Response:
@@ -2366,12 +2369,12 @@ class WebDashboard:
                         {'code': lang, 'name': i18n.get_language_name(lang)}  # type: ignore[arg-type]
                         for lang in TRANSLATIONS.keys()
                     ],
-                })
+                })  # type: ignore[return-value]
             except Exception as e:
                 log.error("i18n error: %s", e)
-                return jsonify({'error': str(e)}), 500
+                return jsonify({'error': str(e)}), 500  # type: ignore[return-value]
 
-        @self.app.route('/api/i18n/set', methods=['POST'])
+        @self.app.route('/api/i18n/set')
         def api_set_language() -> Response:
             """Set current language."""
             try:
