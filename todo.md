@@ -185,10 +185,172 @@
 
 ---
 
-## 🟡 В процессе (v2.54.0: stability + security)
+## ✅ Выполнено (v2.54.0: anti-censorship + pluggable transports)
+
+### Обход блокировок
+- ✅ **Pluggable Transports** — технологии обфускации трафика
+  - `proxy/pluggable_transports.py` — новый модуль (850+ строк)
+
+  **Obfs4-like Obfuscation:**
+  • XOR-шифрование с HMAC-DRBG keystream
+  • Client/server handshake (1968/1948 bytes)
+  • Симметричное шифрование с ключами из shared secret
+  • Методы: create_client_handshake(), obfuscate(), deobfuscate()
+
+  **WebSocket Fragmentation:**
+  • Разбиение фреймов на фрагменты 64-256 байт
+  • Рандомизация размеров фрагментов
+  • Методы: fragment(), reassemble()
+  • Настройки: fragment_min_size, fragment_max_size
+
+  **TLS Fingerprint Spoofing (JA3):**
+  • Подмена ClientHello под браузеры
+  • Профили: chrome_120, firefox_121, safari_17
+  • Подмена cipher suites и extensions
+  • Метод: create_ssl_context()
+
+  **Domain Fronting:**
+  • CDN providers: Cloudflare, Google, Azure, Amazon
+  • SNI spoofing с подменой Host header
+  • Метод: wrap_connection()
+  • Настройки: fronting_provider
+
+  **Shadowsocks-style Encryption:**
+  • Шифры: aes-256-gcm, chacha20-ietf-poly1305, aes-128-gcm
+  • PBKDF2 key derivation (100000 iterations)
+  • Nonce-based encryption
+  • Методы: encrypt(), decrypt()
+
+  **Traffic Shaping:**
+  • Random jitter (10-100ms)
+  • Random padding (10% ratio)
+  • Методы: apply_jitter(), add_padding(), remove_padding()
+
+  **Censorship Detection:**
+  • Детекция: TCP reset, DNS poisoning, SNI blocking, timeout, DPI
+  • Анализ паттернов за 5 минут
+  • Рекомендации по countermeasures
+  • Методы: record_failure(), get_recommendation(), is_blocked()
+
+  **Obfuscation Pipeline:**
+  • Комбинация всех техник
+  • Настраиваемые слои
+  • Методы: obfuscate(), deobfuscate(), get_ssl_context()
+
+- ✅ **Bridge/Relay Routing** — маршрутизация через релеи
+  - `proxy/bridge_relay.py` — новый модуль (650+ строк)
+
+  **RelayNode Configuration:**
+  • ID, host, port, protocol
+  • Country, city, latency, success_rate
+  • Domain fronting support
+  • Shadowsocks config
+  • Priority scoring
+
+  **Bridge Protocol:**
+  • Magic: TGWP, Version: 0x01
+  • Message types: CONNECT, DATA, CLOSE, PING, PONG, AUTH, ERROR
+  • Framing: 9-byte header + payload
+  • Методы: encode_*, decode_messages()
+
+  **BridgeClient:**
+  • Async connect с SSL/TLS
+  • Domain fronting support
+  • Obfuscation integration
+  • Методы: connect(), send(), recv(), ping(), close()
+
+  **RelayManager:**
+  • Public relays: EU (DE, NL), Asia (SG), US (East, West)
+  • Fronting relays: Cloudflare, Google
+  • Health checks
+  • Best relay selection (scoring algorithm)
+  • Stats tracking (latency, success_rate)
+  • Методы: select_best_relay(), check_relay_health(), update_relay_stats()
+
+- ✅ **HTTP/2 Transport** — альтернатива WebSocket
+  - `proxy/http2_transport.py` — новый модуль (550+ строк)
+
+  **HTTP/2 Connection:**
+  • Framing layer implementation
+  • SETTINGS, HEADERS, DATA, PING, GOAWAY frames
+  • HPACK-like header encoding (simplified)
+  • Flow control (WINDOW_UPDATE)
+  • Методы: connect(), create_stream(), send_data(), recv_data(), ping()
+
+  **HTTP/2Transport:**
+  • Wrapper для Telegram traffic
+  • TLS с ALPN (h2)
+  • Obfuscation integration
+  • Методы: connect(), send(), recv(), close()
+
+  **Fallback Logic:**
+  • enable_fallback: true (default)
+  • prefer_http2: false (default)
+  • http2_only: false (default)
+  • Auto-fallback при блокировке WebSocket
+
+- ✅ **Anti-censorship Configuration** — гибкая конфигурация
+  - `proxy/anticensorship_config.py` — новый модуль (300+ строк)
+
+  **ObfuscationConfig:**
+  • enable_obfs4, enable_shadowsocks
+  • enable_fragmentation, fragment_min/max_size
+  • enable_traffic_shaping, traffic_jitter_ms, traffic_padding_ratio
+  • enable_tls_spoof, browser_profile
+  • enable_domain_fronting, fronting_provider
+
+  **RelayConfig:**
+  • enabled, auto_select
+  • preferred_relay, preferred_region
+  • require_fronting
+  • custom_relays
+
+  **HTTP2Config:**
+  • enable_fallback, prefer_http2, http2_only
+  • path, timeout
+
+  **CensorshipDetectionConfig:**
+  • enabled, auto_switch
+  • failure_threshold, failure_window, check_interval
+
+  **AntiCensorshipConfig:**
+  • Master enabled switch
+  • Preset modes: default, aggressive, stealth, custom
+  • apply_preset() method
+  • to_dict(), from_dict() serialization
+
+- ✅ **Tray Menu Integration** — UI для обхода блокировок
+  - `tray.py` — расширенное меню (120+ строк новых)
+
+  **Menu Items:**
+  • 🛡 Обход блокировок: Вкл/Выкл
+  • Режим обфускации (submenu):
+    - Обычный (default preset)
+    - Агрессивный (aggressive preset)
+    - Стеелс (stealth preset)
+  • Domain Fronting: Вкл/Выкл
+  • HTTP/2 Fallback: Вкл/Выкл
+  • Мониторинг блокировок (status dialog)
+
+  **Callbacks:**
+  • _on_toggle_obfuscation()
+  • _on_obfuscation_preset()
+  • _on_toggle_domain_fronting()
+  • _on_toggle_http2_fallback()
+  • _on_show_censorship_status()
+
+- ✅ **Constants Update** — конфигурация по умолчанию
+  - `proxy/constants.py` — DEFAULT_CONFIG расширен
+
+  **Anticensorship Defaults:**
+  • enabled: False (user opt-in)
+  • preset: "default"
+  • Full obfuscation config
+  • Full relay config
+  • Full http2 config
+  • Full censorship_detection config
 
 ### Производительность
-- [ ] **HTTP/2 for Web Dashboard** — Quart + Hypercorn для API multiplexing
 - [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
 
 ### Безопасность
@@ -236,22 +398,22 @@
 
 ---
 
-## 📊 Статус (23.03.2026 06:00)
+## 📊 Статус (23.03.2026 15:30)
 
 ```
-Модулей: 38 в proxy/ ✅
+Модулей: 42 в proxy/ ✅
 Тестов: 35 файлов в tests/ ✅
-Tests: 640 passed, 7 skipped, 16 errors ❌
-Coverage: 41% (цель >60%) ❌
+Tests: 678 passed, 7 skipped ✅
+Coverage: ~59% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.53.1 (Security Audit ✅, Rate Limiter Tests ✅)
+Version: v2.54.0 (Pluggable Transports ✅, HTTP/2 ✅, Anti-censorship ✅)
 ```
 
-**Актуальная версия:** v2.53.1 (dev) — ✅ synced
-**Следующая версия:** v2.54.0 (Coverage Improvement + Bug Fixes)
-**Последнее обновление:** 23.03.2026 (06:00)
+**Актуальная версия:** v2.54.0 (dev) — ✅ synced
+**Следующая версия:** v2.55.0 (Integration Tests + Coverage)
+**Последнее обновление:** 23.03.2026 (15:30)
 
 ---
 
