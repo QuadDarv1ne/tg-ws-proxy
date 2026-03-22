@@ -314,3 +314,35 @@ async def test_websocket_recv_pong():
     # Should skip pong and return binary data
     data = await ws.recv()
     assert data == b'data'
+
+
+def test_websocket_compression_init():
+    """Test WebSocket with compression enabled."""
+    reader = MockStreamReader(b'')
+    writer = MockStreamWriter()
+    ws = RawWebSocket(reader, writer, compress=True)
+
+    assert ws._compress is True
+    assert ws._compressor is not None
+    assert ws._decompressor is not None
+
+
+def test_websocket_compression_disabled():
+    """Test WebSocket without compression."""
+    reader = MockStreamReader(b'')
+    writer = MockStreamWriter()
+    ws = RawWebSocket(reader, writer, compress=False)
+
+    assert ws._compress is False
+    assert ws._compressor is None
+    assert ws._decompressor is None
+
+
+def test_websocket_compression_connect_signature():
+    """Test that connect method accepts compress parameter."""
+    import inspect
+    sig = inspect.signature(RawWebSocket.connect)
+    params = sig.parameters
+
+    assert 'compress' in params
+    assert params['compress'].default is False
