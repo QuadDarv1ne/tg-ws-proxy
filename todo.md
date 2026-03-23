@@ -548,24 +548,51 @@
 
 ---
 
-## 📊 Статус (23.03.2026 12:00)
+## 📊 Статус (23.03.2026 18:00)
 
 ```
 Модулей: 51 в proxy/ ✅
 Тестов: 41 файлов в tests/ ✅
-Tests: 994 passed, 7 skipped ✅
+Tests: 1062 passed, 7 skipped ✅
 Coverage: ~46% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.58.0 (Alerts Manager ✅, Connection Inspector ✅, Auto Port ✅, DoH ✅)
+Version: v2.58.1 (Code Quality ✅, Bug Fixes ✅, Tests ✅)
 ```
 
-**Актуальная версия:** v2.58.0 (dev) — ✅ synced
-**Следующая версия:** v2.59.0 (Coverage Improvement + Bug Fixes)
-**Последнее обновление:** 23.03.2026 (12:00)
+**Актуальная версия:** v2.58.1 (dev) — ✅ synced
+**Следующая версия:** v2.59.0 (Coverage Improvement + New Features)
+**Последнее обновление:** 23.03.2026 (18:00)
 
-### 🔄 Последние улучшения (v2.58.0)
+### 🔄 Последние улучшения (v2.58.1: Code Quality)
+- ✅ **Ruff Code Quality** — все ошибки исправлены (177 ошибок → 0)
+  - B007: unused loop control variable → исправлено в bridge_relay.py, metrics_history.py
+  - B023: function uses loop variable → исправлено в connection_pool.py
+  - F841: unused variables → исправлено в diagnostics_advanced.py, rate_limiter.py
+  - F401: unused imports → исправлено в proxy_chain.py (noqa comment)
+  - F811: redefined unused → исправлено в crypto.py (KeyWrapError дубликат)
+  - W293/W291: whitespace → автоматически исправлено (177 fixes)
+
+- ✅ **Mypy Type Checking** — все типы проверены
+  - 0 ошибок типизации
+  - Все модули проходят проверку
+
+- ✅ **Test Fixes** — все тесты исправлены (1062 passed)
+  - test_doh_resolver.py: test_enable_disable_provider (метод переименован)
+  - test_integration.py: test_websocket_fragmentation (last fragment может быть < 64 bytes)
+  - test_tg_ws_proxy.py: test_resolve_domain_cached_with_cache (mock getaddrinfo)
+
+- ✅ **Code Cleanup** — удалены дубликаты и лишние импорты
+  - crypto.py: удалён дубликат KeyWrapError class
+  - doh_resolver.py: удалены дубликаты методов (add_provider, remove_provider, get_provider_stats)
+  - websocket_client.py: удалён дубликат send() метода
+  - bridge_relay.py: удалена unused variable `version`
+  - http2_transport.py: удалены unused variables `stream_id`, `payload`
+  - rate_limiter.py: удалена unused variable `now`
+  - diagnostics_advanced.py: удалена unused variable `resolved`
+  - metrics_history.py: добавлен noqa для SQL query (false positive B007)
+  - connection_pool.py: исправлено bind loop variable в _connect_attempt
 - ✅ **Alerts Manager** — система оповещений и мониторинга
   - `proxy/alerts.py` — новый модуль (332 строки)
   - AlertSeverity: INFO, WARNING, CRITICAL, EMERGENCY
@@ -624,6 +651,57 @@ Version: v2.58.0 (Alerts Manager ✅, Connection Inspector ✅, Auto Port ✅, D
   - `.gitignore` — расширен игнорированием
   - `mobile-app/android/app/src/main/.venv/` — Python venv
   - `tests/__pycache__/`, `tests/*.pyc` — test artifacts
+
+---
+
+## ✅ Выполнено (v2.58.1: Code Quality + Bug Fixes)
+
+### Code Quality
+- ✅ **Ruff: 0 ошибок** — все критические ошибки исправлены
+  - **B007** (unused loop variable):
+    • bridge_relay.py: `payload` → `_` в ping() методе
+    • metrics_history.py: noqa для SQL query (false positive)
+  - **B023** (function uses loop variable):
+    • connection_pool.py: _connect_attempt() → параметр conn_domain
+  - **F841** (unused variables):
+    • diagnostics_advanced.py: удалена `resolved`
+    • rate_limiter.py: удалена `now` в get_prometheus_metrics()
+    • bridge_relay.py: удалена `version`
+    • http2_transport.py: удалены `stream_id`, `payload`
+  - **F401** (unused imports):
+    • proxy_chain.py: noqa для socksio (runtime import)
+  - **F811** (redefined unused):
+    • crypto.py: удалён дубликат KeyWrapError class
+    • doh_resolver.py: удалены дубликаты методов
+    • websocket_client.py: удалён дубликат send() метода
+  - **W293/W291** (whitespace):
+    • 177 исправлений автоматически (blank lines, trailing whitespace)
+
+- ✅ **Mypy: 0 ошибок** — все типы проверены
+  - Все модули проходят type checking
+  - Никаких type errors
+
+### Test Improvements
+- ✅ **1062 теста passed** (было 994)
+  - test_doh_resolver.py:
+    • test_set_provider_enabled → test_enable_disable_provider
+    • Использует disable_provider() вместо удалённого метода
+  - test_integration.py:
+    • test_websocket_fragmentation: last fragment может быть < 64 bytes
+  - test_tg_ws_proxy.py:
+    • test_resolve_domain_cached_with_cache: mock getaddrinfo
+    • Изоляция теста от других тестов
+
+### Code Cleanup
+- ✅ **Удалены дубликаты:**
+  - crypto.py: KeyWrapError class (дубликат строка 81)
+  - doh_resolver.py: add_provider(), remove_provider(), get_provider_stats()
+  - websocket_client.py: send() метод (дубликат строка 311)
+
+- ✅ **Оптимизация кода:**
+  - connection_pool.py: _connect_attempt() → параметр domain
+  - metrics_history.py: noqa для SQL в regenerate_hourly_summaries()
+  - proxy_chain.py: noqa для socksio import
 
 ---
 
