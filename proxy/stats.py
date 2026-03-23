@@ -60,6 +60,7 @@ class Stats:
         self.connections_tcp_fallback = 0
         self.connections_http_rejected = 0
         self.connections_passthrough = 0
+        self.udp_sessions_active = 0
         self.ws_errors = 0
         self.bytes_up = 0
         self.bytes_down = 0
@@ -390,6 +391,7 @@ class Stats:
                 f"tcp_fb={self.connections_tcp_fallback} "
                 f"http_skip={self.connections_http_rejected} "
                 f"pass={self.connections_passthrough} "
+                f"udp={self.udp_sessions_active} "
                 f"err={self.ws_errors} "
                 f"pool={self.pool_hits}/{self.pool_hits+self.pool_misses} "
                 f"up={_human_bytes(self.bytes_up)} "
@@ -407,6 +409,7 @@ class Stats:
             "connections_tcp_fallback": self.connections_tcp_fallback,
             "connections_http_rejected": self.connections_http_rejected,
             "connections_passthrough": self.connections_passthrough,
+            "udp_sessions_active": self.udp_sessions_active,
             "ws_errors": self.ws_errors,
             "bytes_up": self.bytes_up,
             "bytes_down": self.bytes_down,

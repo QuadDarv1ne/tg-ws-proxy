@@ -1440,6 +1440,106 @@ def _socks5_reply(status: int) -> bytes:
     return bytes([0x05, status, 0x00, 0x01]) + b'\x00' * 6
 
 
+async def _handle_udp_associate(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    label: str,
+    stats: Stats
+) -> None:
+    """
+    Handle SOCKS5 UDP ASSOCIATE command for Telegram calls.
+
+    Creates UDP relay session and returns bind address to client.
+    Client then sends UDP packets to this address for forwarding to Telegram.
+
+    Args:
+        reader: Client stream reader
+        writer: Client stream writer
+        label: Client label for logging
+        stats: Statistics tracker
+    """
+    from .socks5_udp import UdpRelay, handle_udp_associate
+
+    peer = writer.get_extra_info('peername')
+    client_addr = peer if peer else ('127.0.0.1', 0)
+
+    log.info("%s UDP ASSOCIATE request from %s", label, client_addr[0])
+
+    try:
+        # Read UDP ASSOCIATE request details (address type + destination)
+        # We need to consume the request even if we don't use the destination
+        atyp_byte = await asyncio.wait_for(reader.readexactly(1), timeout=10.0)
+        atyp = atyp_byte[0]
+
+        # Skip destination address (we'll accept from any address)
+        if atyp == 0x01:  # IPv4
+            await reader.readexactly(4)
+        elif atyp == 0x03:  # Domain
+            dlen = (await reader.readexactly(1))[0]
+            await reader.readexactly(dlen)
+        elif atyp == 0x04:  # IPv6
+            await reader.readexactly(16)
+
+        # Read port
+        await reader.readexactly(2)
+
+        # Create UDP relay for this client
+        # Use port 0 to let OS assign random available port
+        udp_relay = UdpRelay(host='127.0.0.1', port=0)
+        bind_addr = await udp_relay.start()
+
+        log.info("%s UDP relay started on %s:%d", label, bind_addr[0], bind_addr[1])
+
+        # Send UDP ASSOCIATE successful reply
+        # Format: VER | REP | RSV | ATYP | BND.ADDR | BND.PORT
+        reply = bytearray([
+            0x05,  # SOCKS5 version
+            0x00,  # Success
+            0x00,  # Reserved
+            0x01,  # IPv4
+        ])
+        reply.extend(int(x).to_bytes(1, 'big') for x in bind_addr[0].split('.'))
+        reply.extend(struct.pack('!H', bind_addr[1]))
+
+        writer.write(bytes(reply))
+        await writer.drain()
+
+        stats.udp_sessions_active += 1
+
+        log.info("%s UDP ASSOCIATE bound to %s:%d", label, bind_addr[0], bind_addr[1])
+
+        # Keep connection open until client closes it
+        # UDP packets are handled separately by the relay
+        try:
+            while True:
+                data = await reader.read(1)
+                if not data:
+                    break
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            pass
+        except ConnectionResetError:
+            log.debug("%s UDP ASSOCIATE connection reset", label)
+
+    except asyncio.TimeoutError:
+        log.warning("%s UDP ASSOCIATE timeout", label)
+        try:
+            writer.write(_socks5_reply(0x05))  # Connection failure
+            await writer.drain()
+        except Exception:
+            pass
+    except Exception as e:
+        log.error("%s UDP ASSOCIATE error: %s", label, e)
+        try:
+            writer.write(_socks5_reply(0x01))  # General failure
+            await writer.drain()
+        except Exception:
+            pass
+    finally:
+        stats.udp_sessions_active = max(0, stats.udp_sessions_active - 1)
+        await _close_writer_safe(writer)
+
+
 async def _tcp_fallback(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, dst: str, port: int, init: bytes, label: str,
                         dc: int | None = None, is_media: bool = False, stats: Stats | None = None) -> bool:
     """
@@ -1600,10 +1700,19 @@ async def _handle_client(
             writer.write(b'\x05\x00')  # no-auth
             await writer.drain()
 
-        # -- SOCKS5 CONNECT request --
+        # -- SOCKS5 request --
         req = await asyncio.wait_for(reader.readexactly(4), timeout=10)
         _ver, cmd, _rsv, atyp = req
+        
+        # Handle UDP ASSOCIATE command (for Telegram calls)
+        if cmd == 0x03:  # UDP_ASSOCIATE
+            log.info("%s UDP ASSOCIATE request", label)
+            await _handle_udp_associate(reader, writer, label, stats)
+            return
+        
+        # Handle CONNECT command
         if cmd != 1:
+            log.warning("%s Unsupported SOCKS5 command: %d", label, cmd)
             writer.write(_socks5_reply(0x07))
             await writer.drain()
             writer.close()
@@ -2408,6 +2517,43 @@ def main() -> None:
                     help='Auth username (default: user)')
     ap.add_argument('--auth-password', type=str, default='pass',
                     help='Auth password (default: pass)')
+    
+    # Transport selection
+    ap.add_argument('--transport', type=str, default='auto',
+                    choices=['auto', 'websocket', 'http2', 'quic', 'meek', 'shadowsocks', 'tuic', 'reality'],
+                    help='Transport protocol (default: auto)')
+    ap.add_argument('--transport-host', type=str, default=None,
+                    help='Transport server host (overrides dc-ip)')
+    ap.add_argument('--transport-port', type=int, default=443,
+                    help='Transport server port (default: 443)')
+    ap.add_argument('--transport-path', type=str, default='/api',
+                    help='Transport path for HTTP/2 (default: /api)')
+    
+    # Meek settings
+    ap.add_argument('--meek-cdn', type=str, default='cloudflare',
+                    choices=['cloudflare', 'google', 'amazon', 'microsoft'],
+                    help='CDN for Meek transport (default: cloudflare)')
+    
+    # Shadowsocks settings
+    ap.add_argument('--ss-method', type=str, default='chacha20-ietf-poly1305',
+                    help='Shadowsocks encryption method')
+    ap.add_argument('--ss-password', type=str, default='',
+                    help='Shadowsocks password')
+    
+    # Reality settings
+    ap.add_argument('--reality-pubkey', type=str, default='',
+                    help='Reality server public key')
+    ap.add_argument('--reality-shortid', type=str, default='',
+                    help='Reality server short ID')
+    ap.add_argument('--reality-sni', type=str, default='www.microsoft.com',
+                    help='Reality SNI server name')
+    
+    # Advanced settings
+    ap.add_argument('--auto-select', action='store_true', default=True,
+                    help='Auto-select best transport by latency')
+    ap.add_argument('--health-interval', type=float, default=30.0,
+                    help='Health check interval in seconds (default: 30)')
+    
     ap.add_argument('-v', '--verbose', action='store_true',
                     help='Debug logging')
     args = ap.parse_args()

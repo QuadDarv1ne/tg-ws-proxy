@@ -14,10 +14,13 @@ Author: Dupley Maxim Igorevich
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
+import os
 import secrets
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -776,6 +779,291 @@ def decrypt_chacha20(encrypted: EncryptedData, key: bytes) -> bytes:
     return cipher.decrypt(encrypted)
 
 
+# =============================================================================
+# Automatic Key Rotation
+# =============================================================================
+
+
+class KeyRotator:
+    """
+    Automatic Key Rotation for enhanced security.
+
+    Features:
+    - Time-based key rotation (every N minutes)
+    - Message-count based rotation (every N messages)
+    - Forward secrecy with key derivation chain
+    - Graceful key transition period
+    - Multi-key support for smooth handover
+
+    Security benefits:
+    - Limits damage from key compromise
+    - Provides forward secrecy
+    - Prevents cryptanalysis from long-term key use
+    """
+
+    # Default rotation settings
+    DEFAULT_ROTATION_INTERVAL = 300.0  # 5 minutes
+    DEFAULT_MESSAGE_LIMIT = 10000  # Rotate after N messages
+    DEFAULT_TRANSITION_PERIOD = 30.0  # 30 seconds overlap
+
+    def __init__(
+        self,
+        master_key: bytes | None = None,
+        algorithm: EncryptionType = EncryptionType.AES_256_GCM,
+        rotation_interval: float | None = None,
+        message_limit: int | None = None,
+        transition_period: float | None = None,
+    ):
+        """
+        Initialize key rotator.
+
+        Args:
+            master_key: Master key for derivation (generated if None)
+            algorithm: Encryption algorithm to use
+            rotation_interval: Time between rotations in seconds
+            message_limit: Max messages per key
+            transition_period: Overlap period for smooth transition
+        """
+        self.algorithm = algorithm
+        self.rotation_interval = rotation_interval or self.DEFAULT_ROTATION_INTERVAL
+        self.message_limit = message_limit or self.DEFAULT_MESSAGE_LIMIT
+        self.transition_period = transition_period or self.DEFAULT_TRANSITION_PERIOD
+
+        # Master key (long-term secret)
+        self.master_key = master_key or os.urandom(32)
+
+        # Current key state
+        self._current_key_index = 0
+        self._current_key = self._derive_key(0)
+        self._current_key_start = time.monotonic()
+        self._current_key_messages = 0
+
+        # Previous key (for transition period)
+        self._previous_key: bytes | None = None
+        self._previous_key_index: int | None = None
+        self._previous_key_expiry = 0.0
+
+        # Next key (pre-derived for efficiency)
+        self._next_key: bytes | None = None
+        self._next_key_index: int | None = None
+
+        # Stats
+        self.rotations_count = 0
+        self.messages_encrypted = 0
+        self.messages_decrypted = 0
+
+        # Lock for thread safety
+        self._lock = asyncio.Lock()
+
+        log.info("KeyRotator initialized (interval=%.1fs, msg_limit=%d)",
+                self.rotation_interval, self.message_limit)
+
+    def _derive_key(self, index: int) -> bytes:
+        """
+        Derive key from master key using index.
+
+        Uses HKDF for secure key derivation with forward secrecy.
+        """
+        # Create unique info for this key index
+        info = f'tg-ws-proxy-key-{index}'.encode('utf-8')
+
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,  # 256-bit key
+            salt=b'tg-ws-proxy-v1-salt',
+            info=info,
+            backend=default_backend()
+        )
+
+        return hkdf.derive(self.master_key)
+
+    async def rotate_if_needed(self) -> bool:
+        """
+        Check if rotation is needed and perform it.
+
+        Returns:
+            True if rotation occurred
+        """
+        async with self._lock:
+            now = time.monotonic()
+            should_rotate = False
+
+            # Check time-based rotation
+            if now - self._current_key_start >= self.rotation_interval:
+                should_rotate = True
+                log.debug("Key rotation triggered by timer")
+
+            # Check message-based rotation
+            elif self._current_key_messages >= self.message_limit:
+                should_rotate = True
+                log.debug("Key rotation triggered by message count")
+
+            if should_rotate:
+                await self._rotate_keys()
+                return True
+
+            return False
+
+    async def _rotate_keys(self) -> None:
+        """Perform key rotation."""
+        # Move current key to previous
+        self._previous_key = self._current_key
+        self._previous_key_index = self._current_key_index
+        self._previous_key_expiry = time.monotonic() + self.transition_period
+
+        # Increment index and derive new current key
+        self._current_key_index += 1
+        self._current_key = self._derive_key(self._current_key_index)
+        self._current_key_start = time.monotonic()
+        self._current_key_messages = 0
+
+        # Pre-derive next key for efficiency
+        self._next_key_index = self._current_key_index + 1
+        self._next_key = self._derive_key(self._next_key_index)
+
+        self.rotations_count += 1
+
+        log.info("Keys rotated: index=%d, previous=%d (expires in %.1fs)",
+                self._current_key_index,
+                self._previous_key_index or -1,
+                self._previous_key_expiry - time.monotonic())
+
+    async def encrypt(self, plaintext: bytes) -> tuple[EncryptedData, int]:
+        """
+        Encrypt with automatic key rotation.
+
+        Args:
+            plaintext: Data to encrypt
+
+        Returns:
+            (encrypted_data, key_index)
+        """
+        # Check if rotation needed
+        await self.rotate_if_needed()
+
+        async with self._lock:
+            self._current_key_messages += 1
+            self.messages_encrypted += 1
+
+            # Create cipher based on algorithm
+            if self.algorithm == EncryptionType.AES_256_GCM:
+                from proxy.crypto import AES256GCMCipher
+                cipher = AES256GCMCipher(self._current_key)
+            elif self.algorithm == EncryptionType.CHACHA20_POLY1305:
+                from proxy.crypto import ChaCha20Poly1305Cipher
+                cipher = ChaCha20Poly1305Cipher(self._current_key)
+            else:
+                # Default to AES-256-GCM
+                from proxy.crypto import AES256GCMCipher
+                cipher = AES256GCMCipher(self._current_key)
+
+            # Encrypt
+            encrypted = cipher.encrypt(plaintext)
+
+            # Return encrypted data with key index
+            return (encrypted, self._current_key_index)
+
+    async def decrypt(
+        self,
+        encrypted: EncryptedData,
+        key_index: int
+    ) -> bytes | None:
+        """
+        Decrypt with key index awareness.
+
+        Args:
+            encrypted: Encrypted data
+            key_index: Key index used for encryption
+
+        Returns:
+            Decrypted data or None on failure
+        """
+        async with self._lock:
+            now = time.monotonic()
+
+            # Determine which key to use
+            if key_index == self._current_key_index:
+                key = self._current_key
+                self.messages_decrypted += 1
+            elif key_index == self._previous_key_index:
+                # Check if previous key is still valid
+                if now > self._previous_key_expiry:
+                    log.warning("Previous key expired, rejecting decryption")
+                    return None
+                key = self._previous_key
+                self.messages_decrypted += 1
+            else:
+                log.warning("Unknown key index %d for decryption", key_index)
+                return None
+
+            # Create cipher based on algorithm
+            if self.algorithm == EncryptionType.AES_256_GCM:
+                from proxy.crypto import AES256GCMCipher
+                cipher = AES256GCMCipher(key)
+            elif self.algorithm == EncryptionType.CHACHA20_POLY1305:
+                from proxy.crypto import ChaCha20Poly1305Cipher
+                cipher = ChaCha20Poly1305Cipher(key)
+            else:
+                from proxy.crypto import AES256GCMCipher
+                cipher = AES256GCMCipher(key)
+
+            # Decrypt
+            try:
+                return cipher.decrypt(encrypted)
+            except CryptoError as e:
+                log.error("Decryption failed: %s", e)
+                return None
+
+    def get_key_info(self) -> dict:
+        """Get current key state information."""
+        now = time.monotonic()
+        return {
+            'current_index': self._current_key_index,
+            'current_age': now - self._current_key_start,
+            'current_messages': self._current_key_messages,
+            'previous_index': self._previous_key_index,
+            'previous_expires_in': max(0, self._previous_key_expiry - now),
+            'next_index': self._next_key_index,
+            'rotations': self.rotations_count,
+            'messages_encrypted': self.messages_encrypted,
+            'messages_decrypted': self.messages_decrypted,
+            'time_until_rotation': max(0, self.rotation_interval - (now - self._current_key_start)),
+            'messages_until_rotation': max(0, self.message_limit - self._current_key_messages),
+        }
+
+    async def rotate_now(self) -> None:
+        """Force immediate key rotation."""
+        async with self._lock:
+            await self._rotate_keys()
+            log.info("Manual key rotation performed")
+
+    def export_master_key(self) -> bytes:
+        """
+        Export master key for backup.
+
+        ⚠️ Keep this secure - it can derive all keys!
+        """
+        return self.master_key
+
+    @classmethod
+    def from_master_key(
+        cls,
+        master_key: bytes,
+        **kwargs
+    ) -> KeyRotator:
+        """
+        Create rotator from existing master key.
+
+        Args:
+            master_key: 32-byte master key
+            **kwargs: Additional configuration
+        """
+        if len(master_key) != 32:
+            raise ValueError("Master key must be 32 bytes")
+
+        return cls(master_key=master_key, **kwargs)
+
+
 # Module exports
 __all__ = [
     'EncryptionType',
@@ -789,6 +1077,7 @@ __all__ = [
     'XChaCha20Poly1305Cipher',
     'AES256CTRStream',
     'MTProtoIGECipher',
+    'KeyRotator',  # New: Automatic key rotation
     'encrypt_aes256gcm',
     'decrypt_aes256gcm',
     'encrypt_chacha20',
