@@ -810,28 +810,43 @@ class TestDnsResolverFunctions:
     @pytest.mark.asyncio
     async def test_resolve_domain_cached_with_cache(self):
         """Test domain resolution with cache hit."""
-        from proxy.tg_ws_proxy import _dns_cache, _resolve_domain_cached
-        
-        # Clear cache first
-        from proxy.tg_ws_proxy import _clear_dns_cache
+        from proxy.tg_ws_proxy import (
+            _dns_cache,
+            _dns_cache_lock,
+            _resolve_domain_cached,
+            _OPTIMIZATION_CONFIG,
+        )
+
+        # Clear cache first and ensure cache is enabled
         _clear_dns_cache()
-        
-        # Add entry to cache with proper format (ip, expiry_time)
-        import time
-        now = time.monotonic()
-        test_ip = '192.0.2.1'
-        _dns_cache['test.example.com'] = [(test_ip, now + 100)]
-        
-        # Verify cache was populated
-        assert 'test.example.com' in _dns_cache
-        
-        # Should use cache
-        result = await _resolve_domain_cached('test.example.com')
-        
-        # Result should contain the cached IP with port 443
-        assert len(result) > 0, "Expected cached result but got empty list"
-        assert result[0][0] == test_ip
-        assert result[0][1] == 443
+        original_cache_enabled = _OPTIMIZATION_CONFIG.get('enable_dns_cache', True)
+        _OPTIMIZATION_CONFIG['enable_dns_cache'] = True
+
+        try:
+            # Add entry to cache with proper format (ip, expiry_time)
+            now = time.monotonic()
+            test_ip = '192.0.2.1'
+            # Set expiry far in the future (3600 seconds = 1 hour)
+            async with _dns_cache_lock:
+                _dns_cache['test.example.com'] = [(test_ip, now + 3600)]
+
+            # Verify cache was populated
+            assert 'test.example.com' in _dns_cache
+
+            # Mock getaddrinfo to prevent actual DNS lookup if cache fails
+            with patch('asyncio.get_event_loop') as mock_loop:
+                mock_loop.return_value.getaddrinfo.return_value = [(None, None, None, None, (test_ip, 443))]
+                
+                # Should use cache
+                result = await _resolve_domain_cached('test.example.com')
+
+            # Result should contain the cached IP with port 443
+            assert len(result) > 0, "Expected cached result but got empty list"
+            assert result[0][0] == test_ip
+            assert result[0][1] == 443
+        finally:
+            # Restore original config
+            _OPTIMIZATION_CONFIG['enable_dns_cache'] = original_cache_enabled
 
     @pytest.mark.asyncio
     async def test_resolve_domain_cached_cache_disabled(self):

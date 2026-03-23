@@ -415,15 +415,15 @@ class TestDNSOverHTTPSResolverProviderManagement:
         
         assert result is False
 
-    def test_set_provider_enabled(self):
+    def test_enable_disable_provider(self):
         """Test enabling/disabling provider."""
         resolver = DNSOverHTTPSResolver()
-        
+
         # Find first provider
         provider_name = resolver.providers[0].name
-        
-        resolver.set_provider_enabled(provider_name, False)
-        
+
+        resolver.disable_provider(provider_name)
+
         assert resolver.providers[0].enabled is False
 
 

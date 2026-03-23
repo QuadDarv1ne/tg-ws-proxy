@@ -172,7 +172,7 @@ class CircuitBreaker(Generic[T]):
             self._state = CircuitState.OPEN
             self._opened_at = time.monotonic()
             self._stats.state_changes += 1
-            
+
             # Send alert
             if _HAS_ALERTS:
                 get_alerts_manager().add_alert(
@@ -191,7 +191,7 @@ class CircuitBreaker(Generic[T]):
                 self._state = CircuitState.OPEN
                 self._opened_at = time.monotonic()
                 self._stats.state_changes += 1
-                
+
                 # Send alert
                 if _HAS_ALERTS:
                     get_alerts_manager().add_alert(

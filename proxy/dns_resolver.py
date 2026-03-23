@@ -99,7 +99,7 @@ class DNSResolver:
             log.debug("aiodns resolver initialized")
         except ImportError:
             log.debug("aiodns not available, using asyncio.getaddrinfo()")
-        
+
         # Initialize DoH fallback if enabled
         if self.use_doh_fallback:
             try:
@@ -164,7 +164,7 @@ class DNSResolver:
             if self.enable_metrics:
                 self._metrics.failed_queries += 1
             log.debug("DNS resolution failed for %s: %s", domain, e)
-            
+
             # Try DoH fallback if enabled
             if self.use_doh_fallback and self._doh_resolver:
                 log.info("Trying DoH fallback for %s", domain)
@@ -177,7 +177,7 @@ class DNSResolver:
                         return doh_result
                 except Exception as doh_error:
                     log.debug("DoH fallback failed for %s: %s", domain, doh_error)
-            
+
             return []
 
     def _get_aggressive_ttl(self, domain: str) -> float:

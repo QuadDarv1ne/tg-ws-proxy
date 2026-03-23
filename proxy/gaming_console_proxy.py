@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
-import subprocess
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
@@ -55,7 +54,7 @@ class ConsoleProxyConfig:
 class GamingConsoleProxy:
     """
     Gaming console proxy manager.
-    
+
     Features:
     - PS4/PS5 proxy configuration
     - Xbox proxy support
@@ -64,39 +63,39 @@ class GamingConsoleProxy:
     - LAN proxy sharing
     - Network diagnostics
     """
-    
+
     # Default ports for gaming
     PS4_PORTS = [80, 443, 3478, 3479, 3480, 9295, 9296, 9297]
     PS5_PORTS = [80, 443, 3478, 3479, 3480, 9295, 9296, 9297, 27015, 27036]
     XBOX_PORTS = [80, 443, 3478, 3479, 3074, 53, 88]
     SWITCH_PORTS = [80, 443, 3478, 3479, 6667, 12400, 12420, 28910, 29900, 29901, 29920]
-    
+
     def __init__(self, config: ConsoleProxyConfig):
         self.config = config
         self._upnp_igd = None
         self._forwarded_ports: list[int] = []
-        
+
     async def setup_for_console(self) -> dict[str, Any]:
         """
         Setup proxy for gaming console.
-        
+
         Returns:
             Configuration instructions for console
         """
         log.info("Setting up proxy for %s", self.config.console_type.name)
-        
+
         # Get LAN IP address
         lan_ip = self._get_lan_ip()
-        
+
         # Setup port forwarding
         if self.config.enable_upnp:
             await self._setup_upnp_forwarding()
-        
+
         # Generate configuration instructions
         instructions = self._generate_console_instructions(lan_ip)
-        
+
         log.info("Console proxy setup complete. LAN IP: %s", lan_ip)
-        
+
         return {
             'status': 'success',
             'lan_ip': lan_ip,
@@ -105,7 +104,7 @@ class GamingConsoleProxy:
             'instructions': instructions,
             'forwarded_ports': self._forwarded_ports,
         }
-    
+
     def _get_lan_ip(self) -> str:
         """Get LAN IP address of this machine."""
         try:
@@ -118,48 +117,48 @@ class GamingConsoleProxy:
         except Exception as e:
             log.error("Failed to get LAN IP: %s", e)
             return "192.168.1.100"  # Default fallback
-    
+
     async def _setup_upnp_forwarding(self) -> None:
         """Setup UPnP port forwarding."""
         try:
             # Try to import miniupnpc
             import miniupnpc
-            
+
             u = miniupnpc.UPnP()
             u.discover()
             u.selectigd()
-            
+
             self._upnp_igd = u
-            
+
             # Get external IP
             external_ip = u.externalipaddress()
             log.info("UPnP gateway found: %s", external_ip)
-            
+
             # Forward proxy port
             await self._forward_port_upnp(self.config.proxy_port, self.config.proxy_port, 'TCP')
-            
+
             # Forward gaming ports
             ports_to_forward = self._get_console_ports()
             for port in ports_to_forward:
                 await self._forward_port_upnp(port, port, 'TCP')
                 await self._forward_port_upnp(port, port, 'UDP')
-            
+
             log.info("UPnP port forwarding configured")
-            
+
         except ImportError:
             log.warning("miniupnpc not installed. Install: pip install miniupnpc")
         except Exception as e:
             log.error("UPnP setup failed: %s", e)
-    
-    async def _forward_port_upnp(self, external_port: int, internal_port: int, 
+
+    async def _forward_port_upnp(self, external_port: int, internal_port: int,
                                   protocol: str = 'TCP') -> bool:
         """Forward single port via UPnP."""
         if not self._upnp_igd:
             return False
-        
+
         try:
             lan_ip = self._get_lan_ip()
-            
+
             self._upnp_igd.addportmapping(
                 external_port,
                 protocol,
@@ -168,15 +167,15 @@ class GamingConsoleProxy:
                 'TG WS Proxy',
                 ''
             )
-            
+
             self._forwarded_ports.append(external_port)
             log.debug("Forwarded port %d/%s", external_port, protocol)
             return True
-            
+
         except Exception as e:
             log.debug("Failed to forward port %d: %s", external_port, e)
             return False
-    
+
     def _get_console_ports(self) -> list[int]:
         """Get ports required for configured console."""
         if self.config.console_type in (ConsoleType.PS4, ConsoleType.PS5):
@@ -187,7 +186,7 @@ class GamingConsoleProxy:
             return self.SWITCH_PORTS
         else:
             return [self.config.proxy_port]
-    
+
     def _generate_console_instructions(self, lan_ip: str) -> dict[str, Any]:
         """Generate setup instructions for console."""
         if self.config.console_type in (ConsoleType.PS4, ConsoleType.PS5):
@@ -198,7 +197,7 @@ class GamingConsoleProxy:
             return self._generate_switch_instructions(lan_ip)
         else:
             return {'error': 'Unknown console type'}
-    
+
     def _generate_playstation_instructions(self, lan_ip: str) -> dict[str, Any]:
         """Generate PS4/PS5 setup instructions."""
         return {
@@ -288,7 +287,7 @@ class GamingConsoleProxy:
                 'Для лучшей производительности используйте LAN кабель',
             ]
         }
-    
+
     def _generate_xbox_instructions(self, lan_ip: str) -> dict[str, Any]:
         """Generate Xbox setup instructions."""
         return {
@@ -348,7 +347,7 @@ class GamingConsoleProxy:
                 'Для PC моста: настройте Internet Connection Sharing в Windows'
             ]
         }
-    
+
     def _generate_switch_instructions(self, lan_ip: str) -> dict[str, Any]:
         """Generate Nintendo Switch setup instructions."""
         return {
@@ -418,14 +417,14 @@ class GamingConsoleProxy:
                 'Для SOCKS5 используйте DNS tunneling'
             ]
         }
-    
+
     async def test_console_connection(self, console_ip: str) -> dict[str, Any]:
         """
         Test connection to gaming console.
-        
+
         Args:
             console_ip: IP address of console
-            
+
         Returns:
             Test results
         """
@@ -435,23 +434,23 @@ class GamingConsoleProxy:
             'latency_ms': 0,
             'ports_open': [],
         }
-        
+
         try:
             # Test proxy port
             start = asyncio.get_event_loop().time()
-            
+
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(console_ip, self.config.proxy_port),
                 timeout=5
             )
-            
+
             latency = (asyncio.get_event_loop().time() - start) * 1000
             writer.close()
             await writer.wait_closed()
-            
+
             results['proxy_reachable'] = True
             results['latency_ms'] = round(latency, 2)
-            
+
             # Test gaming ports
             for port in self._get_console_ports()[:5]:  # Test first 5 ports
                 try:
@@ -464,16 +463,16 @@ class GamingConsoleProxy:
                     results['ports_open'].append(port)
                 except Exception:
                     pass
-            
+
         except Exception as e:
             results['error'] = str(e)
-        
+
         return results
-    
+
     def get_firewall_rules(self) -> str:
         """
         Get Windows Firewall rules for gaming proxy.
-        
+
         Returns:
             PowerShell commands to configure firewall
         """
@@ -491,9 +490,9 @@ netsh advfirewall firewall add rule name="TG WS Proxy UDP" dir=in action=allow p
 """
         for port in self._get_console_ports():
             rules += f"netsh advfirewall firewall add rule name=\"Game Port {port}\" dir=in action=allow protocol=TCP localport={port}\n"
-        
+
         return rules
-    
+
     async def cleanup(self) -> None:
         """Cleanup UPnP mappings."""
         if self._upnp_igd:
@@ -509,11 +508,11 @@ netsh advfirewall firewall add rule name="TG WS Proxy UDP" dir=in action=allow p
 def create_console_proxy(console_type: str, port: int = 1080) -> GamingConsoleProxy:
     """
     Create gaming console proxy.
-    
+
     Args:
         console_type: PS4, PS5, XBOX_ONE, XBOX_SERIES, NINTENDO_SWITCH
         port: Proxy port
-        
+
     Returns:
         GamingConsoleProxy instance
     """
@@ -525,10 +524,10 @@ def create_console_proxy(console_type: str, port: int = 1080) -> GamingConsolePr
         'SWITCH': ConsoleType.NINTENDO_SWITCH,
         'NINTENDO_SWITCH': ConsoleType.NINTENDO_SWITCH,
     }
-    
+
     console = console_map.get(console_type.upper(), ConsoleType.PS5)
     config = ConsoleProxyConfig(console_type=console, proxy_port=port)
-    
+
     return GamingConsoleProxy(config)
 
 

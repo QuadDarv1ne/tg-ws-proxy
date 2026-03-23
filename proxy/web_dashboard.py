@@ -2859,16 +2859,16 @@ class WebDashboard:
             """Get metrics history with optional filtering."""
             try:
                 from .metrics_history import get_metrics_history
-                
+
                 metric_name = request.args.get('metric', 'rate_limiter_rps')
                 hours = float(request.args.get('hours', '24'))
                 resolution = request.args.get('resolution', 'auto')
-                
+
                 metrics = get_metrics_history()
                 history = metrics.get_metric_history(metric_name, hours, resolution=resolution)
                 summary = metrics.get_metric_summary(metric_name, hours)
                 trend = metrics.get_trend(metric_name, hours)
-                
+
                 return jsonify({
                     'status': 'success',
                     'metric_name': metric_name,
@@ -2895,18 +2895,18 @@ class WebDashboard:
             """Export metrics history to JSON or CSV."""
             try:
                 from .metrics_history import get_metrics_history
-                
+
                 metric_name = request.args.get('metric', 'rate_limiter_rps')
                 hours = float(request.args.get('hours', '24'))
                 format_type = request.args.get('format', 'json')
-                
+
                 metrics = get_metrics_history()
-                
+
                 if format_type == 'csv':
                     filepath = metrics.export_to_csv(metric_name, hours)
-                    with open(filepath, 'r', encoding='utf-8') as f:
+                    with open(filepath, encoding='utf-8') as f:
                         content = f.read()
-                    
+
                     return Response(
                         content,
                         mimetype='text/csv',
@@ -2914,9 +2914,9 @@ class WebDashboard:
                     )
                 else:
                     filepath = metrics.export_to_json(metric_name, hours)
-                    with open(filepath, 'r', encoding='utf-8') as f:
+                    with open(filepath, encoding='utf-8') as f:
                         content = f.read()
-                    
+
                     return Response(
                         content,
                         mimetype='application/json',
@@ -2931,10 +2931,10 @@ class WebDashboard:
             """Get trend analysis for multiple metrics."""
             try:
                 from .metrics_history import get_metrics_history
-                
+
                 hours = float(request.args.get('hours', '24'))
                 metrics_list = request.args.getlist('metric')
-                
+
                 if not metrics_list:
                     metrics_list = [
                         'rate_limiter_rps',
@@ -2942,14 +2942,14 @@ class WebDashboard:
                         'rate_limiter_violations',
                         'rate_limiter_bans',
                     ]
-                
+
                 metrics = get_metrics_history()
                 trends = {}
-                
+
                 for metric_name in metrics_list:
                     trend = metrics.get_trend(metric_name, hours)
                     trends[metric_name] = trend
-                
+
                 return jsonify({
                     'status': 'success',
                     'time_range_hours': hours,
@@ -3261,20 +3261,20 @@ class WebDashboard:
                 return jsonify({'status': 'success', 'ip': ip})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-        
+
         # =====================================================================
         # Connection Inspector API
         # =====================================================================
-        
+
         @self.app.route('/api/connections')
         def api_connections() -> Response:
             """Get active connections."""
             try:
                 from proxy.rate_limiter import get_rate_limiter
-                
+
                 limit = request.args.get('limit', 100, type=int)
                 limiter = get_rate_limiter()
-                
+
                 connections = limiter.get_active_connections(limit=limit)
                 return jsonify({
                     'status': 'success',
@@ -3283,39 +3283,39 @@ class WebDashboard:
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-        
+
         @self.app.route('/api/connections/<ip>')
         def api_connection_details(ip: str) -> Response:
             """Get connection details for specific IP."""
             try:
                 from proxy.rate_limiter import get_rate_limiter
-                
+
                 limiter = get_rate_limiter()
                 details = limiter.get_connection_details(ip)
-                
+
                 if details is None:
                     return jsonify({'error': 'Connection not found'}), 404
-                
+
                 return jsonify({
                     'status': 'success',
                     'connection': details,
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-        
+
         @self.app.route('/api/connections/search')
         def api_search_connections() -> Response:
             """Search connections by IP or subnet."""
             try:
                 from proxy.rate_limiter import get_rate_limiter
-                
+
                 query = request.args.get('q', '', type=str)
                 if not query:
                     return jsonify({'error': 'Query parameter required'}), 400
-                
+
                 limiter = get_rate_limiter()
                 results = limiter.search_connections(query)
-                
+
                 return jsonify({
                     'status': 'success',
                     'count': len(results),
@@ -3323,22 +3323,22 @@ class WebDashboard:
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-        
+
         @self.app.route('/api/connections/top')
         def api_top_connections() -> Response:
             """Get top connections by metric."""
             try:
                 from proxy.rate_limiter import get_rate_limiter
-                
+
                 by = request.args.get('by', 'requests', type=str)
                 limit = request.args.get('limit', 10, type=int)
-                
+
                 if by not in ('requests', 'violations', 'score'):
                     return jsonify({'error': 'Invalid metric'}), 400
-                
+
                 limiter = get_rate_limiter()
                 top_ips = limiter.get_top_ips(by=by, limit=limit)
-                
+
                 return jsonify({
                     'status': 'success',
                     'metric': by,
@@ -3346,11 +3346,11 @@ class WebDashboard:
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-        
+
         # =====================================================================
         # Alerts API
         # =====================================================================
-        
+
         @self.app.route('/api/alerts')
         def api_get_alerts() -> Response:
             """Get alerts with optional filtering."""
@@ -3358,14 +3358,14 @@ class WebDashboard:
                 category = request.args.get('category', None, type=str)
                 severity = request.args.get('severity', None, type=str)
                 limit = request.args.get('limit', 50, type=int)
-                
+
                 alerts_mgr = get_alerts_manager()
                 alerts = alerts_mgr.get_alerts(
                     category=category,
                     severity=severity,
                     limit=limit,
                 )
-                
+
                 return jsonify({
                     'status': 'success',
                     'count': len(alerts),
@@ -3373,27 +3373,27 @@ class WebDashboard:
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-        
+
         @self.app.route('/api/alerts/stats')
         def api_alerts_stats() -> Response:
             """Get alerts statistics."""
             try:
                 alerts_mgr = get_alerts_manager()
                 stats = alerts_mgr.get_stats()
-                
+
                 return jsonify({
                     'status': 'success',
                     'stats': stats,
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-        
+
         @self.app.route('/api/alerts/<int:alert_id>/acknowledge', methods=['POST'])
         def api_acknowledge_alert(alert_id: int) -> Response:
             """Acknowledge an alert."""
             try:
                 alerts_mgr = get_alerts_manager()
-                
+
                 if alerts_mgr.acknowledge_alert(alert_id):
                     return jsonify({'status': 'success'})
                 else:
@@ -3496,20 +3496,20 @@ if __name__ == '__main__':
 class AlertsManager:
     """
     Alerts and notifications manager.
-    
+
     Features:
     - Real-time alerts
     - Alert history
     - Alert categories (security, performance, system)
     - WebSocket push notifications
     """
-    
+
     def __init__(self, max_history: int = 100):
         self.max_history = max_history
         self._alerts: list[dict] = []
         self._subscribers: list[callable] = []
         self._lock = threading.Lock()
-    
+
     def add_alert(
         self,
         category: str,
@@ -3519,13 +3519,13 @@ class AlertsManager:
     ) -> dict:
         """
         Add new alert.
-        
+
         Args:
             category: alert category (security, performance, system)
             severity: severity level (info, warning, error, critical)
             message: alert message
             details: optional additional details
-            
+
         Returns:
             Alert dict
         """
@@ -3538,22 +3538,22 @@ class AlertsManager:
             'details': details or {},
             'acknowledged': False,
         }
-        
+
         with self._lock:
             self._alerts.append(alert)
             # Trim history
             if len(self._alerts) > self.max_history:
                 self._alerts = self._alerts[-self.max_history:]
-            
+
             # Notify subscribers
             for callback in self._subscribers:
                 try:
                     callback(alert)
                 except Exception:
                     pass
-        
+
         return alert
-    
+
     def get_alerts(
         self,
         category: str | None = None,
@@ -3563,14 +3563,14 @@ class AlertsManager:
         """Get alerts with optional filtering."""
         with self._lock:
             alerts = self._alerts.copy()
-        
+
         if category:
             alerts = [a for a in alerts if a['category'] == category]
         if severity:
             alerts = [a for a in alerts if a['severity'] == severity]
-        
+
         return alerts[-limit:]
-    
+
     def acknowledge_alert(self, alert_id: int) -> bool:
         """Acknowledge an alert."""
         with self._lock:
@@ -3579,21 +3579,21 @@ class AlertsManager:
                     alert['acknowledged'] = True
                     return True
         return False
-    
+
     def get_unacknowledged_count(self) -> int:
         """Get count of unacknowledged alerts."""
         with self._lock:
             return sum(1 for a in self._alerts if not a['acknowledged'])
-    
+
     def subscribe(self, callback: callable) -> None:
         """Subscribe to new alerts."""
         self._subscribers.append(callback)
-    
+
     def unsubscribe(self, callback: callable) -> None:
         """Unsubscribe from alerts."""
         if callback in self._subscribers:
             self._subscribers.remove(callback)
-    
+
     def get_stats(self) -> dict:
         """Get alerts statistics."""
         with self._lock:
@@ -3601,13 +3601,13 @@ class AlertsManager:
             unacknowledged = self.get_unacknowledged_count()
             by_category = {}
             by_severity = {}
-            
+
             for alert in self._alerts:
                 cat = alert['category']
                 sev = alert['severity']
                 by_category[cat] = by_category.get(cat, 0) + 1
                 by_severity[sev] = by_severity.get(sev, 0) + 1
-        
+
         return {
             'total': total,
             'unacknowledged': unacknowledged,

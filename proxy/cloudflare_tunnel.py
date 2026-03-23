@@ -71,7 +71,7 @@ class TunnelStatus:
 class CloudflareTunnel:
     """
     Cloudflare Tunnel manager.
-    
+
     Features:
     - Automatic cloudflared download
     - Tunnel lifecycle management
@@ -137,7 +137,7 @@ class CloudflareTunnel:
     def download_cloudflared(self) -> bool:
         """
         Download cloudflared binary if not present.
-        
+
         Returns:
             True if successful, False otherwise
         """
@@ -210,7 +210,7 @@ class CloudflareTunnel:
     def generate_config(self) -> bool:
         """
         Generate tunnel configuration file.
-        
+
         Returns:
             True if successful, False otherwise
         """
@@ -260,10 +260,10 @@ class CloudflareTunnel:
     def authenticate(self, token: str) -> bool:
         """
         Authenticate tunnel with Cloudflare.
-        
+
         Args:
             token: Cloudflare tunnel token
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -301,10 +301,10 @@ class CloudflareTunnel:
     def create_tunnel(self, tunnel_name: str | None = None) -> str | None:
         """
         Create new tunnel.
-        
+
         Args:
             tunnel_name: Optional tunnel name
-            
+
         Returns:
             Tunnel ID if successful, None otherwise
         """
@@ -344,7 +344,7 @@ class CloudflareTunnel:
     def start(self) -> bool:
         """
         Start tunnel.
-        
+
         Returns:
             True if successful, False otherwise
         """
@@ -466,7 +466,7 @@ class CloudflareTunnel:
 class CloudflareWARP:
     """
     Cloudflare WARP integration (placeholder).
-    
+
     WARP provides WireGuard-based proxy with Cloudflare optimization.
     """
 

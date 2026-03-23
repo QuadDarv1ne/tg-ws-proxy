@@ -195,40 +195,40 @@ class _WsPool:
         now = time.monotonic()
 
         bucket: list[tuple[RawWebSocket, float]] = self._idle.get(key, [])
-        
+
         # Score all connections in bucket and sort by score (best first)
         scored_connections: list[tuple[float, RawWebSocket, float]] = []
         valid_bucket: list[tuple[RawWebSocket, float]] = []
-        
+
         for ws, created in bucket:
             age = now - created
             if age > WS_POOL_MAX_AGE or ws._closed:
                 asyncio.create_task(self._quiet_close(ws))
                 continue
-            
+
             ws_id = id(ws)
             latency_ms = self._get_average_latency(ws_id)
             error_count = self._connection_scores.get(ws_id, {}).get('error_count', 0)
             score = self._calculate_connection_score(ws_id, latency_ms, error_count, age)
             scored_connections.append((score, ws, created))
             valid_bucket.append((ws, created))
-        
+
         # Update bucket with valid connections
         self._idle[key] = valid_bucket
-        
+
         # Get best scored connection
         if scored_connections:
             # Sort by score (highest first)
             scored_connections.sort(key=lambda x: x[0], reverse=True)
             best_score, ws, created = scored_connections[0]
-            
+
             # Remove from bucket
             valid_bucket.remove((ws, created))
             self._idle[key] = valid_bucket
-            
+
             # Update last activity time
             self._last_activity[id(ws)] = now
-            
+
             self.stats.pool_hits += 1
             log.debug(
                 "WS pool hit for DC%d%s (score=%.0f, latency=%.0fms, age=%.1fs, left=%d)",
@@ -355,10 +355,10 @@ class _WsPool:
         """
         # Base interval
         base_interval = 30.0
-        
+
         # Adjust based on consecutive failures
         total_failures = sum(self._consecutive_failures.values())
-        
+
         if total_failures > 10:
             # Many failures - check more frequently
             return 15.0
@@ -368,7 +368,7 @@ class _WsPool:
         elif total_failures == 0:
             # No failures - check less frequently
             return min(60.0, base_interval * 2)
-        
+
         return base_interval
 
     def _calculate_dc_reliability_score(self, dc: int) -> float:
@@ -383,21 +383,21 @@ class _WsPool:
         """
         # Base score
         score = 100.0
-        
+
         # Penalty for consecutive failures
         failures = self._consecutive_failures.get(dc, 0)
         score -= failures * 10
-        
+
         # Penalty for recent failed connections
         recent_failed = sum(1 for _, t in self._failed_connections if time.monotonic() - t < 300)
         score -= recent_failed * 5
-        
+
         # Bonus for successful health checks
         if dc in self._last_activity:
             last_activity = self._last_activity[dc]
             if time.monotonic() - last_activity < 60:
                 score += 10
-        
+
         return max(0.0, min(100.0, score))
 
     async def _record_autotune_sample(
@@ -448,12 +448,12 @@ class _WsPool:
             connect_success = False
             ws = None
 
-            async def _connect_attempt() -> RawWebSocket:
+            async def _connect_attempt(conn_domain: str) -> RawWebSocket:
                 """Inner connect function for retry strategy."""
-                return await RawWebSocket.connect(target_ip, domain, timeout=8)
+                return await RawWebSocket.connect(target_ip, conn_domain, timeout=8)
 
             # Execute with retry logic
-            result = await self._retry_strategy.execute_async(_connect_attempt)
+            result = await self._retry_strategy.execute_async(lambda d=domain: _connect_attempt(d))
 
             if result.success:
                 ws = result.result
@@ -598,38 +598,38 @@ class _WsPool:
         """Return WebSocket to pool with connection scoring."""
         key = (dc, is_media)
         bucket = self._idle.setdefault(key, [])
-        
+
         if len(bucket) < self._pool_max_size:
             now = time.monotonic()
             ws_id = id(ws)
-            
+
             # Update last activity time
             self._last_activity[ws_id] = now
-            
+
             # Get or create connection info
             created = now  # Default for new connections
             error_count = 0
             latency_ms = self._get_average_latency(ws_id)
-            
+
             # Find existing connection in bucket to get created time
             for existing_ws, existing_created in bucket:
                 if id(existing_ws) == ws_id:
                     created = existing_created
                     break
-            
+
             # Get error count from tracking
             if ws_id in self._connection_scores:
                 error_count = self._connection_scores[ws_id].get('error_count', 0)
-            
+
             # Calculate connection score
             age = now - created
             score = self._calculate_connection_score(ws_id, latency_ms, error_count, age)
-            
+
             log.debug(
                 "WS returned to pool: DC%d%s, score=%.0f, latency=%.0fms, errors=%d, age=%.0fs",
                 dc, 'm' if is_media else '', score, latency_ms, error_count, age
             )
-            
+
             bucket.append((ws, created))
         else:
             asyncio.create_task(self._quiet_close(ws))

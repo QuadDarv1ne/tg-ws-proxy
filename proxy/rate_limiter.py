@@ -123,7 +123,7 @@ class IPStats:
     # Token bucket state
     tokens: float = 20.0  # Start with full bucket
     last_token_refill: float = 0.0
-    
+
     # Connection metadata (for inspector)
     first_seen: float = field(default_factory=time.time)
     last_activity: float = field(default_factory=time.time)
@@ -237,7 +237,7 @@ class RateLimiter:
 
         # Calculate RPS
         recent_rps = len([t for t in stats.requests_per_second if t > now - 1.0])
-        
+
         # Record RPS metric
         try:
             metrics = get_metrics_history()
@@ -251,7 +251,7 @@ class RateLimiter:
                 "DDoS detected from %s: %d RPS (threshold: %d)",
                 ip, recent_rps, self.config.ddos_threshold_rps
             )
-            
+
             # Record DDoS detection metric
             try:
                 metrics = get_metrics_history()
@@ -284,7 +284,7 @@ class RateLimiter:
 
         # Calculate CPS
         recent_cps = len([t for t in stats.connections_per_second if t > now - 1.0])
-        
+
         # Record CPS metric
         try:
             metrics = get_metrics_history()
@@ -298,7 +298,7 @@ class RateLimiter:
                 "Connection flood detected from %s: %d CPS (threshold: %d)",
                 ip, recent_cps, self.config.flood_threshold_connections
             )
-            
+
             # Record flood detection metric
             try:
                 metrics = get_metrics_history()
@@ -366,7 +366,7 @@ class RateLimiter:
                 stats.total_bans += 1
                 stats.last_ban_duration = ban_duration
                 log.critical("IP %s banned for DDoS: %.0f seconds", ip, ban_duration)
-                
+
                 # Send alert
                 if _HAS_ALERTS:
                     get_alerts_manager().add_alert(
@@ -379,7 +379,7 @@ class RateLimiter:
                             'rps': stats.requests_per_second[-1] if stats.requests_per_second else 0,
                         }
                     )
-                
+
                 return RateLimitAction.BAN, ban_duration
 
         # Connection flood detection
@@ -390,7 +390,7 @@ class RateLimiter:
                 stats.total_bans += 1
                 stats.last_ban_duration = ban_duration
                 log.critical("IP %s banned for connection flood: %.0f seconds", ip, ban_duration)
-                
+
                 # Send alert
                 if _HAS_ALERTS:
                     get_alerts_manager().add_alert(
@@ -403,7 +403,7 @@ class RateLimiter:
                             'cps': stats.connections_per_second[-1] if stats.connections_per_second else 0,
                         }
                     )
-                
+
                 return RateLimitAction.BAN, ban_duration
 
         # Subnet limit check
@@ -538,7 +538,7 @@ class RateLimiter:
         stats.violations += 1
         stats.last_violation = time.time()
         stats.blocked_requests += 1
-        
+
         # Record violation metric
         try:
             metrics = get_metrics_history()
@@ -556,14 +556,14 @@ class RateLimiter:
             stats.ban_until = time.time() + self.config.ban_duration_seconds
             log.warning("IP %s banned for %.0f seconds (violations: %d, limit: %s)",
                         ip, self.config.ban_duration_seconds, stats.violations, limit_type)
-            
+
             # Record ban metric
             try:
                 metrics = get_metrics_history()
                 metrics.record_metric('rate_limiter_bans', 1, {'ip': ip, 'duration': str(self.config.ban_duration_seconds)})
             except Exception:
                 pass
-                
+
             return RateLimitAction.BAN, self.config.ban_duration_seconds
 
         log.debug("IP %s rate limited: %s (violation %d, delay: %.1fs)",
@@ -662,73 +662,72 @@ class RateLimiter:
     def get_prometheus_metrics(self) -> str:
         """
         Export rate limiter metrics in Prometheus format.
-        
+
         Returns:
             String with Prometheus metrics exposition format
         """
-        now = time.time()
         lines = []
         stats = self.get_global_stats()
-        
+
         # Active connections
         lines.append('# HELP rate_limiter_active_connections Current number of active connections')
         lines.append('# TYPE rate_limiter_active_connections gauge')
         lines.append(f'rate_limiter_active_connections {stats["total_active_connections"]}')
         lines.append('')
-        
+
         # Unique IPs
         lines.append('# HELP rate_limiter_unique_ips Number of unique IPs seen')
         lines.append('# TYPE rate_limiter_unique_ips gauge')
         lines.append(f'rate_limiter_unique_ips {stats["unique_ips"]}')
         lines.append('')
-        
+
         # Banned IPs
         lines.append('# HELP rate_limiter_banned_ips Number of currently banned IPs')
         lines.append('# TYPE rate_limiter_banned_ips gauge')
         lines.append(f'rate_limiter_banned_ips {stats["banned_ips"]}')
         lines.append('')
-        
+
         # Total violations
         lines.append('# HELP rate_limiter_total_violations Total number of rate limit violations')
         lines.append('# TYPE rate_limiter_total_violations counter')
         lines.append(f'rate_limiter_total_violations {stats["total_violations"]}')
         lines.append('')
-        
+
         # DDoS attacks detected
         lines.append('# HELP rate_limiter_ddos_attacks_total Number of DDoS attacks detected')
         lines.append('# TYPE rate_limiter_ddos_attacks_total counter')
         lines.append(f'rate_limiter_ddos_attacks_total {stats["ddos_attacks_detected"]}')
         lines.append('')
-        
+
         # Flood attacks detected
         lines.append('# HELP rate_limiter_flood_attacks_total Number of flood attacks detected')
         lines.append('# TYPE rate_limiter_flood_attacks_total counter')
         lines.append(f'rate_limiter_flood_attacks_total {stats["flood_attacks_detected"]}')
         lines.append('')
-        
+
         # Suspicious IPs
         lines.append('# HELP rate_limiter_suspicious_ips Number of IPs with suspicious score')
         lines.append('# TYPE rate_limiter_suspicious_ips gauge')
         lines.append(f'rate_limiter_suspicious_ips {stats["suspicious_ips"]}')
         lines.append('')
-        
+
         # Active subnets
         lines.append('# HELP rate_limiter_subnets_active Number of active subnets')
         lines.append('# TYPE rate_limiter_subnets_active gauge')
         lines.append(f'rate_limiter_subnets_active {stats["subnets_active"]}')
         lines.append('')
-        
+
         # Requests per minute
         lines.append('# HELP rate_limiter_requests_per_minute Requests in the last minute')
         lines.append('# TYPE rate_limiter_requests_per_minute gauge')
         lines.append(f'rate_limiter_requests_per_minute {stats["requests_last_minute"]}')
         lines.append('')
-        
+
         # Connection flood rate (CPS)
         lines.append('# HELP rate_limiter_flood_rate Current connection flood rate (per second)')
         lines.append('# TYPE rate_limiter_flood_rate gauge')
         lines.append(f'rate_limiter_flood_rate {stats["connection_flood_rate"]}')
-        
+
         return '\n'.join(lines)
 
     def record_request(self, ip: str, success: bool = True) -> None:
@@ -785,33 +784,33 @@ class RateLimiter:
         if ip in self._ip_stats:
             self._ip_stats[ip].ban_until = 0.0
             self._ip_stats[ip].violations = 0
-    
+
     # =============================================================================
     # Connection Inspector API
     # =============================================================================
-    
+
     def get_active_connections(self, limit: int = 100) -> list[dict]:
         """
         Get list of active connections.
-        
+
         Args:
             limit: Maximum connections to return
-            
+
         Returns:
             List of connection info dicts
         """
         now = time.time()
         connections = []
-        
+
         for ip, stats in self._ip_stats.items():
             # Skip banned IPs
             if stats.ban_until > now:
                 continue
-            
+
             # Skip inactive (>5 minutes)
             if now - stats.last_activity > 300:
                 continue
-            
+
             connections.append({
                 'ip': ip,
                 'first_seen': stats.first_seen,
@@ -825,28 +824,28 @@ class RateLimiter:
                 'user_agent': stats.user_agent,
                 'geo_info': stats.geo_info,
             })
-        
+
         # Sort by last activity (most recent first)
         connections.sort(key=lambda c: c['last_activity'], reverse=True)
-        
+
         return connections[:limit]
-    
+
     def get_connection_details(self, ip: str) -> dict | None:
         """
         Get detailed information about specific IP connection.
-        
+
         Args:
             ip: IP address to lookup
-            
+
         Returns:
             Connection details or None if not found
         """
         if ip not in self._ip_stats:
             return None
-        
+
         stats = self._ip_stats[ip]
         now = time.time()
-        
+
         return {
             'ip': ip,
             'first_seen': stats.first_seen,
@@ -866,14 +865,14 @@ class RateLimiter:
             'rps_history': list(stats.requests_per_second)[-50:],  # Last 50 RPS samples
             'cps_history': list(stats.connections_per_second)[-50:],  # Last 50 CPS samples
         }
-    
+
     def get_connections_by_subnet(self, subnet: str) -> list[dict]:
         """
         Get all connections from specific subnet.
-        
+
         Args:
             subnet: Subnet in CIDR notation (e.g., "192.168.1.0/24")
-            
+
         Returns:
             List of connections from subnet
         """
@@ -886,27 +885,27 @@ class RateLimiter:
                     'total_requests': stats.total_requests,
                     'violations': stats.violations,
                 })
-        
+
         return connections
-    
+
     def get_top_ips(self, by: str = 'requests', limit: int = 10) -> list[dict]:
         """
         Get top IPs by various metrics.
-        
+
         Args:
             by: Metric to sort by ('requests', 'violations', 'score')
             limit: Maximum IPs to return
-            
+
         Returns:
             List of top IPs
         """
         now = time.time()
         ips = []
-        
+
         for ip, stats in self._ip_stats.items():
             if stats.ban_until > now:
                 continue
-            
+
             metric_value = 0
             if by == 'requests':
                 metric_value = stats.total_requests
@@ -914,7 +913,7 @@ class RateLimiter:
                 metric_value = stats.violations
             elif by == 'score':
                 metric_value = stats.suspicious_score
-            
+
             ips.append({
                 'ip': ip,
                 'metric': metric_value,
@@ -922,24 +921,24 @@ class RateLimiter:
                 'violations': stats.violations,
                 'suspicious_score': stats.suspicious_score,
             })
-        
+
         # Sort by metric descending
         ips.sort(key=lambda x: x['metric'], reverse=True)
-        
+
         return ips[:limit]
-    
+
     def search_connections(self, query: str) -> list[dict]:
         """
         Search connections by IP or subnet.
-        
+
         Args:
             query: Search query (IP, subnet, or partial match)
-            
+
         Returns:
             List of matching connections
         """
         results = []
-        
+
         for ip, stats in self._ip_stats.items():
             # Check if query matches IP or subnet
             if query in ip or query in stats.subnet:
@@ -950,7 +949,7 @@ class RateLimiter:
                     'total_requests': stats.total_requests,
                     'is_banned': stats.ban_until > time.time(),
                 })
-        
+
         return results
 
 
