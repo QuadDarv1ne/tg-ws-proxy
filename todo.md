@@ -289,6 +289,52 @@
   • http2_only: false (default)
   • Auto-fallback при блокировке WebSocket
 
+- ✅ **Cloudflare Integration** — обход блокировок через Cloudflare
+  - `proxy/cloudflare_tunnel.py` — Cloudflare Tunnel (550+ строк)
+  - `proxy/cloudflare_warp.py` — Cloudflare WARP (440+ строк)
+
+  **CloudflareTunnel:**
+  • cloudflared binary management (auto-download)
+  • Tunnel configuration and lifecycle
+  • Automatic reconnection and health monitoring
+  • SOCKS5/HTTP proxy via tunnel
+  • Metrics and monitoring support
+
+  **CloudflareWARP:**
+  • WARP SOCKS proxy interface (port 40000)
+  • Cloudflare Zero Trust team support
+  • Domain fronting through Cloudflare CDN
+  • WARP routing configuration
+  • License key and access credentials
+
+- ✅ **MTProxy Protocol** — поддержка MTProto
+  - `proxy/mtproxy.py` — новый модуль (536 строк)
+
+  **MTProto Support:**
+  • MTProto 1.0 и 2.0
+  • Secret generation and parsing
+  • DD-Tags for anti-censorship
+  • TLS obfuscation (disguise as telegram.org)
+  • Proxy link format (tg://proxy)
+  • Upstream proxy chain support
+
+- ✅ **System Proxy Integration** — системные прокси
+  - `proxy/system_proxy.py` — кроссплатформенный (345 строк)
+  - `proxy/windows_proxy.py` — Windows-specific (510 строк)
+
+  **SystemProxy:**
+  • Windows Registry proxy settings
+  • WinHTTP proxy configuration
+  • Proxy enable/disable with rollback
+  • Cross-platform support (Win/Linux/macOS)
+
+  **WindowsProxy:**
+  • WinHTTP proxy settings
+  • Internet Explorer/Edge proxy settings
+  • PAC (Proxy Auto-Config) support
+  • Automatic proxy detection (WPAD)
+  • Bypass list configuration
+
 - ✅ **Anti-censorship Configuration** — гибкая конфигурация
   - `proxy/anticensorship_config.py` — новый модуль (300+ строк)
 
@@ -502,31 +548,156 @@
 
 ---
 
-## 📊 Статус (22.03.2026 00:00)
+## 📊 Статус (23.03.2026 00:00)
 
 ```
-Модулей: 50 в proxy/ ✅
-Тестов: 40 файлов в tests/ ✅
+Модулей: 51 в proxy/ ✅
+Тестов: 41 файлов в tests/ ✅
 Tests: 994 passed, 7 skipped ✅
 Coverage: ~46% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.57.0 (Gaming Console ✅, i18n CN ✅, Proxy Chain ✅, Anti-censorship ✅)
+Version: v2.58.0 (Alerts Manager ✅, Connection Inspector ✅, Auto Port ✅, DoH ✅)
 ```
 
-**Актуальная версия:** v2.57.0 (dev) — ✅ synced
-**Следующая версия:** v2.58.0 (Coverage Improvement + Bug Fixes)
-**Последнее обновление:** 22.03.2026 (00:00)
+**Актуальная версия:** v2.58.0 (dev) — ✅ synced
+**Следующая версия:** v2.59.0 (Coverage Improvement + Bug Fixes)
+**Последнее обновление:** 23.03.2026 (00:00)
 
-### 🔄 Последние улучшения
-- ✅ **tg_ws_proxy.py coverage**: 16% → 30% (+14%)
-- ✅ **websocket_client.py**: 28 тестов, coverage 53%
-- ✅ **mtproto_proxy.py**: 67 тестов, coverage 48% (+2%)
-- ✅ **Исправление update_optimization_config**: dns_cache_ttl теперь обновляется корректно
-- ✅ **11 новых тестов** для функций tg_ws_proxy.py
-- ✅ **10 новых тестов** для websocket_client.py
-- ✅ **14 новых тестов** для mtproto_proxy.py
+### 🔄 Последние улучшения (v2.58.0)
+- ✅ **Alerts Manager** — система оповещений и мониторинга
+  - `proxy/alerts.py` — новый модуль (332 строки)
+  - AlertSeverity: INFO, WARNING, CRITICAL, EMERGENCY
+  - AlertType: CONNECTION_SPIKE, ERROR_RATE_HIGH, DC_HIGH_LATENCY, и др.
+  - AlertManager с threshold management
+  - Email и webhook уведомления
+  - Cooldown и suppression логика
+
+- ✅ **Connection Inspector API** — инспекция подключений
+  - `GET /api/connections` — список всех подключений
+  - `GET /api/connections/<ip>` — детали по IP
+  - `GET /api/connections/search` — поиск подключений
+  - `GET /api/connections/top` — топ по трафику/активности
+
+- ✅ **Автовыбор свободного порта** — при конфликте
+  - `auto_port: true` в конфиге
+  - Автоматический поиск свободного порта
+  - Логирование выбранного порта
+
+- ✅ **DNS-over-HTTPS (DoH)** — анти-DNS-poisoning
+  - `proxy/doh_resolver.py` — асинхронный DoH resolver
+  - Интеграция с dns_resolver.py
+  - Обход блокировок DNS
+
+- ✅ **Pluggable Transports Integration** — слой интеграции
+  - `proxy/pluggable_transports_integration.py` — integration layer
+  - Автоматический выбор транспорта
+  - Комбинация техник обфускации
+
+- ✅ **Crypto Exception Classes** — иерархия исключений
+  - `proxy/crypto.py` — exception classes
+  - Специализированные исключения для crypto операций
+
+- ✅ **Config Backup** — резервное копирование конфигурации
+  - `proxy/config_backup.py` — backup/restore конфига
+  - Version history с timestamps
+  - Auto-backup при изменениях
+
+---
+
+## ✅ Выполнено (v2.58.0: Alerts + Connection Inspector + Auto Port)
+
+### Мониторинг и Оповещения
+- ✅ **Alerts Manager** — централизованная система оповещений
+  - `proxy/alerts.py` — новый модуль (332 строки)
+
+  **AlertSeverity:**
+  • INFO — информационные события
+  • WARNING — предупреждения
+  • CRITICAL — критические события
+  • EMERGENCY — чрезвычайные ситуации
+
+  **AlertType:**
+  • CONNECTION_SPIKE — скачок подключений
+  • ERROR_RATE_HIGH — высокий уровень ошибок
+  • TRAFFIC_LIMIT — лимит трафика
+  • CPU_HIGH / MEMORY_HIGH — ресурсы
+  • WS_ERRORS — ошибки WebSocket
+  • DC_UNAVAILABLE / DC_HIGH_LATENCY — DC статус
+  • SECURITY_EVENT — события безопасности
+  • KEY_ROTATION — ротация ключей
+  • RATE_LIMIT — rate limiting события
+  • POOL_EXHAUSTED — исчерпание пула
+
+  **AlertManager:**
+  • threshold management (warning/critical)
+  • cooldown_seconds: 300 (default)
+  • max_history: 1000 alerts
+  • alert callbacks support
+  • Методы: check_threshold(), send_custom_alert(), get_recent_alerts()
+
+  **Уведомления:**
+  • Email уведомления (SMTP)
+  • Webhook уведомления (HTTP)
+  • Async notification delivery
+  • Alert suppression tracking
+
+- ✅ **Connection Inspector API** — инспекция подключений
+  - `proxy/web_dashboard.py` — расширенное API
+
+  **API Endpoints:**
+  • `GET /api/connections` — список всех подключений
+    - filters: ip, dc_id, status, type
+    - pagination: limit, offset
+    - Response: connections[], total
+
+  • `GET /api/connections/<ip>` — детали по IP
+    - Response: connection details, stats, history
+
+  • `GET /api/connections/search` — поиск подключений
+    - query: search string
+    - fields: ip, dc_id, user_agent
+    - Response: matches[]
+
+  • `GET /api/connections/top` — топ по трафику/активности
+    - by: traffic/connections/errors
+    - limit: top N
+    - Response: top[]
+
+### Auto Port Selection
+- ✅ **Автовыбор порта** — при конфликте
+  - `proxy/constants.py` — `auto_port: true`
+  - `proxy/tg_ws_proxy.py` — auto-detect free port
+  - Конфигурация: `server.auto_port`
+  - Логирование: выбранный порт
+
+### DNS-over-HTTPS
+- ✅ **DoH Resolver** — анти-DNS-poisoning
+  - `proxy/doh_resolver.py` — асинхронный resolver
+  - Интеграция с `dns_resolver.py`
+  - Cloudflare/Google DoH endpoints
+  - Конфигурация: `dns.use_async_dns`, `dns.timeout`
+
+### Pluggable Transports
+- ✅ **Integration Layer** — комбинация техник
+  - `proxy/pluggable_transports_integration.py` — integration
+  - Автоматический выбор транспорта
+  - Obfs4 + Shadowsocks + Fragmentation
+  - Конфигурация: `anticensorship.preset`
+
+### Config Management
+- ✅ **Config Backup** — backup/restore
+  - `proxy/config_backup.py` — новый модуль
+  - Version history с timestamps
+  - Auto-backup при изменениях
+  - Методы: backup_config(), restore_config(), list_backups()
+
+### Crypto
+- ✅ **Exception Classes** — иерархия исключений
+  - `proxy/crypto.py` — exception classes
+  - CryptoError (base)
+  - DecryptError, EncryptError, KeyError
 
 ---
 
