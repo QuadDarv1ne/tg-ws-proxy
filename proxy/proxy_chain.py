@@ -45,13 +45,13 @@ class ProxyHop:
     password: str | None = None
     secret: str | None = None  # For MTProto/Shadowsocks
     timeout: float = 10.0
-    
+
     # Performance metrics
     latency_ms: float = field(default=float('inf'))
     success_rate: float = field(default=1.0)
     last_used: float = field(default_factory=time.time)
     is_active: bool = field(default=True)
-    
+
     @property
     def score(self) -> float:
         """Calculate proxy quality score (higher is better)."""
@@ -76,46 +76,46 @@ class ProxyChainConfig:
 class ProxyChainManager:
     """
     Proxy chain manager.
-    
+
     Features:
     - Multi-hop proxy chains
     - Automatic failover
     - Latency monitoring
     - Protocol support (SOCKS5, HTTP, WS, MTProto)
     """
-    
+
     def __init__(self, config: ProxyChainConfig | None = None):
         self.config = config or ProxyChainConfig()
         self._current_chain: list[ProxyHop] = []
         self._failed_hops: set[int] = set()
         self._latency_check_task: asyncio.Task | None = None
         self._running = False
-        
+
     async def start(self) -> None:
         """Start proxy chain manager."""
         self._running = True
-        
+
         if self.config.enable_latency_check:
             self._latency_check_task = asyncio.create_task(
                 self._latency_check_loop()
             )
-        
-        log.info("Proxy chain manager started (%d hops configured)", 
+
+        log.info("Proxy chain manager started (%d hops configured)",
                 len(self.config.hops))
-    
+
     async def stop(self) -> None:
         """Stop proxy chain manager."""
         self._running = False
-        
+
         if self._latency_check_task:
             self._latency_check_task.cancel()
             try:
                 await self._latency_check_task
             except asyncio.CancelledError:
                 pass
-        
+
         log.info("Proxy chain manager stopped")
-    
+
     async def _latency_check_loop(self) -> None:
         """Periodically check proxy latency."""
         while self._running:
@@ -126,95 +126,95 @@ class ProxyChainManager:
                 break
             except Exception as e:
                 log.error("Latency check error: %s", e)
-    
+
     async def _check_all_proxies(self) -> None:
         """Check latency of all configured proxies."""
         tasks = []
         for i, hop in enumerate(self.config.hops):
             if hop.is_active:
                 tasks.append(self._check_proxy_latency(i, hop))
-        
+
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-    
+
     async def _check_proxy_latency(self, index: int, hop: ProxyHop) -> None:
         """Check latency of single proxy."""
         try:
             start = time.monotonic()
-            
+
             # Try to connect
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(hop.host, hop.port),
                 timeout=hop.timeout
             )
-            
+
             # Close immediately
             writer.close()
             await writer.wait_closed()
-            
+
             latency = (time.monotonic() - start) * 1000
-            
+
             # Update metrics
             hop.latency_ms = latency
             hop.success_rate = min(1.0, hop.success_rate + 0.1)
             hop.last_used = time.time()
-            
-            log.debug("Proxy %d (%s:%d) latency: %.0fms", 
+
+            log.debug("Proxy %d (%s:%d) latency: %.0fms",
                      index, hop.host, hop.port, latency)
-            
-        except Exception as e:
+
+        except Exception:
             hop.success_rate = max(0, hop.success_rate - 0.2)
-            
+
             # Disable if success rate too low
             if hop.success_rate < self.config.min_success_rate:
                 hop.is_active = False
                 self._failed_hops.add(index)
-                log.warning("Proxy %d disabled (low success rate: %.1f%%)", 
+                log.warning("Proxy %d disabled (low success rate: %.1f%%)",
                            index, hop.success_rate * 100)
-    
+
     def get_optimal_chain(self) -> list[ProxyHop]:
         """
         Get optimal proxy chain based on current metrics.
-        
+
         Returns:
             List of proxy hops in optimal order
         """
         if not self.config.hops:
             return []
-        
+
         # Filter active proxies
         active_proxies = [h for h in self.config.hops if h.is_active]
-        
+
         if not active_proxies:
             # All proxies failed, use all with low score
             active_proxies = self.config.hops
-        
+
         # Sort by score (descending)
         sorted_proxies = sorted(active_proxies, key=lambda x: x.score, reverse=True)
-        
+
         # Select top proxies for chain
         chain_size = min(3, len(sorted_proxies))
         chain = sorted_proxies[:chain_size]
-        
+
         self._current_chain = chain
         log.debug("Optimal chain selected: %d hops", len(chain))
-        
+
         return chain
-    
-    async def create_connection(self, target_host: str, 
+
+    async def create_connection(self, target_host: str,
                                  target_port: int) -> tuple[asyncio.StreamReader, asyncio.StreamWriter] | None:
         """
         Create connection through proxy chain.
-        
+
         Args:
             target_host: Target host
             target_port: Target port
-            
+
         Returns:
             Reader/writer pair or None if failed
         """
         chain = self.get_optimal_chain()
-        
+
         if not chain:
             # Direct connection
             try:
@@ -222,62 +222,62 @@ class ProxyChainManager:
             except Exception as e:
                 log.error("Direct connection failed: %s", e)
                 return None
-        
+
         # Connect through chain
         current_reader = None
         current_writer = None
-        
+
         try:
             for i, hop in enumerate(chain):
-                log.debug("Connecting through hop %d: %s:%d (%s)", 
+                log.debug("Connecting through hop %d: %s:%d (%s)",
                          i, hop.host, hop.port, hop.protocol.name)
-                
+
                 try:
                     # Connect to this hop
                     reader, writer = await asyncio.wait_for(
                         self._connect_to_proxy(hop),
                         timeout=hop.timeout
                     )
-                    
+
                     # If not first hop, close previous
                     if current_writer:
                         current_writer.close()
                         await current_writer.wait_closed()
-                    
+
                     current_reader = reader
                     current_writer = writer
-                    
+
                 except Exception as e:
                     log.error("Hop %d failed: %s", i, e)
-                    
+
                     # Mark hop as failed
                     hop.is_active = False
                     self._failed_hops.add(i)
-                    
+
                     # Retry with next hop
                     if self.config.enable_auto_failover:
                         continue
                     else:
                         return None
-            
+
             # Final connection to target
             if current_writer:
                 # Send CONNECT request through last hop
                 await self._send_connect_request(current_writer, target_host, target_port)
-                
+
                 return current_reader, current_writer
-            
+
         except Exception as e:
             log.error("Chain connection failed: %s", e)
-            
+
             # Cleanup
             if current_writer:
                 current_writer.close()
-            
+
             return None
-        
+
         return None
-    
+
     async def _connect_to_proxy(self, hop: ProxyHop) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """Connect to single proxy hop."""
         if hop.protocol == ProxyProtocol.SOCKS5:
@@ -289,40 +289,40 @@ class ProxyChainManager:
         else:
             # Direct TCP connection
             return await asyncio.open_connection(hop.host, hop.port)
-    
+
     async def _connect_socks5(self, hop: ProxyHop) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """Connect to SOCKS5 proxy."""
         # Use asyncio socks5 library if available
         try:
-            import socksio
+            import socksio  # noqa: F401
             # Implementation would use socksio library
             pass
         except ImportError:
             pass
-        
+
         # Fallback: direct connection with manual SOCKS5 handshake
         reader, writer = await asyncio.open_connection(hop.host, hop.port)
-        
+
         # SOCKS5 greeting
         if hop.username and hop.password:
             # Auth required
             writer.write(b'\x05\x01\x02')  # VER=5, NMETHODS=1, METHODS=USERNAME/PASSWORD
         else:
             writer.write(b'\x05\x01\x00')  # No auth
-        
+
         await writer.drain()
         greeting = await reader.read(2)
-        
+
         if greeting[0] != 0x05:
             raise ConnectionError("Not SOCKS5")
-        
+
         if greeting[1] == 0x02 and hop.username and hop.password:
             # Perform authentication
             await self._socks5_auth(reader, writer, hop.username, hop.password)
-        
+
         return reader, writer
-    
-    async def _socks5_auth(self, reader: asyncio.StreamReader, 
+
+    async def _socks5_auth(self, reader: asyncio.StreamReader,
                            writer: asyncio.StreamWriter,
                            username: str, password: str) -> None:
         """Perform SOCKS5 username/password authentication."""
@@ -332,29 +332,29 @@ class ProxyChainManager:
             bytes([len(username)]) + username.encode() +
             bytes([len(password)]) + password.encode()
         )
-        
+
         writer.write(auth)
         await writer.drain()
-        
+
         # Auth response
         response = await reader.read(2)
-        
+
         if response[1] != 0x00:
             raise ConnectionError("SOCKS5 authentication failed")
-    
+
     async def _connect_http(self, hop: ProxyHop) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """Connect to HTTP proxy."""
         reader, writer = await asyncio.open_connection(hop.host, hop.port)
-        
+
         # HTTP CONNECT request will be sent later
         return reader, writer
-    
+
     async def _connect_websocket(self, hop: ProxyHop) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """Connect to WebSocket proxy."""
         # WebSocket upgrade would be handled here
         reader, writer = await asyncio.open_connection(hop.host, hop.port)
         return reader, writer
-    
+
     async def _send_connect_request(self, writer: asyncio.StreamWriter,
                                      target_host: str, target_port: int) -> None:
         """Send CONNECT request through proxy."""
@@ -363,10 +363,10 @@ class ProxyChainManager:
             f"Host: {target_host}:{target_port}\r\n"
             f"\r\n"
         )
-        
+
         writer.write(connect_request.encode())
         await writer.drain()
-    
+
     def get_chain_stats(self) -> dict[str, Any]:
         """Get proxy chain statistics."""
         return {
@@ -401,26 +401,26 @@ def get_chain_manager() -> ProxyChainManager:
 def create_chain(hops: list[dict]) -> ProxyChainManager:
     """
     Create proxy chain from configuration.
-    
+
     Args:
         hops: List of hop configurations
             Example: [
                 {"protocol": "socks5", "host": "proxy1.com", "port": 1080},
                 {"protocol": "http", "host": "proxy2.com", "port": 8080},
             ]
-    
+
     Returns:
         Configured ProxyChainManager
     """
     proxy_hops = []
-    
+
     for hop_config in hops:
         protocol_str = hop_config.get('protocol', 'socks5').upper()
         try:
             protocol = ProxyProtocol[protocol_str]
         except KeyError:
             protocol = ProxyProtocol.SOCKS5
-        
+
         hop = ProxyHop(
             protocol=protocol,
             host=hop_config.get('host', '127.0.0.1'),
@@ -431,7 +431,7 @@ def create_chain(hops: list[dict]) -> ProxyChainManager:
             timeout=float(hop_config.get('timeout', 10.0)),
         )
         proxy_hops.append(hop)
-    
+
     config = ProxyChainConfig(hops=proxy_hops)
     return ProxyChainManager(config)
 

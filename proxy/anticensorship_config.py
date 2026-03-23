@@ -14,36 +14,36 @@ from typing import Any
 @dataclass
 class ObfuscationConfig:
     """Configuration for traffic obfuscation."""
-    
+
     # Enable obfuscation
     enabled: bool = False
-    
+
     # Obfs4-like obfuscation
     enable_obfs4: bool = True
-    
+
     # Shadowsocks-style encryption
     enable_shadowsocks: bool = False
     shadowsocks_password: str = ""
     shadowsocks_cipher: str = "aes-256-gcm"
-    
+
     # WebSocket fragmentation
     enable_fragmentation: bool = True
     fragment_min_size: int = 64
     fragment_max_size: int = 256
-    
+
     # Traffic shaping
     enable_traffic_shaping: bool = True
     traffic_jitter_ms: tuple[int, int] = (10, 100)
     traffic_padding_ratio: float = 0.1
-    
+
     # TLS fingerprint spoofing
     enable_tls_spoof: bool = True
     browser_profile: str = "chrome_120"  # chrome_120, firefox_121, safari_17
-    
+
     # Domain fronting
     enable_domain_fronting: bool = False
     fronting_provider: str = "cloudflare"  # cloudflare, google, azure, amazon
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -63,7 +63,7 @@ class ObfuscationConfig:
             "enable_domain_fronting": self.enable_domain_fronting,
             "fronting_provider": self.fronting_provider,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ObfuscationConfig:
         """Create from dictionary."""
@@ -89,25 +89,25 @@ class ObfuscationConfig:
 @dataclass
 class RelayConfig:
     """Configuration for bridge/relay routing."""
-    
+
     # Enable relay routing
     enabled: bool = False
-    
+
     # Auto-select best relay
     auto_select: bool = True
-    
+
     # Preferred relay ID (if not auto-select)
     preferred_relay: str = ""
-    
+
     # Preferred region
     preferred_region: str = ""
-    
+
     # Require domain fronting
     require_fronting: bool = False
-    
+
     # Custom relays
     custom_relays: list[dict[str, Any]] = field(default_factory=list)
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -118,7 +118,7 @@ class RelayConfig:
             "require_fronting": self.require_fronting,
             "custom_relays": self.custom_relays,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> RelayConfig:
         """Create from dictionary."""
@@ -135,22 +135,22 @@ class RelayConfig:
 @dataclass
 class HTTP2Config:
     """Configuration for HTTP/2 transport."""
-    
+
     # Enable HTTP/2 as fallback
     enable_fallback: bool = True
-    
+
     # Try HTTP/2 first (instead of WebSocket)
     prefer_http2: bool = False
-    
+
     # Use HTTP/2 only (no WebSocket)
     http2_only: bool = False
-    
+
     # HTTP/2 path
     path: str = "/apiws"
-    
+
     # Connection timeout
     timeout: float = 10.0
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -160,7 +160,7 @@ class HTTP2Config:
             "path": self.path,
             "timeout": self.timeout,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HTTP2Config:
         """Create from dictionary."""
@@ -176,22 +176,22 @@ class HTTP2Config:
 @dataclass
 class CensorshipDetectionConfig:
     """Configuration for censorship detection."""
-    
+
     # Enable auto-detection
     enabled: bool = True
-    
+
     # Auto-switch to alternative transport
     auto_switch: bool = True
-    
+
     # Failure threshold before switching
     failure_threshold: int = 5
-    
+
     # Time window for failures (seconds)
     failure_window: int = 60
-    
+
     # Check interval for blocked detection (seconds)
     check_interval: int = 30
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -201,7 +201,7 @@ class CensorshipDetectionConfig:
             "failure_window": self.failure_window,
             "check_interval": self.check_interval,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CensorshipDetectionConfig:
         """Create from dictionary."""
@@ -217,10 +217,10 @@ class CensorshipDetectionConfig:
 @dataclass
 class AntiCensorshipConfig:
     """Main anti-censorship configuration."""
-    
+
     # Master switch for all anti-censorship features
     enabled: bool = False
-    
+
     # Sub-configurations
     obfuscation: ObfuscationConfig = field(default_factory=ObfuscationConfig)
     relay: RelayConfig = field(default_factory=RelayConfig)
@@ -228,15 +228,15 @@ class AntiCensorshipConfig:
     censorship_detection: CensorshipDetectionConfig = field(
         default_factory=CensorshipDetectionConfig
     )
-    
+
     # Preset modes
     # "default", "aggressive", "stealth", "custom"
     preset: str = "default"
-    
+
     def apply_preset(self, preset: str) -> None:
         """Apply predefined preset configuration."""
         self.preset = preset
-        
+
         if preset == "default":
             # Basic obfuscation only
             self.enabled = True
@@ -246,7 +246,7 @@ class AntiCensorshipConfig:
             self.obfuscation.enable_tls_spoof = True
             self.relay.enabled = False
             self.obfuscation.enable_domain_fronting = False
-            
+
         elif preset == "aggressive":
             # All features enabled
             self.enabled = True
@@ -259,7 +259,7 @@ class AntiCensorshipConfig:
             self.relay.enabled = True
             self.relay.auto_select = True
             self.http2.enable_fallback = True
-            
+
         elif preset == "stealth":
             # Maximum stealth
             self.enabled = True
@@ -277,11 +277,11 @@ class AntiCensorshipConfig:
             self.relay.require_fronting = True
             self.http2.enable_fallback = True
             self.http2.prefer_http2 = True
-            
+
         elif preset == "custom":
             # Keep current settings
             pass
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -292,7 +292,7 @@ class AntiCensorshipConfig:
             "http2": self.http2.to_dict(),
             "censorship_detection": self.censorship_detection.to_dict(),
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AntiCensorshipConfig:
         """Create from dictionary."""
@@ -308,11 +308,11 @@ class AntiCensorshipConfig:
                 data.get("censorship_detection", {})
             ),
         )
-        
+
         # Apply preset if specified
         if config.preset != "custom":
             config.apply_preset(config.preset)
-            
+
         return config
 
 

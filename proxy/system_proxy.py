@@ -49,7 +49,7 @@ class ProxyConfig:
 class WindowsSystemProxy:
     """
     System-wide proxy configuration for Windows.
-    
+
     Features:
     - Registry-based proxy settings
     - WinHTTP proxy configuration
@@ -117,10 +117,10 @@ class WindowsSystemProxy:
     def enable_proxy(self, config: ProxyConfig) -> bool:
         """
         Enable system-wide proxy.
-        
+
         Args:
             config: Proxy configuration
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -153,7 +153,7 @@ class WindowsSystemProxy:
     def disable_proxy(self) -> bool:
         """
         Disable system-wide proxy.
-        
+
         Returns:
             True if successful, False otherwise
         """

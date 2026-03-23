@@ -61,10 +61,10 @@ class HTTP2Error(Exception):
 class HTTP2Connection:
     """
     HTTP/2 connection handler.
-    
+
     Implements HTTP/2 framing layer for tunneling Telegram traffic.
     """
-    
+
     def __init__(
         self,
         host: str,
@@ -74,7 +74,7 @@ class HTTP2Connection:
     ):
         """
         Initialize HTTP/2 connection.
-        
+
         Args:
             host: Target host
             port: Target port
@@ -85,29 +85,29 @@ class HTTP2Connection:
         self.port = port
         self.use_tls = use_tls
         self.ssl_context = ssl_context
-        
+
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
         self.connected = False
-        
+
         # Connection state
         self.next_stream_id = 1  # Client-initiated streams start at 1
         self.local_settings = DEFAULT_SETTINGS.copy()
         self.remote_settings = DEFAULT_SETTINGS.copy()
         self.local_window = 65535
         self.remote_window = 65535
-        
+
         # Stream state
         self.streams: dict[int, dict[str, Any]] = {}
         self.response_buffers: dict[int, bytes] = {}
-        
+
     async def connect(self, timeout: float = 10.0) -> bool:
         """
         Establish HTTP/2 connection.
-        
+
         Args:
             timeout: Connection timeout
-            
+
         Returns:
             True if successful
         """
@@ -118,7 +118,7 @@ class HTTP2Connection:
                 self.ssl_context.check_hostname = False
                 self.ssl_context.verify_mode = ssl.CERT_NONE
                 self.ssl_context.set_alpn_protocols(['h2'])
-            
+
             # Connect
             if self.use_tls:
                 self.reader, self.writer = await asyncio.wait_for(
@@ -135,17 +135,17 @@ class HTTP2Connection:
                     asyncio.open_connection(self.host, self.port),
                     timeout=timeout,
                 )
-            
+
             # Send connection preface
             if not self.use_tls:
                 # h2c: send magic preface
                 self.writer.write(H2_MAGIC)
-            
+
             # Send SETTINGS frame
             settings_frame = self._build_settings_frame()
             self.writer.write(settings_frame)
             await self.writer.drain()
-            
+
             # Read server preface and SETTINGS
             if not self.use_tls:
                 preface = await asyncio.wait_for(
@@ -155,32 +155,32 @@ class HTTP2Connection:
                 if preface != H2_MAGIC:
                     log.error("Invalid server preface: %s", preface)
                     return False
-            
+
             # Read SETTINGS frame
             await self._read_settings_frame(timeout)
-            
+
             self.connected = True
             log.info("HTTP/2 connection established to %s:%d", self.host, self.port)
             return True
-            
+
         except asyncio.TimeoutError:
             log.warning("HTTP/2 connection timeout to %s:%d", self.host, self.port)
         except ssl.SSLError as exc:
             log.error("HTTP/2 SSL error: %s", exc)
         except Exception as exc:
             log.error("HTTP/2 connection error: %s", exc)
-            
+
         return False
-    
+
     def _build_settings_frame(self) -> bytes:
         """Build SETTINGS frame with local settings."""
         payload = b''
         for setting_id, value in self.local_settings.items():
             payload += struct.pack('>H', setting_id)
             payload += struct.pack('>I', value)
-            
+
         return self._build_frame(H2_FRAME_SETTINGS, payload)
-    
+
     async def _read_settings_frame(self, timeout: float) -> None:
         """Read and process SETTINGS frame from server."""
         # Read frame header (9 bytes)
@@ -188,21 +188,21 @@ class HTTP2Connection:
             self.reader.readexactly(9),  # type: ignore
             timeout=timeout,
         )
-        
+
         length = struct.unpack('>I', b'\x00' + header[:3])[0]
         frame_type = header[3]
         flags = header[4]
-        stream_id = struct.unpack('>I', header[5:9])[0] & 0x7FFFFFFF
-        
+        _ = struct.unpack('>I', header[5:9])[0] & 0x7FFFFFFF
+
         if frame_type != H2_FRAME_SETTINGS:
             raise HTTP2Error(f"Expected SETTINGS frame, got {frame_type}")
-        
+
         # Read payload
         payload = await asyncio.wait_for(
             self.reader.readexactly(length),  # type: ignore
             timeout=timeout,
         )
-        
+
         # Parse settings
         offset = 0
         while offset < len(payload):
@@ -210,15 +210,15 @@ class HTTP2Connection:
             value = struct.unpack('>I', payload[offset+2:offset+6])[0]
             self.remote_settings[setting_id] = value
             offset += 6
-            
+
         log.debug("Remote HTTP/2 settings: %s", self.remote_settings)
-        
+
         # Send SETTINGS ACK if needed
         if flags & H2_FLAG_END_HEADERS == 0:
             ack_frame = self._build_frame(H2_FRAME_SETTINGS, b'', flags=H2_FLAG_END_HEADERS)
             self.writer.write(ack_frame)
             await self.writer.drain()
-    
+
     def _build_frame(
         self,
         frame_type: int,
@@ -232,9 +232,9 @@ class HTTP2Connection:
         header += struct.pack('B', frame_type)  # 1 byte type
         header += struct.pack('B', flags)  # 1 byte flags
         header += struct.pack('>I', stream_id & 0x7FFFFFFF)  # 4 bytes stream ID
-        
+
         return header + payload
-    
+
     async def create_stream(
         self,
         method: str = 'POST',
@@ -243,21 +243,21 @@ class HTTP2Connection:
     ) -> int:
         """
         Create new HTTP/2 stream.
-        
+
         Args:
             method: HTTP method
             path: Request path
             headers: Additional headers
-            
+
         Returns:
             Stream ID
         """
         if not self.connected:
             raise HTTP2Error("Not connected")
-            
+
         stream_id = self.next_stream_id
         self.next_stream_id += 2
-        
+
         # Build headers
         request_headers = [
             (':method', method),
@@ -265,13 +265,13 @@ class HTTP2Connection:
             (':scheme', 'https' if self.use_tls else 'http'),
             (':authority', self.host),
         ]
-        
+
         if headers:
             request_headers.extend(headers.items())
-            
+
         # Encode headers (simple HPACK-like encoding)
         header_block = self._encode_headers(request_headers)
-        
+
         # Send HEADERS frame
         headers_frame = self._build_frame(
             H2_FRAME_HEADERS,
@@ -279,10 +279,10 @@ class HTTP2Connection:
             flags=H2_FLAG_END_HEADERS,
             stream_id=stream_id,
         )
-        
+
         self.writer.write(headers_frame)  # type: ignore
         await self.writer.drain()
-        
+
         # Initialize stream state
         self.streams[stream_id] = {
             'state': 'open',
@@ -290,13 +290,13 @@ class HTTP2Connection:
             'remote_window': self.remote_settings[H2_SETTINGS_INITIAL_WINDOW_SIZE],
         }
         self.response_buffers[stream_id] = b''
-        
+
         return stream_id
-    
+
     def _encode_headers(self, headers: list[tuple[str, str]]) -> bytes:
         """
         Encode headers (simplified HPACK).
-        
+
         For production use, implement full HPACK compression.
         """
         # Simple encoding without compression
@@ -306,7 +306,7 @@ class HTTP2Connection:
             encoded += bytes([len(name)]) + name.encode()
             encoded += bytes([len(value)]) + value.encode()
         return encoded
-    
+
     async def send_data(
         self,
         stream_id: int,
@@ -315,7 +315,7 @@ class HTTP2Connection:
     ) -> None:
         """
         Send data on stream.
-        
+
         Args:
             stream_id: Stream ID
             data: Data to send
@@ -325,33 +325,33 @@ class HTTP2Connection:
             raise HTTP2Error("Not connected")
         if stream_id not in self.streams:
             raise HTTP2Error(f"Stream {stream_id} not found")
-            
+
         # Split into frames based on MAX_FRAME_SIZE
         max_size = self.remote_settings[H2_SETTINGS_MAX_FRAME_SIZE]
         offset = 0
-        
+
         while offset < len(data):
             chunk = data[offset:offset + max_size]
             offset += max_size
-            
+
             flags = 0
             if offset >= len(data) and end_stream:
                 flags = H2_FLAG_END_STREAM
-                
+
             frame = self._build_frame(
                 H2_FRAME_DATA,
                 chunk,
                 flags=flags,
                 stream_id=stream_id,
             )
-            
+
             self.writer.write(frame)  # type: ignore
-            
+
         await self.writer.drain()
-        
+
         # Update window
         self.streams[stream_id]['remote_window'] -= len(data)
-    
+
     async def recv_data(
         self,
         stream_id: int,
@@ -359,19 +359,19 @@ class HTTP2Connection:
     ) -> bytes | None:
         """
         Receive data from stream.
-        
+
         Args:
             stream_id: Stream ID
             timeout: Read timeout
-            
+
         Returns:
             Received data or None if stream ended
         """
         if not self.connected:
             return None
-            
+
         start_time = time.monotonic()
-        
+
         while time.monotonic() - start_time < timeout:
             try:
                 # Read frame header
@@ -379,55 +379,55 @@ class HTTP2Connection:
                     self.reader.readexactly(9),  # type: ignore
                     timeout=min(1.0, timeout - (time.monotonic() - start_time)),
                 )
-                
+
                 length = struct.unpack('>I', b'\x00' + header[:3])[0]
                 frame_type = header[3]
                 flags = header[4]
                 frame_stream_id = struct.unpack('>I', header[5:9])[0] & 0x7FFFFFFF
-                
+
                 # Read payload
                 payload = await asyncio.wait_for(
                     self.reader.readexactly(length),  # type: ignore
                     timeout=timeout - (time.monotonic() - start_time),
                 )
-                
+
                 # Handle frame
                 if frame_stream_id == stream_id:
                     if frame_type == H2_FRAME_DATA:
                         self.response_buffers[stream_id] += payload
-                        
+
                         # Update window
                         self.streams[stream_id]['local_window'] -= len(payload)
                         self.local_window -= len(payload)
-                        
+
                         # Send WINDOW_UPDATE if needed
                         if self.local_window < 32768:
                             self._send_window_update(0, 65535 - self.local_window)
                             self.local_window = 65535
-                            
+
                         if flags & H2_FLAG_END_STREAM:
                             self.streams[stream_id]['state'] = 'half-closed'
                             result = self.response_buffers[stream_id]
                             self.response_buffers[stream_id] = b''
                             return result
-                            
+
                     elif frame_type == H2_FRAME_RST_STREAM:
                         self.streams[stream_id]['state'] = 'closed'
                         return None
-                        
+
                 elif frame_type == H2_FRAME_GOAWAY:
                     log.info("Received GOAWAY, closing connection")
                     await self.close()
                     return None
-                    
+
             except asyncio.TimeoutError:
                 continue
             except Exception as exc:
                 log.error("HTTP/2 recv error: %s", exc)
                 return None
-                
+
         return None
-    
+
     def _send_window_update(self, stream_id: int, increment: int) -> None:
         """Send WINDOW_UPDATE frame."""
         payload = struct.pack('>I', increment & 0x7FFFFFFF)
@@ -437,44 +437,44 @@ class HTTP2Connection:
             stream_id=stream_id,
         )
         self.writer.write(frame)  # type: ignore
-    
+
     async def ping(self) -> float | None:
         """
         Send HTTP/2 PING and measure latency.
-        
+
         Returns:
             Latency in ms or None
         """
         if not self.connected:
             return None
-            
+
         try:
             # Send PING
             ping_data = struct.pack('>Q', int(time.time() * 1000))
             ping_frame = self._build_frame(H2_FRAME_PING, ping_data)
             self.writer.write(ping_frame)  # type: ignore
             await self.writer.drain()
-            
+
             start = time.monotonic()
-            
+
             # Wait for PING ACK
             while True:
                 header = await self.reader.readexactly(9)  # type: ignore
                 length = struct.unpack('>I', b'\x00' + header[:3])[0]
                 frame_type = header[3]
-                
+
                 if frame_type == H2_FRAME_PING:
-                    payload = await self.reader.readexactly(length)  # type: ignore
+                    await self.reader.readexactly(length)  # type: ignore
                     return (time.monotonic() - start) * 1000
-                    
+
         except Exception as exc:
             log.debug("HTTP/2 ping error: %s", exc)
             return None
-    
+
     async def close(self) -> None:
         """Close HTTP/2 connection."""
         self.connected = False
-        
+
         if self.writer:
             try:
                 # Send GOAWAY
@@ -484,12 +484,12 @@ class HTTP2Connection:
                 )
                 self.writer.write(goaway)
                 await self.writer.drain()
-                
+
                 self.writer.close()
                 await self.writer.wait_closed()
             except Exception:
                 pass
-                
+
         self.writer = None
         self.reader = None
 
@@ -497,10 +497,10 @@ class HTTP2Connection:
 class HTTP2Transport:
     """
     HTTP/2 transport for Telegram traffic tunneling.
-    
+
     Wraps HTTP/2 connection to provide Telegram-compatible interface.
     """
-    
+
     def __init__(
         self,
         host: str,
@@ -511,7 +511,7 @@ class HTTP2Transport:
     ):
         """
         Initialize HTTP/2 transport.
-        
+
         Args:
             host: Target host
             port: Target port
@@ -524,10 +524,10 @@ class HTTP2Transport:
         self.use_tls = use_tls
         self.path = path
         self.obfuscation = obfuscation
-        
+
         self.connection: HTTP2Connection | None = None
         self.stream_id: int | None = None
-        
+
     async def connect(self, timeout: float = 10.0) -> bool:
         """Establish HTTP/2 transport."""
         try:
@@ -541,7 +541,7 @@ class HTTP2Transport:
                     ssl_ctx.check_hostname = False
                     ssl_ctx.verify_mode = ssl.CERT_NONE
                     ssl_ctx.set_alpn_protocols(['h2'])
-            
+
             # Create connection
             self.connection = HTTP2Connection(
                 self.host,
@@ -549,33 +549,33 @@ class HTTP2Transport:
                 use_tls=self.use_tls,
                 ssl_context=ssl_ctx,
             )
-            
+
             if not await self.connection.connect(timeout):
                 return False
-                
+
             # Create stream
             headers = {
                 'content-type': 'application/octet-stream',
                 'te': 'trailers',
             }
-            
+
             self.stream_id = await self.connection.create_stream(
                 path=self.path,
                 headers=headers,
             )
-            
+
             log.info("HTTP/2 transport established to %s:%d", self.host, self.port)
             return True
-            
+
         except Exception as exc:
             log.error("HTTP/2 transport error: %s", exc)
             return False
-    
+
     async def send(self, data: bytes) -> int:
         """Send data through HTTP/2 transport."""
         if not self.connection or self.stream_id is None:
             raise RuntimeError("HTTP/2 transport not connected")
-            
+
         # Obfuscate if enabled
         if self.obfuscation:
             fragments = self.obfuscation.obfuscate(data)
@@ -591,23 +591,23 @@ class HTTP2Transport:
         else:
             await self.connection.send_data(self.stream_id, data, end_stream=False)
             return len(data)
-    
+
     async def recv(self, max_size: int = 65536, timeout: float = 30.0) -> bytes | None:
         """Receive data from HTTP/2 transport."""
         if not self.connection or self.stream_id is None:
             return None
-            
+
         data = await self.connection.recv_data(self.stream_id, timeout)
-        
+
         if data is None:
             return None
-            
+
         # Deobfuscate if enabled
         if self.obfuscation:
             data = self.obfuscation.deobfuscate([data])
-            
+
         return data
-    
+
     async def close(self) -> None:
         """Close HTTP/2 transport."""
         if self.connection:
@@ -619,17 +619,17 @@ class HTTP2Transport:
 async def test_http2_transport():
     """Test HTTP/2 transport."""
     transport = HTTP2Transport('kws1.web.telegram.org', 443)
-    
+
     if await transport.connect():
         print("Connected!")
-        
+
         # Send test data
         await transport.send(b'Hello, HTTP/2!')
-        
+
         # Try to receive
         data = await transport.recv(timeout=5)
         print(f"Received: {data}")
-        
+
         await transport.close()
     else:
         print("Failed to connect")

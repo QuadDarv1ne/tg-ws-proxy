@@ -178,7 +178,7 @@ class RawWebSocket:
             asyncio.TimeoutError: On connection timeout
         """
         last_error: Exception | None = None
-        
+
         for attempt in range(max(1, retry_count)):
             try:
                 ws = await RawWebSocket._connect_once(
@@ -193,7 +193,7 @@ class RawWebSocket:
                 ws._ip = ip
                 ws._connect_time = timeout
                 return ws
-                
+
             except (asyncio.TimeoutError, ConnectionRefusedError, OSError) as e:
                 last_error = e
                 if attempt < retry_count - 1:
@@ -206,10 +206,10 @@ class RawWebSocket:
                 if e.is_redirect:
                     log.debug("WebSocket redirect detected for %s: %d", domain, e.status_code)
                 raise
-        
+
         # All retries failed
         raise last_error or asyncio.TimeoutError("Connection failed")
-    
+
     @staticmethod
     async def _connect_once(
         ip: str,
@@ -307,32 +307,6 @@ class RawWebSocket:
             headers,
             location=headers.get('location')
         )
-
-    async def send(self, data: bytes) -> None:
-        """
-        Send a masked binary WebSocket frame.
-
-        Args:
-            data: Data to send
-
-        Raises:
-            ConnectionError: If WebSocket is closed
-        """
-        if self._closed:
-            raise ConnectionError("WebSocket closed")
-
-        # Compress data if enabled
-        if self._compress and self._compressor and len(data) > 0:
-            # Compress with permessage-deflate (RFC 7692)
-            compressed = self._compressor.compress(data) + self._compressor.flush(zlib.Z_SYNC_FLUSH)
-            # Remove trailing 4 bytes (0x00 0x00 0xFF 0xFF) as per RFC 7692
-            if compressed.endswith(b'\x00\x00\xff\xff'):
-                compressed = compressed[:-4]
-            data = compressed
-
-        frame = self._build_frame(self.OP_BINARY, data, mask=True)
-        self.writer.write(frame)
-        await self.writer.drain()
 
     async def send_batch(self, parts: list[bytes]) -> None:
         """
@@ -439,7 +413,7 @@ class RawWebSocket:
         """
         if self._closed:
             return False
-        
+
         try:
             await self.send(data, opcode=self.OP_PING)
             return True

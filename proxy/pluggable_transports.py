@@ -14,13 +14,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-import os
 import secrets
 import socket
 import ssl
 import struct
 import time
-from typing import Any, Callable
+from typing import Any
 
 log = logging.getLogger("tg-ws-obfs")
 
@@ -32,22 +31,22 @@ log = logging.getLogger("tg-ws-obfs")
 class Obfs4Obfuscator:
     """
     Obfs4-style traffic obfuscation.
-    
+
     Makes traffic look like random noise to DPI systems.
     Based on the obfs4 protocol design.
     """
-    
+
     # Client and server handshake sizes
     CLIENT_HANDSHAKE_SIZE = 1968
     SERVER_HANDSHAKE_SIZE = 1948
-    
+
     # Magic header to detect obfs4 traffic (optional)
     OBFUSCATION_MAGIC = b'\x00\x00\x00\x00'
-    
+
     def __init__(self, cert: bytes | None = None, seed: bytes | None = None):
         """
         Initialize obfuscator.
-        
+
         Args:
             cert: Optional certificate for authentication
             seed: Optional seed for deterministic key generation
@@ -57,88 +56,88 @@ class Obfs4Obfuscator:
         self._client_key = None
         self._server_key = None
         self._initialized = False
-        
+
     def _derive_keys(self, shared_secret: bytes) -> tuple[bytes, bytes]:
         """Derive client and server keys from shared secret."""
         client_key = hashlib.sha256(shared_secret + b'client').digest()
         server_key = hashlib.sha256(shared_secret + b'server').digest()
         return client_key, server_key
-    
+
     def _generate_handshake(self, is_client: bool = True) -> bytes:
         """Generate obfuscated handshake data."""
         # Generate random padding
-        padding_size = (self.CLIENT_HANDSHAKE_SIZE if is_client 
+        padding_size = (self.CLIENT_HANDSHAKE_SIZE if is_client
                        else self.SERVER_HANDSHAKE_SIZE) - 32
         padding = secrets.token_bytes(padding_size)
-        
+
         # Create handshake with embedded key material
         ephemeral_key = secrets.token_bytes(32)
         handshake = padding + ephemeral_key
-        
+
         return handshake
-    
+
     def create_client_handshake(self) -> bytes:
         """Create client-side obfuscated handshake."""
         handshake = self._generate_handshake(is_client=True)
-        
+
         # Derive keys from handshake
         self._client_key, self._server_key = self._derive_keys(
             hashlib.sha256(handshake[-32:]).digest()
         )
         self._initialized = True
-        
+
         return handshake
-    
+
     def process_server_handshake(self, handshake: bytes) -> bool:
         """Process server handshake and verify."""
         if len(handshake) != self.SERVER_HANDSHAKE_SIZE:
             return False
-            
+
         # Derive keys
         self._server_key, self._client_key = self._derive_keys(
             hashlib.sha256(handshake[-32:]).digest()
         )
         self._initialized = True
         return True
-    
+
     def obfuscate(self, data: bytes) -> bytes:
         """
         Obfuscate data using XOR cipher with key expansion.
-        
+
         Args:
             data: Plain data to obfuscate
-            
+
         Returns:
             Obfuscated data
         """
         if not self._initialized:
             raise RuntimeError("Handshake not completed")
-            
+
         # Generate keystream
         keystream = self._generate_keystream(len(data), self._client_key)
-        
+
         # XOR encryption
         return bytes(a ^ b for a, b in zip(data, keystream))
-    
+
     def deobfuscate(self, data: bytes) -> bytes:
         """
         Deobfuscate data.
-        
+
         Args:
             data: Obfuscated data
-            
+
         Returns:
             Original plain data
         """
         if not self._initialized:
             raise RuntimeError("Handshake not completed")
-            
+
         # Generate keystream (same as client for symmetric encryption)
         keystream = self._generate_keystream(len(data), self._client_key)
-        
+
         # XOR decryption
         return bytes(a ^ b for a, b in zip(data, keystream))
-    
+
     def _generate_keystream(self, length: int, key: bytes) -> bytes:
         """Generate XOR keystream using HMAC-DRBG-like construction."""
         keystream = b''
@@ -158,11 +157,11 @@ class Obfs4Obfuscator:
 class WSFragmenter:
     """
     WebSocket frame fragmentation for DPI bypass.
-    
+
     Breaks large WebSocket frames into smaller chunks to evade
     pattern-based detection systems.
     """
-    
+
     def __init__(
         self,
         min_fragment_size: int = 64,
@@ -171,7 +170,7 @@ class WSFragmenter:
     ):
         """
         Initialize fragmenter.
-        
+
         Args:
             min_fragment_size: Minimum fragment size in bytes
             max_fragment_size: Maximum fragment size in bytes
@@ -180,23 +179,23 @@ class WSFragmenter:
         self.min_size = min_fragment_size
         self.max_size = max_fragment_size
         self.randomize = randomize_sizes
-        
+
     def fragment(self, data: bytes) -> list[bytes]:
         """
         Split data into fragments.
-        
+
         Args:
             data: Data to fragment
-            
+
         Returns:
             List of fragmented data chunks
         """
         if len(data) <= self.min_size:
             return [data]
-            
+
         fragments = []
         offset = 0
-        
+
         while offset < len(data):
             # Determine fragment size
             if self.randomize:
@@ -205,25 +204,25 @@ class WSFragmenter:
                 ) + self.min_size
             else:
                 size = self.max_size
-                
+
             # Calculate remaining bytes
             remaining = len(data) - offset
             actual_size = min(size, remaining)
-            
+
             # Extract fragment
             fragment = data[offset:offset + actual_size]
             fragments.append(fragment)
             offset += actual_size
-            
+
         return fragments
-    
+
     def reassemble(self, fragments: list[bytes]) -> bytes:
         """
         Reassemble fragments into original data.
-        
+
         Args:
             fragments: List of data fragments
-            
+
         Returns:
             Reassembled original data
         """
@@ -238,10 +237,10 @@ class WSFragmenter:
 class TLSFingerprintSpoof:
     """
     TLS fingerprint spoofing to evade JA3 detection.
-    
+
     Modifies TLS ClientHello to mimic popular browsers.
     """
-    
+
     # Common JA3 fingerprints to mimic
     BROWSER_FINGERPRINTS = {
         'chrome_120': {
@@ -316,11 +315,11 @@ class TLSFingerprintSpoof:
             'alpn': [b'h2', b'http/1.1'],
         },
     }
-    
+
     def __init__(self, browser_profile: str = 'chrome_120'):
         """
         Initialize TLS spoofing.
-        
+
         Args:
             browser_profile: Browser fingerprint to mimic
         """
@@ -328,31 +327,31 @@ class TLSFingerprintSpoof:
         self.fingerprint = self.BROWSER_FINGERPRINTS.get(
             browser_profile, self.BROWSER_FINGERPRINTS['chrome_120']
         )
-        
+
     def create_ssl_context(self) -> ssl.SSLContext:
         """
         Create SSL context with spoofed fingerprint.
-        
+
         Returns:
             Configured SSL context
         """
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-        
+
         # Set TLS version
         ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.maximum_version = ssl.TLSVersion.TLSv1_3
-        
+
         # Set ciphers
         cipher_string = self._build_cipher_string()
         ctx.set_ciphers(cipher_string)
-        
+
         # Set ALPN protocols
         ctx.set_alpn_protocols([p.decode() for p in self.fingerprint['alpn']])
-        
+
         return ctx
-    
+
     def _build_cipher_string(self) -> str:
         """Build OpenSSL cipher string from fingerprint."""
         # Map cipher codes to OpenSSL names
@@ -375,12 +374,12 @@ class TLSFingerprintSpoof:
             0x000A: 'ECDHE-RSA-DES-CBC3-SHA',
             0x0004: 'DES-CBC3-SHA',
         }
-        
+
         ciphers = []
         for code in self.fingerprint['ciphers']:
             if code in cipher_map:
                 ciphers.append(cipher_map[code])
-                
+
         return ':'.join(ciphers) if ciphers else 'DEFAULT'
 
 
@@ -392,10 +391,10 @@ class TLSFingerprintSpoof:
 class DomainFronting:
     """
     Domain fronting for circumventing SNI-based blocking.
-    
+
     Uses CDN domains to mask the actual destination.
     """
-    
+
     # Fronting domains (CDN providers)
     FRONTING_DOMAINS = {
         'cloudflare': {
@@ -419,28 +418,28 @@ class DomainFronting:
             'description': 'Amazon CloudFront',
         },
     }
-    
+
     def __init__(self, provider: str = 'cloudflare'):
         """
         Initialize domain fronting.
-        
+
         Args:
             provider: CDN provider to use
         """
         if provider not in self.FRONTING_DOMAINS:
             raise ValueError(f"Unknown provider: {provider}")
-            
+
         self.provider = provider
         self.config = self.FRONTING_DOMAINS[provider]
-        
+
     def get_front_domain(self) -> str:
         """Get the fronting domain for SNI."""
         return self.config['front']
-    
+
     def get_host_header(self) -> str:
         """Get the Host header value (actual destination)."""
         return self.config['host_header']
-    
+
     def wrap_connection(
         self,
         sock: socket.socket,
@@ -448,28 +447,28 @@ class DomainFronting:
     ) -> ssl.SSLContext:
         """
         Wrap socket with domain fronting.
-        
+
         Args:
             sock: Raw socket
             server_hostname: Actual server hostname
-            
+
         Returns:
             SSL context configured for fronting
         """
         # Create SSL context with spoofed fingerprint
         tls_spoof = TLSFingerprintSpoof('chrome_120')
         ctx = tls_spoof.create_ssl_context()
-        
+
         # Wrap with SNI set to front domain
         wrapped = ctx.wrap_socket(
             sock,
             server_hostname=self.get_front_domain(),
             do_handshake_on_connect=False,
         )
-        
+
         # Store actual host header for later use
         wrapped._actual_host = self.get_host_header()
-        
+
         return wrapped
 
 
@@ -481,10 +480,10 @@ class DomainFronting:
 class ShadowsocksObfs:
     """
     Shadowsocks-compatible encryption for additional obfuscation.
-    
+
     Provides an extra layer of encryption on top of TLS.
     """
-    
+
     SUPPORTED_CIPHERS = {
         'aes-256-gcm': {
             'key_size': 32,
@@ -502,25 +501,25 @@ class ShadowsocksObfs:
             'tag_size': 16,
         },
     }
-    
+
     def __init__(self, password: str, cipher: str = 'aes-256-gcm'):
         """
         Initialize Shadowsocks obfuscator.
-        
+
         Args:
             password: Password for key derivation
             cipher: Encryption cipher to use
         """
         if cipher not in self.SUPPORTED_CIPHERS:
             raise ValueError(f"Unsupported cipher: {cipher}")
-            
+
         self.cipher_name = cipher
         self.cipher_config = self.SUPPORTED_CIPHERS[cipher]
-        
+
         # Derive key from password
         self.key = self._derive_key(password)
         self.nonce_counter = 0
-        
+
     def _derive_key(self, password: str) -> bytes:
         """Derive encryption key from password using PBKDF2."""
         salt = b'tg-ws-proxy-salt'
@@ -532,14 +531,14 @@ class ShadowsocksObfs:
             dklen=self.cipher_config['key_size'],
         )
         return key
-    
+
     def encrypt(self, data: bytes) -> bytes:
         """
         Encrypt data with Shadowsocks-style encryption.
-        
+
         Args:
             data: Plain data
-            
+
         Returns:
             Encrypted data with nonce prefix
         """
@@ -548,24 +547,24 @@ class ShadowsocksObfs:
         except ImportError:
             # Fallback to simple XOR if cryptography not available
             return self._xor_encrypt(data)
-            
+
         # Generate nonce
         nonce = self._generate_nonce()
-        
+
         # Encrypt
         aesgcm = AESGCM(self.key)
         ciphertext = aesgcm.encrypt(nonce, data, None)
-        
+
         # Prepend nonce to ciphertext
         return nonce + ciphertext
-    
+
     def decrypt(self, data: bytes) -> bytes:
         """
         Decrypt Shadowsocks-style encrypted data.
-        
+
         Args:
             data: Encrypted data with nonce prefix
-            
+
         Returns:
             Decrypted plain data
         """
@@ -574,34 +573,34 @@ class ShadowsocksObfs:
         except ImportError:
             # Fallback to simple XOR if cryptography not available
             return self._xor_decrypt(data)
-            
+
         # Extract nonce and ciphertext
         nonce_size = self.cipher_config['nonce_size']
         nonce = data[:nonce_size]
         ciphertext = data[nonce_size:]
-        
+
         # Decrypt
         aesgcm = AESGCM(self.key)
         plaintext = aesgcm.decrypt(nonce, ciphertext, None)
-        
+
         return plaintext
-    
+
     def _generate_nonce(self) -> bytes:
         """Generate unique nonce for each encryption."""
         self.nonce_counter += 1
         nonce = struct.pack('>Q', self.nonce_counter)
         nonce += b'\x00' * (self.cipher_config['nonce_size'] - len(nonce))
         return nonce
-    
+
     def _xor_encrypt(self, data: bytes) -> bytes:
         """Simple XOR encryption fallback."""
         keystream = self._generate_keystream(len(data))
         return bytes(a ^ b for a, b in zip(data, keystream))
-    
+
     def _xor_decrypt(self, data: bytes) -> bytes:
         """Simple XOR decryption fallback."""
         return self._xor_encrypt(data)
-    
+
     def _generate_keystream(self, length: int) -> bytes:
         """Generate XOR keystream."""
         keystream = b''
@@ -625,11 +624,11 @@ class ShadowsocksObfs:
 class TrafficShaper:
     """
     Traffic shaping to evade pattern-based detection.
-    
+
     Adds timing jitter and padding to make traffic patterns
     less distinguishable.
     """
-    
+
     def __init__(
         self,
         jitter_ms: tuple[int, int] = (10, 100),
@@ -638,7 +637,7 @@ class TrafficShaper:
     ):
         """
         Initialize traffic shaper.
-        
+
         Args:
             jitter_ms: Random delay range in milliseconds
             padding_enabled: Whether to add padding
@@ -647,54 +646,54 @@ class TrafficShaper:
         self.jitter_range = jitter_ms
         self.padding_enabled = padding_enabled
         self.padding_ratio = padding_ratio
-        
+
     def apply_jitter(self) -> None:
         """Apply random delay."""
         import random
         delay_ms = random.randint(self.jitter_range[0], self.jitter_range[1])
         time.sleep(delay_ms / 1000.0)
-        
+
     def add_padding(self, data: bytes) -> bytes:
         """
         Add random padding to data.
-        
+
         Args:
             data: Original data
-            
+
         Returns:
             Padded data with length prefix
         """
         if not self.padding_enabled:
             return data
-            
+
         # Calculate padding size
         padding_size = int(len(data) * self.padding_ratio)
         padding_size = max(padding_size, secrets.randbelow(64) + 16)
-        
+
         # Generate random padding
         padding = secrets.token_bytes(padding_size)
-        
+
         # Prepend length header
         header = struct.pack('>H', len(data))
-        
+
         return header + data + padding
-    
+
     def remove_padding(self, padded_data: bytes) -> bytes:
         """
         Remove padding from data.
-        
+
         Args:
             padded_data: Padded data with length header
-            
+
         Returns:
             Original data without padding
         """
         if not self.padding_enabled:
             return padded_data
-            
+
         # Extract length from header
         original_length = struct.unpack('>H', padded_data[:2])[0]
-        
+
         # Extract original data
         return padded_data[2:2 + original_length]
 
@@ -707,14 +706,14 @@ class TrafficShaper:
 class ObfuscationPipeline:
     """
     Combined obfuscation pipeline with multiple layers.
-    
+
     Applies multiple obfuscation techniques in sequence:
     1. Shadowsocks encryption (optional)
     2. Obfs4 obfuscation
     3. WebSocket fragmentation
     4. Traffic shaping
     """
-    
+
     def __init__(
         self,
         enable_obfs4: bool = True,
@@ -727,7 +726,7 @@ class ObfuscationPipeline:
     ):
         """
         Initialize obfuscation pipeline.
-        
+
         Args:
             enable_obfs4: Enable obfs4 obfuscation
             enable_shadowsocks: Enable Shadowsocks encryption
@@ -738,74 +737,74 @@ class ObfuscationPipeline:
             domain_fronting_provider: CDN provider for domain fronting
         """
         self.enabled_layers = []
-        
+
         # Initialize components
         if enable_shadowsocks and shadowsocks_password:
             self.ss_obfs = ShadowsocksObfs(shadowsocks_password)
             self.enabled_layers.append('shadowsocks')
         else:
             self.ss_obfs = None
-            
+
         if enable_obfs4:
             self.obfs4 = Obfs4Obfuscator()
             self.enabled_layers.append('obfs4')
         else:
             self.obfs4 = None
-            
+
         if enable_fragmentation:
             self.fragmenter = WSFragmenter()
             self.enabled_layers.append('fragmentation')
         else:
             self.fragmenter = None
-            
+
         if enable_traffic_shaping:
             self.shaper = TrafficShaper()
             self.enabled_layers.append('traffic_shaping')
         else:
             self.shaper = None
-            
+
         self.tls_spoof = TLSFingerprintSpoof(browser_profile)
-        
+
         if domain_fronting_provider:
             self.domain_fronting = DomainFronting(domain_fronting_provider)
             self.enabled_layers.append('domain_fronting')
         else:
             self.domain_fronting = None
-            
+
         log.info(
             "Obfuscation pipeline initialized: %s",
             ', '.join(self.enabled_layers) if self.enabled_layers else 'none'
         )
-        
+
     def obfuscate(self, data: bytes) -> list[bytes]:
         """
         Apply full obfuscation pipeline to data.
-        
+
         Args:
             data: Original data
-            
+
         Returns:
             List of obfuscated fragments
         """
         result = data
-        
+
         # Layer 1: Shadowsocks encryption
         if self.ss_obfs:
             result = self.ss_obfs.encrypt(result)
-            
+
         # Layer 2: Obfs4 obfuscation
         if self.obfs4:
             if not self.obfs4._initialized:
                 # Perform handshake
                 self.obfs4.create_client_handshake()
             result = self.obfs4.obfuscate(result)
-            
+
         # Layer 3: Fragmentation
         if self.fragmenter:
             fragments = self.fragmenter.fragment(result)
         else:
             fragments = [result]
-            
+
         # Layer 4: Traffic shaping (padding)
         if self.shaper and self.shaper.padding_enabled:
             shaped_fragments = []
@@ -815,22 +814,22 @@ class ObfuscationPipeline:
                 else:
                     shaped_fragments.append(frag)
             fragments = shaped_fragments
-            
+
         # Apply jitter between fragments
         if self.shaper:
             for i, _ in enumerate(fragments):
                 if i > 0:
                     self.shaper.apply_jitter()
-                    
+
         return fragments
-    
+
     def deobfuscate(self, fragments: list[bytes]) -> bytes:
         """
         Reverse obfuscation pipeline.
-        
+
         Args:
             fragments: Obfuscated fragments
-            
+
         Returns:
             Original data
         """
@@ -839,21 +838,21 @@ class ObfuscationPipeline:
             result = self.fragmenter.reassemble(fragments)
         else:
             result = b''.join(fragments)
-            
+
         # Remove traffic shaping padding
         if self.shaper and self.shaper.padding_enabled:
             result = self.shaper.remove_padding(result)
-            
+
         # Layer 2: Deobfuscate obfs4
         if self.obfs4:
             result = self.obfs4.deobfuscate(result)
-            
+
         # Layer 1: Decrypt Shadowsocks
         if self.ss_obfs:
             result = self.ss_obfs.decrypt(result)
-            
+
         return result
-    
+
     def get_ssl_context(self) -> ssl.SSLContext:
         """Get SSL context with TLS fingerprint spoofing."""
         return self.tls_spoof.create_ssl_context()
@@ -1116,10 +1115,10 @@ class AdaptiveObfuscationPipeline(ObfuscationPipeline):
 class CensorshipDetector:
     """
     Detects various forms of internet censorship.
-    
+
     Monitors connection patterns to identify blocking.
     """
-    
+
     # Known blocking patterns
     BLOCKING_PATTERNS = {
         'tcp_reset': 'TCP RST packets detected',
@@ -1128,7 +1127,7 @@ class CensorshipDetector:
         'timeout': 'Connection times out',
         'deep_packet_inspection': 'Traffic patterns match DPI',
     }
-    
+
     def __init__(self):
         """Initialize detector."""
         self.failure_history: list[dict[str, Any]] = []
@@ -1139,7 +1138,7 @@ class CensorshipDetector:
             'timeout': False,
             'dpi': False,
         }
-        
+
     def record_failure(
         self,
         error_type: str,
@@ -1149,7 +1148,7 @@ class CensorshipDetector:
     ) -> None:
         """
         Record a connection failure.
-        
+
         Args:
             error_type: Type of error
             error_msg: Error message
@@ -1164,14 +1163,14 @@ class CensorshipDetector:
             'domain': domain,
         }
         self.failure_history.append(entry)
-        
+
         # Keep only last 100 failures
         if len(self.failure_history) > 100:
             self.failure_history = self.failure_history[-100:]
-            
+
         # Analyze for patterns
         self._analyze_patterns()
-        
+
     def _analyze_patterns(self) -> None:
         """Analyze failure patterns to detect blocking."""
         now = time.time()
@@ -1179,24 +1178,24 @@ class CensorshipDetector:
             f for f in self.failure_history
             if now - f['timestamp'] < 300  # Last 5 minutes
         ]
-        
+
         if len(recent_failures) < 5:
             return
-            
+
         # Check for TCP reset pattern
         reset_count = sum(
             1 for f in recent_failures
             if 'reset' in f['error_msg'].lower() or 'ECONNRESET' in f['error_msg']
         )
         self.blocking_detected['tcp_reset'] = reset_count > len(recent_failures) * 0.5
-        
+
         # Check for timeout pattern
         timeout_count = sum(
             1 for f in recent_failures
             if 'timeout' in f['error_msg'].lower() or 'timed out' in f['error_msg']
         )
         self.blocking_detected['timeout'] = timeout_count > len(recent_failures) * 0.7
-        
+
         # Check for SNI blocking
         if any(f.get('domain') for f in recent_failures):
             domain_failures: dict[str, int] = {}
@@ -1204,18 +1203,18 @@ class CensorshipDetector:
                 domain = f.get('domain')
                 if domain:
                     domain_failures[domain] = domain_failures.get(domain, 0) + 1
-                    
+
             # If one domain has many more failures, might be SNI blocking
             if domain_failures:
                 max_failures = max(domain_failures.values())
                 self.blocking_detected['sni_blocking'] = (
                     max_failures > len(recent_failures) * 0.6
                 )
-                
+
     def get_recommendation(self) -> str:
         """
         Get recommendation based on detected blocking.
-        
+
         Returns:
             Recommended countermeasure
         """
@@ -1228,7 +1227,7 @@ class CensorshipDetector:
         if self.blocking_detected['dpi']:
             return "Enable full obfuscation pipeline with traffic shaping"
         return "No specific blocking detected"
-    
+
     def is_blocked(self) -> bool:
         """Check if any blocking is detected."""
         return any(self.blocking_detected.values())

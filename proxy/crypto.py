@@ -78,76 +78,71 @@ class CryptoConfig:
     kdf_info: bytes = b"tg-ws-proxy-v1"  # context info for HKDF
 
 
-class KeyWrapError(CryptoError):
-    """Raised when key wrapping fails."""
-    pass
-
-
 class KeyWrapper:
     """
     Key Wrapping for secure key storage.
-    
+
     Uses AES-256-KW (Key Wrap) or AES-GCM for key encryption.
     """
-    
+
     @staticmethod
     def wrap(key: bytes, wrapping_key: bytes) -> bytes:
         """
         Wrap key using AES-256-GCM.
-        
+
         Args:
             key: Key to wrap
             wrapping_key: Key encryption key (KEK)
-            
+
         Returns:
             Wrapped key with nonce and tag
         """
         if len(wrapping_key) != 32:
             raise KeyWrapError("Wrapping key must be 32 bytes")
-        
+
         nonce = secrets.token_bytes(12)
-        
+
         cipher = Cipher(
             algorithms.AES(wrapping_key),
             modes.GCM(nonce),
             backend=default_backend()
         )
         encryptor = cipher.encryptor()
-        
+
         wrapped = encryptor.update(key) + encryptor.finalize()
-        
+
         # Return nonce + tag + wrapped key
         return nonce + encryptor.tag + wrapped
-    
+
     @staticmethod
     def unwrap(wrapped_data: bytes, wrapping_key: bytes) -> bytes:
         """
         Unwrap key using AES-256-GCM.
-        
+
         Args:
             wrapped_data: Wrapped key (nonce + tag + ciphertext)
             wrapping_key: Key encryption key (KEK)
-            
+
         Returns:
             Unwrapped key
         """
         if len(wrapping_key) != 32:
             raise KeyWrapError("Wrapping key must be 32 bytes")
-        
+
         if len(wrapped_data) < 28:  # 12 nonce + 16 tag
             raise KeyWrapError("Wrapped data too short")
-        
+
         nonce = wrapped_data[:12]
         tag = wrapped_data[12:28]
         ciphertext = wrapped_data[28:]
-        
+
         cipher = Cipher(
             algorithms.AES(wrapping_key),
             modes.GCM(nonce, tag),
             backend=default_backend()
         )
         decryptor = cipher.decryptor()
-        
+
         try:
             key = decryptor.update(ciphertext) + decryptor.finalize()
             return key

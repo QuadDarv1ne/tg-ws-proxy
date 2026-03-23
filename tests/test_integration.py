@@ -418,22 +418,26 @@ class TestPluggableTransportsIntegration:
     def test_websocket_fragmentation(self):
         """Test WebSocket fragmentation."""
         from proxy.pluggable_transports import WSFragmenter
-        
+
         fragmenter = WSFragmenter()
-        
+
         # Create large message
         data = b'X' * 1000
-        
+
         # Fragment
         fragments = fragmenter.fragment(data)
-        
-        # All fragments should be within size limits
-        for frag in fragments:
-            assert 64 <= len(frag) <= 256
-        
+
+        # All fragments except possibly the last should be within size limits
+        for i, frag in enumerate(fragments):
+            if i < len(fragments) - 1:
+                assert 64 <= len(frag) <= 256
+            else:
+                # Last fragment can be smaller
+                assert len(frag) <= 256
+
         # Reassemble
         reassembled = fragmenter.reassemble(fragments)
-        
+
         assert reassembled == data
 
     def test_shadowsocks_encryption(self):
