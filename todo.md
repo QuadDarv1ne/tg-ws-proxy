@@ -548,7 +548,7 @@
 
 ---
 
-## 📊 Статус (23.03.2026 00:00)
+## 📊 Статус (23.03.2026 12:00)
 
 ```
 Модулей: 51 в proxy/ ✅
@@ -563,7 +563,7 @@ Version: v2.58.0 (Alerts Manager ✅, Connection Inspector ✅, Auto Port ✅, D
 
 **Актуальная версия:** v2.58.0 (dev) — ✅ synced
 **Следующая версия:** v2.59.0 (Coverage Improvement + Bug Fixes)
-**Последнее обновление:** 23.03.2026 (00:00)
+**Последнее обновление:** 23.03.2026 (12:00)
 
 ### 🔄 Последние улучшения (v2.58.0)
 - ✅ **Alerts Manager** — система оповещений и мониторинга
@@ -586,9 +586,25 @@ Version: v2.58.0 (Alerts Manager ✅, Connection Inspector ✅, Auto Port ✅, D
   - Логирование выбранного порта
 
 - ✅ **DNS-over-HTTPS (DoH)** — анти-DNS-poisoning
-  - `proxy/doh_resolver.py` — асинхронный DoH resolver
-  - Интеграция с dns_resolver.py
-  - Обход блокировок DNS
+  - `proxy/doh_resolver.py` — асинхронный DoH resolver (764 строки)
+
+  **DoH Providers:**
+  • Cloudflare (1.1.1.1) — priority 1
+  • Google (8.8.8.8) — priority 2
+  • Quad9 (9.9.9.9) — priority 3
+  • Automatic fallback on failure
+
+  **Features:**
+  • Response caching with TTL
+  • DNSSEC validation support
+  • Provider scoring (success rate + latency)
+  • Auto-selection by score (lower = better)
+  • Методы: resolve(), cache_lookup(), select_best_provider()
+
+  **Integration:**
+  • Интеграция с dns_resolver.py
+  • Конфигурация: `dns.use_async_dns`, `dns.timeout`
+  • Обход блокировок DNS и DNS-poisoning
 
 - ✅ **Pluggable Transports Integration** — слой интеграции
   - `proxy/pluggable_transports_integration.py` — integration layer
@@ -603,6 +619,11 @@ Version: v2.58.0 (Alerts Manager ✅, Connection Inspector ✅, Auto Port ✅, D
   - `proxy/config_backup.py` — backup/restore конфига
   - Version history с timestamps
   - Auto-backup при изменениях
+
+- ✅ **Project Cleanup** — очистка от временных файлов
+  - `.gitignore` — расширен игнорированием
+  - `mobile-app/android/app/src/main/.venv/` — Python venv
+  - `tests/__pycache__/`, `tests/*.pyc` — test artifacts
 
 ---
 
@@ -674,10 +695,25 @@ Version: v2.58.0 (Alerts Manager ✅, Connection Inspector ✅, Auto Port ✅, D
 
 ### DNS-over-HTTPS
 - ✅ **DoH Resolver** — анти-DNS-poisoning
-  - `proxy/doh_resolver.py` — асинхронный resolver
-  - Интеграция с `dns_resolver.py`
-  - Cloudflare/Google DoH endpoints
-  - Конфигурация: `dns.use_async_dns`, `dns.timeout`
+  - `proxy/doh_resolver.py` — новый модуль (764 строки)
+
+  **DoH Providers:**
+  • Cloudflare (1.1.1.1) — priority 1
+  • Google (8.8.8.8) — priority 2  
+  • Quad9 (9.9.9.9) — priority 3
+  • Automatic fallback on failure
+
+  **Features:**
+  • Response caching with TTL
+  • DNSSEC validation support
+  • Provider scoring (success rate + latency)
+  • Auto-selection by score (lower = better)
+  • Методы: resolve(), cache_lookup(), select_best_provider()
+
+  **Integration:**
+  • Интеграция с `dns_resolver.py`
+  • Конфигурация: `dns.use_async_dns`, `dns.timeout`
+  • Обход блокировок DNS и DNS-poisoning
 
 ### Pluggable Transports
 - ✅ **Integration Layer** — комбинация техник
@@ -698,6 +734,13 @@ Version: v2.58.0 (Alerts Manager ✅, Connection Inspector ✅, Auto Port ✅, D
   - `proxy/crypto.py` — exception classes
   - CryptoError (base)
   - DecryptError, EncryptError, KeyError
+
+### Project Cleanup
+- ✅ **Очистка проекта** — игнорирование временных файлов
+  - `.gitignore` — расширен правилами
+  - `mobile-app/android/app/src/main/.venv/` — Python venv
+  - `tests/__pycache__/`, `tests/*.pyc` — test artifacts
+  - Сохранена только необходимая Android конфигурация
 
 ---
 
