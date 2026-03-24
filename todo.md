@@ -412,7 +412,15 @@
   • Metrics tracking per hop
 
 ### Производительность
-- [ ] **QUIC/UDP Research** — для звонков и медиа через прокси (v3.0.0)
+- ✅ **QUIC/UDP Research** — для звонков и медиа через прокси (v2.59.0)
+  - ✅ `quic_transport.py` — QUIC/HTTP/3 transport (477 строк)
+  - ✅ `socks5_udp.py` — SOCKS5 UDP relay (588 строк)
+  - ✅ Документация: `docs/ANTI_CENSORSHIP.md` (разделы 1.3, 2)
+  - ✅ Тесты: `test_new_transports.py` (QuicConfig, check_quic_support)
+  - ✅ aioquic integration (опционально)
+  - ✅ HTTP/2 fallback при отсутствии QUIC
+  - ✅ 0-RTT handshakes, connection migration
+  - ✅ UDP relay для Telegram звонков
 
 ### Безопасность
 - ✅ **Аудит зависимостей** — `pip-audit` интеграция в CI
