@@ -548,24 +548,44 @@
 
 ---
 
-## 📊 Статус (24.03.2026 00:00)
+## 📊 Статус (24.03.2026 12:00)
 
 ```
 Модулей: 63 в proxy/ ✅
-Тестов: 43 файлов в tests/ ✅
-Tests: 1062+ passed (новые транспорты добавлены) ✅
-Coverage: ~46% (цель >80%)
+Тестов: 44 файлов в tests/ ✅
+Tests: 1145 passed, 8 skipped ✅
+Coverage: 47% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.59.0 (Enhanced Transports ✅, Anti-Censorship ✅)
+Version: v2.60.0-dev (Coverage Improvement ✅)
 ```
 
-**Актуальная версия:** v2.59.0 (dev/main) — ✅ synced
+**Актуальная версия:** v2.60.0-dev (dev/main) — ✅ synced
 **Следующая версия:** v2.60.0 (Coverage Improvement + Integration Tests)
-**Последнее обновление:** 24.03.2026 (00:00)
+**Последнее обновление:** 24.03.2026 (12:00)
 
-### 🔄 Последние улучшения (v2.59.0: Enhanced Transports & Anti-Censorship)
+### 🔄 Последние улучшения (v2.60.0-dev: Coverage Improvement)
+- ✅ **websocket_client.py тесты** — улучшение покрытия с 56% до 64%
+  - test_websocket_client.py: +239 строк тестов
+  - TestWebSocketBuildFrame: 6 тестов (_build_frame метод)
+  - TestWebSocketReadFrame: 5 тестов (_read_frame метод)
+  - TestWebSocketCompression: 3 теста (compression logic)
+  - Покрытие: 272 stmts, 94 missed, 64% coverage
+
+- ✅ **meek_transport.py тесты** — базовое тестирование
+  - test_new_transports.py: +94 строки тестов
+  - TestMeekTransportDetailed: 6 тестов
+  - Тестирование MeekConfig customization
+  - Тестирование MeekSession initialization
+  - Тестирование session ID uniqueness
+
+- ✅ **Общее улучшение тестов** — 1139 → 1145 тестов
+  - Добавлено: 6 новых тестов
+  - Все тесты проходят (1145 passed, 8 skipped)
+  - Покрытие: 46% → 47% (+1%)
+
+### 🔄 Предыдущие улучшения (v2.59.0: Enhanced Transports)
 - ✅ **8 новых транспортов** — расширенные возможности обфускации
   - meek_transport.py: domain fronting через CDN (607 строк)
   - mux_transport.py: мультиплексирование соединений (553 строки)
