@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import ssl
-from typing import Any
 
 log = logging.getLogger('tg-ws-reality')
 

@@ -18,7 +18,6 @@ import logging
 import struct
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 log = logging.getLogger('tg-ws-mux')
 

@@ -13,10 +13,7 @@ Author: Dupley Maxim Igorevich
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import uuid
-from typing import Any
 
 log = logging.getLogger('tg-ws-tuic')
 

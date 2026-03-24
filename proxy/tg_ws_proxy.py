@@ -1458,7 +1458,7 @@ async def _handle_udp_associate(
         label: Client label for logging
         stats: Statistics tracker
     """
-    from .socks5_udp import UdpRelay, handle_udp_associate
+    from .socks5_udp import UdpRelay
 
     peer = writer.get_extra_info('peername')
     client_addr = peer if peer else ('127.0.0.1', 0)
@@ -1703,13 +1703,13 @@ async def _handle_client(
         # -- SOCKS5 request --
         req = await asyncio.wait_for(reader.readexactly(4), timeout=10)
         _ver, cmd, _rsv, atyp = req
-        
+
         # Handle UDP ASSOCIATE command (for Telegram calls)
         if cmd == 0x03:  # UDP_ASSOCIATE
             log.info("%s UDP ASSOCIATE request", label)
             await _handle_udp_associate(reader, writer, label, stats)
             return
-        
+
         # Handle CONNECT command
         if cmd != 1:
             log.warning("%s Unsupported SOCKS5 command: %d", label, cmd)
@@ -2517,7 +2517,7 @@ def main() -> None:
                     help='Auth username (default: user)')
     ap.add_argument('--auth-password', type=str, default='pass',
                     help='Auth password (default: pass)')
-    
+
     # Transport selection
     ap.add_argument('--transport', type=str, default='auto',
                     choices=['auto', 'websocket', 'http2', 'quic', 'meek', 'shadowsocks', 'tuic', 'reality'],
@@ -2528,18 +2528,18 @@ def main() -> None:
                     help='Transport server port (default: 443)')
     ap.add_argument('--transport-path', type=str, default='/api',
                     help='Transport path for HTTP/2 (default: /api)')
-    
+
     # Meek settings
     ap.add_argument('--meek-cdn', type=str, default='cloudflare',
                     choices=['cloudflare', 'google', 'amazon', 'microsoft'],
                     help='CDN for Meek transport (default: cloudflare)')
-    
+
     # Shadowsocks settings
     ap.add_argument('--ss-method', type=str, default='chacha20-ietf-poly1305',
                     help='Shadowsocks encryption method')
     ap.add_argument('--ss-password', type=str, default='',
                     help='Shadowsocks password')
-    
+
     # Reality settings
     ap.add_argument('--reality-pubkey', type=str, default='',
                     help='Reality server public key')
@@ -2547,13 +2547,13 @@ def main() -> None:
                     help='Reality server short ID')
     ap.add_argument('--reality-sni', type=str, default='www.microsoft.com',
                     help='Reality SNI server name')
-    
+
     # Advanced settings
     ap.add_argument('--auto-select', action='store_true', default=True,
                     help='Auto-select best transport by latency')
     ap.add_argument('--health-interval', type=float, default=30.0,
                     help='Health check interval in seconds (default: 30)')
-    
+
     ap.add_argument('-v', '--verbose', action='store_true',
                     help='Debug logging')
     args = ap.parse_args()

@@ -10,9 +10,8 @@ Usage:
 import argparse
 import asyncio
 import logging
-import sys
 
-from .transport_manager import TransportManager, TransportConfig, TransportType
+from .transport_manager import TransportConfig, TransportManager, TransportType
 
 log = logging.getLogger('tg-ws-proxy-run')
 
@@ -34,7 +33,7 @@ def parse_transport_type(name: str) -> TransportType:
 
 async def run_proxy_with_transport(args: argparse.Namespace) -> None:
     """Run proxy with enhanced transport support."""
-    
+
     # Create transport configuration
     config = TransportConfig(
         transport_type=parse_transport_type(args.transport),
@@ -50,10 +49,10 @@ async def run_proxy_with_transport(args: argparse.Namespace) -> None:
         auto_select=args.auto_select,
         health_check_interval=args.health_interval,
     )
-    
+
     # Create transport manager
     manager = TransportManager(config)
-    
+
     log.info("=" * 60)
     log.info("  TG WS Proxy - Enhanced Transport")
     log.info("=" * 60)
@@ -63,16 +62,16 @@ async def run_proxy_with_transport(args: argparse.Namespace) -> None:
     if args.transport == 'auto':
         log.info("  Auto-select: ENABLED")
     log.info("=" * 60)
-    
+
     # Connect transport
     log.info("Connecting...")
     if not await manager.start():
         log.error("Failed to connect with any transport")
         return
-    
+
     log.info("Connected! Proxy ready.")
     log.info("Configure Telegram: SOCKS5 127.0.0.1:%d", args.port)
-    
+
     # Main loop - forward data between SOCKS5 clients and transport
     try:
         await run_forward_loop(manager, args.port)
@@ -80,7 +79,7 @@ async def run_proxy_with_transport(args: argparse.Namespace) -> None:
         log.info("Shutting down...")
     finally:
         await manager.stop()
-    
+
     # Print stats
     stats = manager.get_stats()
     log.info("Final stats:")
@@ -100,7 +99,7 @@ async def run_forward_loop(manager: TransportManager, listen_port: int) -> None:
     # For now, just keep running and monitoring transport
     while True:
         await asyncio.sleep(1)
-        
+
         # Print periodic stats
         stats = manager.get_stats()
         if stats['bytes_sent'] > 0 or stats['bytes_received'] > 0:
@@ -115,13 +114,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description='TG WS Proxy - Enhanced Transport Runner'
     )
-    
+
     ap.add_argument('--port', type=int, default=1080,
                     help='Local SOCKS5 listen port (default: 1080)')
-    
+
     # Transport selection
     ap.add_argument('--transport', type=str, default='auto',
-                    choices=['auto', 'websocket', 'http2', 'quic', 'meek', 
+                    choices=['auto', 'websocket', 'http2', 'quic', 'meek',
                              'shadowsocks', 'tuic', 'reality'],
                     help='Transport protocol (default: auto)')
     ap.add_argument('--transport-host', type=str, default=None,
@@ -130,18 +129,18 @@ def main() -> None:
                     help='Transport server port (default: 443)')
     ap.add_argument('--transport-path', type=str, default='/api',
                     help='Transport path for HTTP/2 (default: /api)')
-    
+
     # Meek settings
     ap.add_argument('--meek-cdn', type=str, default='cloudflare',
                     choices=['cloudflare', 'google', 'amazon', 'microsoft'],
                     help='CDN for Meek transport')
-    
+
     # Shadowsocks settings
     ap.add_argument('--ss-method', type=str, default='chacha20-ietf-poly1305',
                     help='Shadowsocks encryption method')
     ap.add_argument('--ss-password', type=str, default='',
                     help='Shadowsocks password')
-    
+
     # Reality settings
     ap.add_argument('--reality-pubkey', type=str, default='',
                     help='Reality server public key')
@@ -149,25 +148,25 @@ def main() -> None:
                     help='Reality server short ID')
     ap.add_argument('--reality-sni', type=str, default='www.microsoft.com',
                     help='Reality SNI server name')
-    
+
     # Advanced
     ap.add_argument('--auto-select', action='store_true', default=True,
                     help='Auto-select best transport')
     ap.add_argument('--health-interval', type=float, default=30.0,
                     help='Health check interval (default: 30s)')
-    
+
     ap.add_argument('-v', '--verbose', action='store_true',
                     help='Verbose logging')
-    
+
     args = ap.parse_args()
-    
+
     # Configure logging
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format='%(asctime)s  %(levelname)-5s  %(message)s',
         datefmt='%H:%M:%S',
     )
-    
+
     # Run
     try:
         asyncio.run(run_proxy_with_transport(args))

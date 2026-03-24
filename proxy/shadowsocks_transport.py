@@ -14,11 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import hmac
 import logging
-import os
 import struct
-from typing import Any
 
 log = logging.getLogger('tg-ws-ss')
 

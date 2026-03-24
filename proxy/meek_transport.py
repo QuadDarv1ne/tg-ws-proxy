@@ -15,15 +15,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import logging
 import os
 import random
 import ssl
-import struct
 import time
 from dataclasses import dataclass, field
-from typing import Callable
 
 log = logging.getLogger('tg-ws-meek')
 

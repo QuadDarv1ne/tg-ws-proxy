@@ -21,7 +21,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Protocol
+from typing import Protocol
 
 log = logging.getLogger('tg-ws-transport-manager')
 

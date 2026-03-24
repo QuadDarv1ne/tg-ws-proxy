@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -131,10 +130,6 @@ class Kyber768:
         """
         # Verify and derive shared secret (simplified)
         # Real Kyber uses polynomial operations and error correction
-
-        expected_cipher = hashlib.sha3_512(
-            secret_key + ciphertext.ciphertext + b'verify'
-        ).digest()
 
         # In real implementation, would verify ciphertext validity
         # and recover message with error correction
@@ -324,7 +319,7 @@ def check_pq_availability() -> dict[str, Any]:
     # Check for liboqs (production PQ library)
     liboqs_available = False
     try:
-        import oqs  # type: ignore
+        import oqs  # noqa: F401 # type: ignore
         liboqs_available = True
     except ImportError:
         pass

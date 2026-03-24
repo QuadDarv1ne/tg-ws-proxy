@@ -865,7 +865,7 @@ class KeyRotator:
         Uses HKDF for secure key derivation with forward secrecy.
         """
         # Create unique info for this key index
-        info = f'tg-ws-proxy-key-{index}'.encode('utf-8')
+        info = f'tg-ws-proxy-key-{index}'.encode()
 
         hkdf = HKDF(
             algorithm=hashes.SHA256(),

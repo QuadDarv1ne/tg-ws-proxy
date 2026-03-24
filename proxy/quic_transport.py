@@ -21,8 +21,6 @@ import logging
 import os
 import socket
 import ssl
-import struct
-import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -31,8 +29,7 @@ log = logging.getLogger('tg-ws-quic')
 # Try to import aioquic for full QUIC support
 try:
     from aioquic.asyncio.client import connect as aioquic_connect
-    from aioquic.h3.connection import H3_ALPN
-    from aioquic.h3.events import H3Event, HeadersReceived, DataReceived
+    from aioquic.h3.events import HeadersReceived
     from aioquic.quic.configuration import QuicConfiguration
     HAS_AIOQUIC = True
 except ImportError:

@@ -27,9 +27,6 @@ classifiers = [
     "Topic :: Internet :: Proxy Servers",
 ]
 
-# Copyright notice
-copyright = "© 2026 Dupley Maxim Igorevich. All rights reserved."
-
 dependencies = [
     "cryptography>=46.0.5",
 ]

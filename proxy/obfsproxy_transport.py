@@ -14,11 +14,9 @@ Author: Dupley Maxim Igorevich
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import logging
-import os
 import secrets
 import struct
 from dataclasses import dataclass, field
@@ -40,19 +38,19 @@ class ObfsProtocol(Enum):
 class ObfsConfig:
     """Obfuscation configuration."""
     protocol: ObfsProtocol = ObfsProtocol.OBFSC4
-    
+
     # obfs4 settings
     cert: bytes = field(default_factory=lambda: secrets.token_bytes(32))
     seed: bytes = field(default_factory=lambda: secrets.token_bytes(32))
-    
+
     # ScrambleSuit settings
     password: str = ''
     interval_min: int = 50
     interval_max: int = 300
-    
+
     # Meek-lite settings
     front_domain: str = 'www.google.com'
-    
+
     # Common settings
     add_padding: bool = True
     timing_jitter: bool = True
@@ -94,12 +92,12 @@ class Obfs4Obfuscator:
         """XOR data with keystream generated from key."""
         keystream = b''
         block_idx = counter
-        
+
         while len(keystream) < len(data):
             block = hashlib.sha256(key + struct.pack('>I', block_idx)).digest()
             keystream += block
             block_idx += 1
-        
+
         keystream = keystream[:len(data)]
         return bytes(a ^ b for a, b in zip(data, keystream))
 
@@ -294,7 +292,7 @@ class MeekLiteObfuscator:
             f'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n'
             f'X-Forwarded-Host: {self.front_domain}\r\n'
             f'\r\n'
-        ).encode('utf-8')
+        ).encode()
 
         return header + data
 
