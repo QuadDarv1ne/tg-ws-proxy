@@ -6,6 +6,32 @@
 
 ---
 
+## ✅ Выполнено (v2.60.0: Coverage Improvement & Code Quality)
+
+### Тестирование
+- ✅ **Coverage Improvement** — 41 новый тест (+853 строки)
+  - websocket_client.py: +239 строк (56% → 64%)
+  - socks5_udp.py: +376 строк (27 тестов)
+  - reality_transport.py: +144 строки (8 тестов)
+  - meek_transport.py: +94 строки (6 тестов)
+
+### Code Quality
+- ✅ **Ruff: 0 ошибок** — code quality fixes
+  - Удалены unused imports и unused variables
+  - Исправлены whitespace errors
+  - 15 файлов исправлено
+
+- ✅ **Mypy: 0 ошибок** — все типы проверены
+
+### Release
+- ✅ **v2.60.0 Released** — 2026-03-24
+  - git tag: v2.60.0
+  - CHANGELOG.md обновлён
+  - 1180 тестов passed
+  - Coverage: 47%
+
+---
+
 ## ✅ Выполнено (v2.48.1: build & compatibility)
 
 ### Android & Build System
@@ -562,7 +588,7 @@
 
 ---
 
-## 📊 Статус (24.03.2026 18:00)
+## 📊 Статус (24.03.2026 20:00)
 
 ```
 Модулей: 63 в proxy/ ✅
@@ -572,14 +598,14 @@ Coverage: 47% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.60.0-dev (Coverage Improvement ✅)
+Version: v2.60.0 (RELEASED ✅)
 ```
 
-**Актуальная версия:** v2.60.0-dev (dev/main) — ✅ synced
-**Следующая версия:** v2.60.0 (Coverage Improvement + Integration Tests)
-**Последнее обновление:** 24.03.2026 (12:00)
+**Актуальная версия:** v2.60.0 (dev/main) — ✅ synced
+**Следующая версия:** v2.61.0 (Coverage Improvement + Integration Tests)
+**Последнее обновление:** 24.03.2026 (20:00)
 
-### 🔄 Последние улучшения (v2.60.0-dev: Coverage Improvement)
+### 🔄 Последние улучшения (v2.60.0: Coverage Improvement & Code Quality)
 - ✅ **websocket_client.py тесты** — улучшение покрытия с 56% до 64%
   - test_websocket_client.py: +239 строк тестов
   - TestWebSocketBuildFrame: 6 тестов (_build_frame метод)
