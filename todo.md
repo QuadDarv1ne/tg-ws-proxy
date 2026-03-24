@@ -538,10 +538,12 @@
   - ✅ socks5_handler.py: 13 тестов (78% coverage) — negotiate, read_request, send_reply
   - ✅ websocket_client.py: 64% coverage — улучшено с 56% (+239 строк тестов)
   - ✅ meek_transport.py: 6 тестов — MeekConfig, MeekSession тесты
+  - ✅ socks5_udp.py: 27 тестов — UdpSession, UdpRelay тесты
+  - ✅ reality_transport.py: 8 тестов — конфигурация, статистика
   - [ ] Integration Tests — сквозные тесты для основных сценариев
   - [ ] tg_ws_proxy.py: 29% coverage — можно улучшить
   - [ ] web_dashboard.py: 26% coverage — можно улучшить
-  - [ ] Новые транспорты: quic, mux, shadowsocks, tuic, reality — низкое покрытие
+  - [ ] Новые транспорты: quic, mux, shadowsocks, tuic — низкое покрытие
 
 ### Мониторинг
 - ✅ **Real-time Dashboard** — улучшение веб-панели с live графиками
@@ -552,12 +554,12 @@
 
 ---
 
-## 📊 Статус (24.03.2026 12:00)
+## 📊 Статус (24.03.2026 18:00)
 
 ```
 Модулей: 63 в proxy/ ✅
-Тестов: 44 файлов в tests/ ✅
-Tests: 1145 passed, 8 skipped ✅
+Тестов: 45 файлов в tests/ ✅
+Tests: 1180 passed, 8 skipped ✅
 Coverage: 47% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
@@ -584,10 +586,30 @@ Version: v2.60.0-dev (Coverage Improvement ✅)
   - Тестирование MeekSession initialization
   - Тестирование session ID uniqueness
 
-- ✅ **Общее улучшение тестов** — 1139 → 1145 тестов
-  - Добавлено: 6 новых тестов
-  - Все тесты проходят (1145 passed, 8 skipped)
-  - Покрытие: 46% → 47% (+1%)
+- ✅ **socks5_udp.py тесты** — полное тестирование dataclass и init
+  - test_socks5_udp.py: +376 строк тестов
+  - TestUdpSession: 5 тестов (session creation, stats, timestamps)
+  - TestUdpRelayInit: 3 теста (initialization, constants)
+  - TestUdpRelaySessions: 4 теста (session management, cleanup)
+  - TestUdpRelayStats: 3 теста (statistics tracking)
+  - TestUdpRelayRunning: 2 теста (running state)
+  - TestUdpRelaySockets: 3 теста (socket management)
+  - TestUdpRelayOnPacketCallback: 3 теста (callback handling)
+  - TestUdpRelayEdgeCases: 4 теста (edge cases, limits)
+  - Всего: 27 тестов
+
+- ✅ **reality_transport.py тесты** — тестирование конфигурации
+  - test_new_transports.py: +144 строки тестов
+  - TestRealityTransport: 8 тестов
+  - Тестирование конфигурации (defaults, custom)
+  - Тестирование статистики (initial, update)
+  - Тестирование SNI server name variants (5 вариантов)
+  - Тестирование send/recv/close когда не подключен
+
+- ✅ **Общее улучшение тестов** — 1139 → 1180 тестов
+  - Добавлено: 41 новый тест
+  - Все тесты проходят (1180 passed, 8 skipped)
+  - Покрытие: 46% → 47% (стабильно)
 
 ### 🔄 Предыдущие улучшения (v2.59.0: Enhanced Transports)
 - ✅ **8 новых транспортов** — расширенные возможности обфускации
