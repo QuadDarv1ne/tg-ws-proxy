@@ -424,6 +424,100 @@ class TestMuxConnectionPool:
 
 
 # =============================================================================
+# Meek Transport Tests
+# =============================================================================
+
+
+class TestMeekTransportDetailed:
+    """Detailed tests for MeekTransport."""
+
+    def test_meek_config_customization(self):
+        """Test MeekConfig customization."""
+        from proxy.meek_transport import MeekConfig
+
+        config = MeekConfig(
+            front_domains=['cdn.example.com'],
+            bridge_host='bridge.example.com',
+            bridge_port=8443,
+            poll_interval=0.5,
+            add_random_padding=False
+        )
+
+        assert config.front_domains == ['cdn.example.com']
+        assert config.bridge_host == 'bridge.example.com'
+        assert config.bridge_port == 8443
+        assert config.poll_interval == 0.5
+        assert config.add_random_padding is False
+
+    def test_meek_session_initialization(self):
+        """Test MeekSession initialization."""
+        from proxy.meek_transport import MeekConfig, MeekSession
+
+        config = MeekConfig(bridge_host='test.com')
+        session = MeekSession(config)
+
+        assert session.config == config
+        assert len(session.session_id) == 12
+        assert session._connected is False
+        assert session.bytes_sent == 0
+        assert session.bytes_received == 0
+
+    def test_meek_session_id_uniqueness(self):
+        """Test that session IDs are unique."""
+        from proxy.meek_transport import MeekConfig, MeekSession
+
+        config = MeekConfig(bridge_host='test.com')
+        session1 = MeekSession(config)
+        session2 = MeekSession(config)
+
+        assert session1.session_id != session2.session_id
+
+    def test_meek_config_defaults(self):
+        """Test MeekConfig default values."""
+        from proxy.meek_transport import MeekConfig
+
+        config = MeekConfig()
+
+        assert len(config.front_domains) > 0
+        assert 'www.google.com' in config.front_domains
+        assert config.bridge_port == 443
+        assert config.cdn_path == '/api/meek'
+        assert config.poll_interval == 0.1
+        assert config.max_poll_size == 65536
+        assert config.request_timeout == 30.0
+        assert config.add_random_padding is True
+        assert config.padding_min == 100
+        assert config.padding_max == 500
+        assert config.tls_verify is False
+        assert config.session_duration == 300.0
+        assert config.reconnect_delay == 5.0
+
+    def test_meek_session_stats(self):
+        """Test MeekSession statistics tracking."""
+        from proxy.meek_transport import MeekConfig, MeekSession
+
+        config = MeekConfig(bridge_host='test.com')
+        session = MeekSession(config)
+
+        # Initial stats
+        assert session.bytes_sent == 0
+        assert session.bytes_received == 0
+        assert session.requests_made == 0
+        assert session.bytes_overhead == 0
+
+    def test_meek_config_sni_override(self):
+        """Test SNI override configuration."""
+        from proxy.meek_transport import MeekConfig
+
+        config = MeekConfig(
+            bridge_host='test.com',
+            tls_sni_override='custom-sni.com'
+        )
+
+        assert config.tls_sni_override == 'custom-sni.com'
+
+
+# =============================================================================
 # Integration Tests
 # =============================================================================
 
