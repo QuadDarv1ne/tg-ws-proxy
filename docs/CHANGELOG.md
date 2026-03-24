@@ -2,7 +2,63 @@
 
 Все изменения проекта TG WS Proxy.
 
-## [v2.57.0] - 2026-03-23
+## [v2.60.0] - 2026-03-24
+
+### Добавлено
+- **Тесты websocket_client.py** — улучшение покрытия с 56% до 64%
+  - TestWebSocketBuildFrame: 6 тестов (_build_frame метод)
+  - TestWebSocketReadFrame: 5 тестов (_read_frame метод)
+  - TestWebSocketCompression: 3 теста (compression logic)
+  - +239 строк тестов
+
+- **Тесты meek_transport.py** — базовое тестирование
+  - TestMeekTransportDetailed: 6 тестов
+  - Тестирование MeekConfig customization
+  - Тестирование MeekSession initialization
+  - +94 строки тестов
+
+- **Тесты socks5_udp.py** — полное тестирование
+  - TestUdpSession: 5 тестов
+  - TestUdpRelayInit: 3 теста
+  - TestUdpRelaySessions: 4 теста
+  - TestUdpRelayStats: 3 теста
+  - TestUdpRelayRunning: 2 теста
+  - TestUdpRelaySockets: 3 теста
+  - TestUdpRelayOnPacketCallback: 3 теста
+  - TestUdpRelayEdgeCases: 4 теста
+  - Всего: 27 тестов, +376 строк
+
+- **Тесты reality_transport.py** — тестирование конфигурации
+  - TestRealityTransport: 8 тестов
+  - Тестирование конфигурации (defaults, custom)
+  - Тестирование статистики (initial, update)
+  - Тестирование SNI server name variants
+  - +144 строки тестов
+
+- **QUIC/UDP Research** — завершено
+  - quic_transport.py: QUIC/HTTP/3 transport (477 строк)
+  - socks5_udp.py: SOCKS5 UDP relay (588 строк)
+  - Документация: ANTI_CENSORSHIP.md
+  - aioquic integration, HTTP/2 fallback
+
+### Изменено
+- **Ruff code quality fixes** — 0 ошибок
+  - Удалены unused imports и unused variables
+  - Исправлены whitespace errors
+  - 15 файлов исправлено, 40 insertions, 68 deletions
+
+- **pyproject.toml** — удалён invalid copyright property
+
+### Итого
+- **Тестов:** 1180 passed, 8 skipped
+- **Coverage:** 47% (цель >80%)
+- **Ruff:** 0 ошибок
+- **Mypy:** 0 ошибок
+
+## [v2.59.0] - 2026-03-23
+
+### Добавлено
+- **8 новых транспортов** — расширенные возможности обфускации
 
 ### Добавлено
 - **Gaming Console Proxy** — поддержка игровых консолей

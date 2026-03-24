@@ -29,7 +29,6 @@ log = logging.getLogger('tg-ws-quic')
 # Try to import aioquic for full QUIC support
 try:
     from aioquic.asyncio.client import connect as aioquic_connect
-    from aioquic.h3.events import HeadersReceived
     from aioquic.quic.configuration import QuicConfiguration
     HAS_AIOQUIC = True
 except ImportError:

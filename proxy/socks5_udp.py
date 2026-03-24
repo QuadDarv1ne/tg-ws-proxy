@@ -314,7 +314,6 @@ class UdpRelayProtocol(asyncio.DatagramProtocol):
 
         # SOCKS5 UDP header format:
         # RSV (2 bytes) | FRAG (1 byte) | ATYP (1 byte) | DST.ADDR | DST.PORT | DATA
-        rsv = data[:2]
         frag = data[2]
         atyp = data[3]
 
