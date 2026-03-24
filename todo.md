@@ -548,64 +548,54 @@
 
 ---
 
-## 📊 Статус (23.03.2026 18:00)
+## 📊 Статус (24.03.2026 00:00)
 
 ```
-Модулей: 51 в proxy/ ✅
-Тестов: 41 файлов в tests/ ✅
-Tests: 1062 passed, 7 skipped ✅
+Модулей: 63 в proxy/ ✅
+Тестов: 43 файлов в tests/ ✅
+Tests: 1062+ passed (новые транспорты добавлены) ✅
 Coverage: ~46% (цель >80%)
 Ruff: 0 ошибок ✅
 Mypy: 0 ошибок ✅
 RuntimeWarnings: 0 ✅
-Version: v2.58.1 (Code Quality ✅, Bug Fixes ✅, Tests ✅)
+Version: v2.59.0 (Enhanced Transports ✅, Anti-Censorship ✅)
 ```
 
-**Актуальная версия:** v2.58.1 (dev) — ✅ synced
-**Следующая версия:** v2.59.0 (Coverage Improvement + New Features)
-**Последнее обновление:** 23.03.2026 (18:00)
+**Актуальная версия:** v2.59.0 (dev/main) — ✅ synced
+**Следующая версия:** v2.60.0 (Coverage Improvement + Integration Tests)
+**Последнее обновление:** 24.03.2026 (00:00)
 
-### 🔄 Последние улучшения (v2.58.1: Code Quality)
-- ✅ **Ruff Code Quality** — все ошибки исправлены (177 ошибок → 0)
-  - B007: unused loop control variable → исправлено в bridge_relay.py, metrics_history.py
-  - B023: function uses loop variable → исправлено в connection_pool.py
-  - F841: unused variables → исправлено в diagnostics_advanced.py, rate_limiter.py
-  - F401: unused imports → исправлено в proxy_chain.py (noqa comment)
-  - F811: redefined unused → исправлено в crypto.py (KeyWrapError дубликат)
-  - W293/W291: whitespace → автоматически исправлено (177 fixes)
+### 🔄 Последние улучшения (v2.59.0: Enhanced Transports & Anti-Censorship)
+- ✅ **8 новых транспортов** — расширенные возможности обфускации
+  - meek_transport.py: domain fronting через CDN (607 строк)
+  - mux_transport.py: мультиплексирование соединений (553 строки)
+  - obfsproxy_transport.py: Obfsproxy-совместимая обфускация (466 строк)
+  - quic_transport.py: UDP-based transport (476 строк)
+  - reality_transport.py: VLESS-Reality совместимый (165 строк)
+  - shadowsocks_transport.py: Shadowsocks encryption (167 строк)
+  - tuic_transport.py: UDP-based proxy protocol (156 строк)
+  - socks5_udp.py: UDP relay через SOCKS5 (587 строк)
 
-- ✅ **Mypy Type Checking** — все типы проверены
-  - 0 ошибок типизации
-  - Все модули проходят проверку
+- ✅ **Transport Manager** — единый интерфейс для транспортов
+  - transport_manager.py: dynamic selection, health checks, load balancing (649 строк)
 
-- ✅ **Test Fixes** — все тесты исправлены (1062 passed)
-  - test_doh_resolver.py: test_enable_disable_provider (метод переименован)
-  - test_integration.py: test_websocket_fragmentation (last fragment может быть < 64 bytes)
-  - test_tg_ws_proxy.py: test_resolve_domain_cached_with_cache (mock getaddrinfo)
+- ✅ **Web Transport UI** — веб-интерфейс управления
+  - web_transport_ui.py: dashboard, configuration, monitoring (684 строки)
 
-- ✅ **Code Cleanup** — удалены дубликаты и лишние импорты
-  - crypto.py: удалён дубликат KeyWrapError class
-  - doh_resolver.py: удалены дубликаты методов (add_provider, remove_provider, get_provider_stats)
-  - websocket_client.py: удалён дубликат send() метода
-  - bridge_relay.py: удалена unused variable `version`
-  - http2_transport.py: удалены unused variables `stream_id`, `payload`
-  - rate_limiter.py: удалена unused variable `now`
-  - diagnostics_advanced.py: удалена unused variable `resolved`
-  - metrics_history.py: добавлен noqa для SQL query (false positive B007)
-  - connection_pool.py: исправлено bind loop variable в _connect_attempt
-- ✅ **Alerts Manager** — система оповещений и мониторинга
-  - `proxy/alerts.py` — новый модуль (332 строки)
-  - AlertSeverity: INFO, WARNING, CRITICAL, EMERGENCY
-  - AlertType: CONNECTION_SPIKE, ERROR_RATE_HIGH, DC_HIGH_LATENCY, и др.
-  - AlertManager с threshold management
-  - Email и webhook уведомления
-  - Cooldown и suppression логика
+- ✅ **Post-Quantum Crypto** — постквантовая криптография
+  - post_quantum_crypto.py: Kyber KEM, hybrid key exchange (402 строки)
 
-- ✅ **Connection Inspector API** — инспекция подключений
-  - `GET /api/connections` — список всех подключений
-  - `GET /api/connections/<ip>` — детали по IP
-  - `GET /api/connections/search` — поиск подключений
-  - `GET /api/connections/top` — топ по трафику/активности
+- ✅ **Документация** — расширенные руководства
+  - docs/ANTI_CENSORSHIP.md: руководство по обходу блокировок (432 строки)
+  - docs/CHANGES_SUMMARY.md: сводка изменений (453 строки)
+  - docs/ENHANCED_TRANSPORTS.md: документация транспортов (517 строк)
+
+- ✅ **Тесты** — тестирование новых транспортов
+  - test_enhanced_transports.py: transport lifecycle tests (542 строки)
+  - test_new_transports.py: protocol tests (470 строк)
+
+- ✅ **Quick Build** — автоматизация сборки
+  - quick_build.py: automated build process (322 строки)
 
 - ✅ **Автовыбор свободного порта** — при конфликте
   - `auto_port: true` в конфиге
