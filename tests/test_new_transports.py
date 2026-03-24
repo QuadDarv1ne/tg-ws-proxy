@@ -518,6 +518,150 @@ class TestMeekTransportDetailed:
 
 
 # =============================================================================
+# Reality Transport Tests
+# =============================================================================
+
+
+class TestRealityTransport:
+    """Tests for Reality Transport."""
+
+    def test_reality_config_defaults(self):
+        """Test RealityTransport default configuration."""
+        from proxy.reality_transport import RealityTransport
+
+        transport = RealityTransport(
+            host='127.0.0.1',
+            port=443
+        )
+
+        assert transport.host == '127.0.0.1'
+        assert transport.port == 443
+        assert transport.public_key == ''
+        assert transport.short_id == ''
+        assert transport.server_name == 'www.microsoft.com'
+        assert transport._connected is False
+        assert transport._reader is None
+        assert transport._writer is None
+        assert transport.bytes_sent == 0
+        assert transport.bytes_received == 0
+
+    def test_reality_config_custom(self):
+        """Test RealityTransport with custom configuration."""
+        from proxy.reality_transport import RealityTransport
+
+        transport = RealityTransport(
+            host='example.com',
+            port=8443,
+            public_key='test_public_key',
+            short_id='0123456789abcdef',
+            server_name='www.google.com'
+        )
+
+        assert transport.host == 'example.com'
+        assert transport.port == 8443
+        assert transport.public_key == 'test_public_key'
+        assert transport.short_id == '0123456789abcdef'
+        assert transport.server_name == 'www.google.com'
+
+    def test_reality_stats_initial(self):
+        """Test RealityTransport initial stats."""
+        from proxy.reality_transport import RealityTransport
+
+        transport = RealityTransport(host='127.0.0.1', port=443)
+        stats = transport.get_stats()
+
+        assert stats['connected'] is False
+        assert stats['server_name'] == 'www.microsoft.com'
+        assert stats['bytes_sent'] == 0
+        assert stats['bytes_received'] == 0
+
+    def test_reality_stats_update(self):
+        """Test RealityTransport stats update."""
+        from proxy.reality_transport import RealityTransport
+
+        transport = RealityTransport(host='127.0.0.1', port=443)
+
+        # Manually update stats (simulating traffic)
+        transport.bytes_sent = 1024
+        transport.bytes_received = 2048
+        transport._connected = True
+
+        stats = transport.get_stats()
+
+        assert stats['connected'] is True
+        assert stats['bytes_sent'] == 1024
+        assert stats['bytes_received'] == 2048
+
+    def test_reality_server_name_variants(self):
+        """Test RealityTransport with different SNI server names."""
+        from proxy.reality_transport import RealityTransport
+
+        servers = [
+            'www.microsoft.com',
+            'www.google.com',
+            'www.cloudflare.com',
+            'www.amazon.com',
+            'www.apple.com'
+        ]
+
+        for server in servers:
+            transport = RealityTransport(
+                host='127.0.0.1',
+                port=443,
+                server_name=server
+            )
+            assert transport.server_name == server
+
+    def test_reality_not_connected_send(self):
+        """Test RealityTransport send when not connected."""
+        from proxy.reality_transport import RealityTransport
+
+        transport = RealityTransport(host='127.0.0.1', port=443)
+
+        # Send should return False when not connected
+        import asyncio
+
+        async def test_send():
+            result = await transport.send(b'test data')
+            return result
+
+        result = asyncio.new_event_loop().run_until_complete(test_send())
+        assert result is False
+
+    def test_reality_not_connected_recv(self):
+        """Test RealityTransport recv when not connected."""
+        from proxy.reality_transport import RealityTransport
+
+        transport = RealityTransport(host='127.0.0.1', port=443)
+
+        # Recv should return None when not connected
+        import asyncio
+
+        async def test_recv():
+            result = await transport.recv()
+            return result
+
+        result = asyncio.new_event_loop().run_until_complete(test_recv())
+        assert result is None
+
+    def test_reality_close_when_not_connected(self):
+        """Test RealityTransport close when not connected."""
+        from proxy.reality_transport import RealityTransport
+
+        transport = RealityTransport(host='127.0.0.1', port=443)
+
+        # Close should not raise when not connected
+        import asyncio
+
+        async def test_close():
+            await transport.close()
+            return True
+
+        result = asyncio.new_event_loop().run_until_complete(test_close())
+        assert result is True
+
+
+# =============================================================================
 # Integration Tests
 # =============================================================================
 
