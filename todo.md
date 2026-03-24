@@ -526,7 +526,7 @@
   • Методы: mimic_https(), mimic_browser()
 
 ### Тестирование
-- ✅ **Coverage Improvement** — увеличение покрытия с 41% до 45%
+- ✅ **Coverage Improvement** — увеличение покрытия с 41% до 47%
   - ✅ rate_limiter.py: 65 тестов (83% coverage) — Token Bucket, API Limiting, Connection Scoring, Ban/Unban, Subnet, DDoS, Flood, Prometheus
   - ✅ metrics_history.py: 42 теста (84% coverage) — record_metric, get_summary, get_history, get_trend, export, cleanup
   - ✅ web_dashboard.py: 21 тест (26% coverage) — все импорты исправлены
@@ -536,8 +536,12 @@
   - ✅ cloudflare_tunnel.py: 49 тестов (72% coverage) — tunnel lifecycle, config generation, WARP
   - ✅ circuit_breaker.py: 35 тестов (98% coverage) — state transitions, registry, concurrent access
   - ✅ socks5_handler.py: 13 тестов (78% coverage) — negotiate, read_request, send_reply
-  - [ ] websocket_client.py: 53% coverage — можно улучшить
+  - ✅ websocket_client.py: 64% coverage — улучшено с 56% (+239 строк тестов)
+  - ✅ meek_transport.py: 6 тестов — MeekConfig, MeekSession тесты
   - [ ] Integration Tests — сквозные тесты для основных сценариев
+  - [ ] tg_ws_proxy.py: 29% coverage — можно улучшить
+  - [ ] web_dashboard.py: 26% coverage — можно улучшить
+  - [ ] Новые транспорты: quic, mux, shadowsocks, tuic, reality — низкое покрытие
 
 ### Мониторинг
 - ✅ **Real-time Dashboard** — улучшение веб-панели с live графиками
